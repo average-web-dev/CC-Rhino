@@ -21,6 +21,8 @@ val modVersion: String by extra
 dependencies {
     api(project(":core-api"))
     implementation(libs.cobalt)
+    implementation(libs.graaljs.polyglot)
+    implementation(libs.graaljs.js)
     implementation(libs.fastutil)
     implementation(libs.guava)
     implementation(libs.jzlib)

@@ -90,6 +90,8 @@ sourceSets.all {
                 "-Xlint:-processing",
                 // We violate this pattern too often for it to be a helpful warning. Something to improve one day!
                 "-Xlint:-this-escape",
+                // Required by ErrorProne on JDK 21+
+                "-XDaddTypeAnnotationsToSymbol=true",
             ),
         )
 

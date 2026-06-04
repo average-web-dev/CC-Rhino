@@ -353,30 +353,30 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
         // Load the bios resource
         InputStream biosStream = null;
         try {
-            biosStream = computer.getGlobalEnvironment().createResourceFile("computercraft", "lua/bios.lua");
+            biosStream = computer.getGlobalEnvironment().createResourceFile("computercraft", "js/bios.js");
         } catch (Exception e) {
             LOG.error("Failed to load BIOS", e);
         }
 
         if (biosStream == null) {
-            displayFailure("Error loading bios.lua", null);
+            displayFailure("Error loading bios.js", null);
             return null;
         }
 
-        // Create the lua machine
+        // Create the machine
         try (var bios = biosStream) {
             return luaFactory.create(new MachineEnvironment(
-                new LuaContext(computer), metrics, executor.timeoutState(),
+                new JSContext(computer), metrics, executor.timeoutState(),
                 () -> apis.stream().map(ApiWrapper::api).iterator(),
                 luaMethods,
                 computer.getGlobalEnvironment().getHostString()
             ), bios);
         } catch (IOException e) {
-            LOG.error("Failed to read bios.lua", e);
-            displayFailure("Error loading bios.lua", null);
+            LOG.error("Failed to read bios.js", e);
+            displayFailure("Error loading bios.js", null);
             return null;
         } catch (MachineException e) {
-            displayFailure("Error loading bios.lua", e.getMessage());
+            displayFailure("Error loading bios.js", e.getMessage());
             return null;
         }
     }

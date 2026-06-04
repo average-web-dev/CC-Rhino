@@ -45,9 +45,9 @@ class CCTweakedPlugin : Plugin<Project> {
 
     companion object {
         /**
-         * The version we run with. We use Java 25 here, as our Gradle build requires that.
+         * The version we run with. Lowered to 21 to match the locally installed JDK.
          */
-        val JDK_VERSION = JavaLanguageVersion.of(25)
+        val JDK_VERSION = JavaLanguageVersion.of(21)
 
         /**
          * The Java version we target. Should be the same as what Minecraft uses.

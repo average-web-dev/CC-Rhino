@@ -24,6 +24,8 @@ public final class CoreConfig {
     public static int maximumFilesOpen = 128;
     public static String defaultComputerSettings = "";
 
+    public static int jsStatementLimit = 10_000;
+
     public static boolean httpEnabled = true;
     public static boolean httpWebsocketEnabled = true;
     public static List<AddressRule> httpRules = List.of(
