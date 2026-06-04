@@ -62,6 +62,7 @@ public class JSMachine implements ILuaMachine, AutoCloseable {
             }
             listenerCount(event) { return (this._listeners[event] ?? []).length; }
         }
+        globalThis.EventEmitter = EventEmitter;
         globalThis.__emitter__ = new EventEmitter();
         globalThis.__createPromise__ = cb => new Promise(cb);
         """;
