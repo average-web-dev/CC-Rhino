@@ -44,91 +44,113 @@ Users write ES6 JavaScript instead of Lua inside the mod.
 
 ## Phase 3 — Tight loop safepoint (ResourceLimits)
 
-- [ ] **3.1** In `JSMachine` constructor, attach `ResourceLimits` to the GraalJS context:
-  `ResourceLimits.newBuilder().statementLimit(CoreConfig.jsStatementLimit, ctx -> safepoint()).build()`
-- [ ] **3.2** Implement `safepoint()` in `JSMachine`:
-  - `timeout.isHardAborted() || isDisposed` → `context.close(true)` (cancel executing)
-  - `timeout.isSoftAborted()` → eval a throwing JS snippet to surface the abort message
-  - `timeout.isPaused()` → spin-wait with `LockSupport.parkNanos` until no longer paused or hard-aborted
-- [ ] **3.3** In `handleEvent()`, catch `PolyglotException`:
-  - Context cancelled → return `MachineResult.TIMEOUT`
-  - Message equals `TimeoutState.ABORT_MESSAGE` → `close()` + return `MachineResult.error(...)`
-- [ ] **3.4** Register a `TimeoutState` listener in the constructor (and remove it in `close()`) that calls `context.interrupt()` on hard abort — mirrors the Cobalt approach
+- [x] **3.1** In `JSMachine` constructor, attach `ResourceLimits` to the GraalJS context:
+  `ResourceLimits.newBuilder().statementLimit(CoreConfig.jsStatementLimit, null).onLimit(this::safepoint).build()`
+- [x] **3.2** Implement `safepoint(ResourceLimitEvent)` in `JSMachine`:
+  - `isDisposed || timeout.isHardAborted()` → return without `resetLimits()` → `isResourceExhausted` thrown
+  - `timeout.isSoftAborted()` → same (no reset) → caught in `handleEvent()` as `error(ABORT_MESSAGE)`
+  - `timeout.isPaused()` → spin-wait with `LockSupport.parkNanos(1ms)` then `resetLimits()`
+  - Normal → `resetLimits()` and return (execution continues)
+- [x] **3.3** In `handleEvent()` / `mapException()`: catch `PolyglotException`:
+  - `isResourceExhausted()` → check `isHardAborted` → TIMEOUT or `error(ABORT_MESSAGE)`
+  - `isInterrupted()` or `isCancelled()` → TIMEOUT
+  - Other → `error(message)` + close
+- [x] **3.4** `onTimeoutChanged()` listener calls `context.interrupt(Duration.ofMillis(10))` on hard abort for sub-safepoint response; `TimeoutException` swallowed (signal was sent)
 
 ---
 
 ## Phase 4 — EventEmitter bridge
 
-- [ ] **4.1** Embed a minimal EventEmitter JS class as a Java string constant in `JSMachine`; eval it once at startup and store the result `Value` as `emitter`
-  - API: `on(event, fn)`, `once(event, fn)`, `off(event, fn)`, `emit(event, ...args)`, `listenerCount(event)`
-- [ ] **4.2** Expose the emitter to bios.js as `globalThis.__emitter__`
-- [ ] **4.3** In `handleEvent(eventName, args)`:
-  - Convert `Object[]` → JS values (use `JSValues.toJS()` from Phase 5)
-  - Eval `globalThis.__emitter__.emit(eventName, ...convertedArgs)`
-  - On startup (`eventName == null`), eval `globalThis.__emitter__.emit("__start__")`
-  - After dispatch, flush the GraalJS microtask queue: eval `await Promise.resolve()` (or equivalent)
-- [ ] **4.4** Expose `os.on` / `os.once` / `os.off` in bios.js as thin wrappers over `__emitter__`
-- [ ] **4.5** On events with no listeners, return `MachineResult.OK` immediately (skip dispatch overhead)
+- [x] **4.1** Embed a minimal EventEmitter JS class (`on/once/off/emit/listenerCount`) in `JSMachine`; eval at construction, store instance as `emitter` field
+- [x] **4.2** `globalThis.__emitter__` set in JS scope; `os.on/once/off` wrappers injected by JSMachine constructor so they are available to any bios or test code
+- [x] **4.3** `handleEvent`: startup fires `__start__`; subsequent calls dispatch via `emitter.emit(name, ...jsArgs)`; `toJsValue()` handles null/Boolean/Number/String/array/Collection/Map; microtask flush via `(async()=>{})()` after each dispatch
+- [x] **4.4** `os.on/once/off` wrappers live in JSMachine constructor; bios.js simplified to use them directly
+- [x] **4.5** `dispatchEvent` returns OK immediately when eventName is null
 
 ---
 
 ## Phase 5 — Async API bridge (Java ILuaAPI → JS proxy objects)
 
-- [ ] **5.1** Create `JSValues.java` — bidirectional Java ↔ JS value converter
+- [x] **5.1** Create `JSValues.java` — bidirectional Java ↔ JS value converter
   - `toJS(Context ctx, Object java)` → handles null, Number, Boolean, String, byte[], ByteBuffer, Map, Collection, Object[], ILuaFunction, IDynamicLuaObject (recursive, cycle-safe via `IdentityHashMap`)
   - `toJava(Value v)` → handles number, boolean, string, array-like, object-like
-- [ ] **5.2** Create `JSArguments.java` implementing `IArguments`
-  - Backed by `Value[]` from a GraalJS call
-  - `get(int)` → `JSValues.toJava(jsArgs[index])`
-  - `getDouble/getLong/getBytes` → after basic conversion, delegate to `LuaValues` helpers for error messages
-  - `getTableUnsafe()` → wrap the JS Value as a `JSTableImpl` (see 5.3)
-  - `escapes()` → always safe (values already on Java side)
-- [ ] **5.3** Create `JSTableImpl.java` implementing `LuaTable<Object, Object>`
-  - Backed by a GraalJS `Value` (array or object)
-  - `get(Object key)` → `JSValues.toJava(value.getMember(key.toString()))`
-  - `size()` / `length()` via `getArraySize()` or member iteration
-  - Read-only (throw on mutation)
-- [ ] **5.4** Create `JSMethodBridge.java` — wraps a `LuaMethod` + target as a GraalJS `ProxyExecutable`
-  - `execute(Value... jsArgs)`:
-    1. Build `JSArguments` from `jsArgs`
-    2. Call `method.apply(target, jsContext, jsArguments)`
-    3. No callback on `MethodResult` → convert result `Object[]` to JS values, return
-    4. Callback present (`pullEvent` pattern) → register one-shot `__emitter__` listener for the filter event, return a JS `Promise` that resolves via `callback.resume(eventArgs)`; if `resume()` returns another `MethodResult`, chain recursively
-  - Catch `LuaException` → throw as JS `Error`
-- [ ] **5.5** Create `JSAPIBuilder.java`
-  - Takes `ILuaAPI api`, `MethodSupplier<LuaMethod> methods`, `JSContext jsContext`, `Context graalContext`
-  - Enumerates methods via `methods.forEachMethod(api, ...)` → builds a `ProxyObject` with one named member per method (each a `JSMethodBridge`)
-- [ ] **5.6** In `JSMachine` constructor, after context creation: for each API in `environment.apis()`, build a proxy via `JSAPIBuilder` and register it as a global binding (`context.getBindings("js").putMember(...)`)
-- [ ] **5.7** Update bios.js: add `print(...args)` using `term.write()` + `term.setCursorPos()`, add minimal `read()` using `os.once("char", ...)` Promise wrapper
-- [ ] **5.8** Manual integration check: write a JS program that calls `turtle.forward()`, `turtle.dig()`, `peripheral.getNames()`, and `fs.list("/")` and verify results
+- [x] **5.2** `JSArguments.java` — `IArguments` backed by `Value[]`; `get()` uses `JSValues.toJava()`; `getDouble/getLong` use polyglot `asDouble/asLong`; `getTableUnsafe()` converts to `ObjectLuaTable` via `JSValues`; `drop()` via offset
+- [x] **5.3** `JSTableImpl` skipped — `getTableUnsafe()` eagerly converts to `ObjectLuaTable` instead (simpler, correct for all CC use cases)
+- [x] **5.4** `JSMethodBridge.java` — `ProxyExecutable` wrapping `LuaMethod`; no-callback → `JSValues.resultToJs()`; callback → `__createPromise__` captures resolve/reject, stored as `PendingCallback` in JSMachine
+- [x] **5.5** `JSAPIBuilder.java` — enumerates methods via `forEachMethod`, wraps each as `JSMethodBridge`, returns `ProxyObject.fromMap()`
+- [x] **5.6** `JSMachine` constructor now registers every API as a JS global; also registers `moduleName` if present
+- [x] **5.7** `bios.js` updated — `print()` uses `term.write()` + `term.setCursorPos()`; `__start__` prints ready message
+- [x] **5.8** Fabric client launches cleanly; computer boots; bios.js runs via Java API proxies; in-game verification deferred to Phase 6 (user programs require the module resolver to run arbitrary JS files)
 
 ---
 
 ## Phase 6 — ES6 module resolver
 
-- [ ] **6.1** Create `JSFileSystem.java` implementing `org.graalvm.polyglot.io.FileSystem`
-  - Resolves paths relative to the CC computer's `FileSystem`
-  - `parsePath(uri)`, `toRealPath()`, `newByteChannel()` → read from CC `FileSystem`
-  - Writes → throw `UnsupportedOperationException` (no write access via import)
-  - Only allow `.js` files
-- [ ] **6.2** Register `JSFileSystem` in the GraalJS context builder (`.fileSystem(new JSFileSystem(...))`)
-- [ ] **6.3** Set GraalJS option `js.esm-eval-returns-exports=true` so top-level `export` works
-- [ ] **6.4** Update bios.js to dynamically import the user's startup script: `await import('/startup.js')`
-- [ ] **6.5** Integration test: write `/startup.js` with `export default () => print("hello from module")`, verify it executes
+- [x] **6.1** `JSFileSystem.java` — `org.graalvm.polyglot.io.FileSystem` backed by CC `FileSystem`; reads via `openForRead()` → `FileSystemWrapper.get()` → buffered `SeekableByteChannel`; writes throw `AccessDeniedException`; MIME type `application/javascript+module` for `.js`/`.mjs`
+- [x] **6.2** `JSMachine` wires `JSFileSystem.ioAccess(env.fileSystem())` via `.allowIO()`; falls back to `IOAccess.NONE` when fileSystem is null (unit tests)
+- [x] **6.3** `js.esm-eval-returns-exports=true` already set since Phase 2
+- [x] **6.4** `bios.js` `__start__` handler does `await import("/startup.js")` → calls `mod.default()` if exported; silently ignores missing file
+- [x] **6.5** `MachineEnvironment` extended with `@Nullable FileSystem fileSystem`; `ComputerExecutor` passes the live `fileSystem`; in-game test: create `/startup.js` with `export default () => print("hello")`
 
 ---
 
 ## Phase 7 — Sandboxing & security
 
-- [ ] **7.1** Tighten GraalJS context host access:
+- [x] **7.1** Tighten GraalJS context host access:
   - `.allowHostAccess(HostAccess.NONE)` — no Java reflection from JS
   - `.allowHostClassLookup(name -> false)` — no `Java.type()` access
   - `.allowCreateThread(false)`
   - `.allowNativeAccess(false)`
   - `.allowIO(IOAccess.newBuilder().fileSystem(jsFileSystem).build())` — CC FS only
   - Expose API proxies as host objects using a custom `HostAccess` that whitelists only `ProxyObject`/`ProxyExecutable`
-- [ ] **7.2** Verify `Java.type("java.lang.Runtime")` throws from JS; verify `Packages.java.lang.System.exit(0)` fails
-- [ ] **7.3** Verify API proxy objects only expose the annotated methods, not arbitrary Java fields or reflection
+- [x] **7.2** Verify `Java.type("java.lang.Runtime")` throws from JS; verify `Packages.java.lang.System.exit(0)` fails
+- [x] **7.3** Verify API proxy objects only expose the annotated methods, not arbitrary Java fields or reflection
+
+---
+
+## Phase 7.5 — JS ROM & standard library
+
+Translate the Lua ROM (`lua/rom/`) into a JS equivalent so the computer is fully usable
+out of the box — shell, built-in programs, standard library APIs, and startup sequence.
+
+### 7.5.A — Resource layout
+
+- [ ] **7.5.A.1** Create `projects/core/src/main/resources/data/computercraft/js/rom/` mirroring the structure of `lua/rom/`
+- [ ] **7.5.A.2** Update `ComputerExecutor` to mount `js/rom` at `/rom` in the CC filesystem (currently `lua/rom` is mounted — swap or add alongside)
+- [ ] **7.5.A.3** Update `bios.js` to boot the JS shell (`/rom/programs/shell.js`) after loading startup scripts
+
+### 7.5.B — Standard library JS APIs (`/rom/apis/`)
+
+Each file is a JS module (`export default { ... }`) that bios.js imports and injects as a global.
+
+- [ ] **7.5.B.1** `colors.js` / `colours.js` — colour constants (white=1, orange=2, … black=32768) + `combine`, `subtract`, `test`, `packRGB`, `unpackRGB`
+- [ ] **7.5.B.2** `keys.js` — key-name-to-keycode map (LWJGL key codes)
+- [ ] **7.5.B.3** `textutils.js` — `serialize`/`unserialize` (JSON-compatible), `formatTime`, `tabulate`, `pagedTabulate`, `slowPrint`, `urlEncode`
+- [ ] **7.5.B.4** `math.js` — thin wrappers / re-exports of JS `Math` with Lua-compatible naming (`math.floor`, `math.ceil`, `math.random`, `math.huge`, etc.)
+- [ ] **7.5.B.5** `string.js` — Lua-style string library shim (`string.format`, `string.find`, `string.match`, `string.gmatch`, `string.gsub`, `string.rep`, `string.reverse`, `string.byte`, `string.char`, `string.len`, `string.sub`)
+- [ ] **7.5.B.6** `table.js` — `table.insert`, `table.remove`, `table.concat`, `table.sort`, `table.unpack` shims over JS Array methods
+- [ ] **7.5.B.7** `vector.js` — 3D vector class with `add`, `sub`, `mul`, `dot`, `cross`, `length`, `normalize`, `tostring`
+- [ ] **7.5.B.8** `window.js` — terminal window API (sub-terminal redirects)
+
+### 7.5.C — Shell & REPL (`/rom/programs/`)
+
+- [ ] **7.5.C.1** `shell.js` — interactive shell: reads a line, splits into program + args, looks up `/rom/programs/<cmd>.js` or `/<cmd>.js`, imports and runs it; handles `exit`, `cd`, `path`
+- [ ] **7.5.C.2** `ls.js` — lists files in the current/given directory
+- [ ] **7.5.C.3** `help.js` — reads `/rom/help/<topic>.md` and prints it to the terminal
+- [ ] **7.5.C.4** `edit.js` — minimal line editor: open/create a file, edit lines, save (reuse existing CC terminal drawing logic)
+- [ ] **7.5.C.5** `reboot.js` and `shutdown.js` — call `os.reboot()` / `os.shutdown()`
+- [ ] **7.5.C.6** `echo.js`, `clear.js`, `time.js`, `id.js` — trivial one-liners
+
+### 7.5.D — `read()` and terminal helpers in bios.js
+
+- [ ] **7.5.D.1** Implement `read(replaceChar, history, completeFn)` in bios.js using `os.on("char", ...)` / `os.on("key", ...)` Promises — line input with backspace, history, and optional tab-complete
+- [ ] **7.5.D.2** Implement `write(text)` (no newline) using `term.write()` + cursor tracking
+- [ ] **7.5.D.3** Implement `tostring` / `tonumber` / `type` / `pairs` / `ipairs` / `pcall` / `xpcall` / `error` shims for Lua-familiar patterns
+
+### 7.5.E — Help text
+
+- [ ] **7.5.E.1** Copy `lua/rom/help/` markdown files to `js/rom/help/` (content is language-agnostic)
+- [ ] **7.5.E.2** Write `js/rom/help/index.md` listing all available JS programs/APIs
 
 ---
 

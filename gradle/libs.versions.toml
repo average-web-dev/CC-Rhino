@@ -86,7 +86,10 @@ checkerFramework = { module = "org.checkerframework:checker-qual", version.ref =
 cobalt = { module = "cc.tweaked:cobalt", version.ref = "cobalt" }
 commonsCli = { module = "commons-cli:commons-cli", version.ref = "commonsCli" }
 graaljs-polyglot = { module = "org.graalvm.polyglot:polyglot", version.ref = "graaljs" }
-graaljs-js = { module = "org.graalvm.polyglot:js-community", version.ref = "graaljs" }
+# js-community (both polyglot and js group) are POM-only wrappers — no JAR, breaks Fabric Loom's lib scanner.
+# Depend directly on the actual runtime JARs instead.
+graaljs-js-language = { module = "org.graalvm.js:js-language", version.ref = "graaljs" }
+graaljs-truffle-runtime = { module = "org.graalvm.truffle:truffle-runtime", version.ref = "graaljs" }
 fastutil = { module = "it.unimi.dsi:fastutil", version.ref = "fastutil" }
 forgeSpi = { module = "net.minecraftforge:forgespi", version.ref = "forgeSpi" }
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
