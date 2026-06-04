@@ -1,0 +1,36 @@
+CC:Tweaked JS Edition — Help Index
+===================================
+
+Programs:
+  ls [path]      List files in a directory
+  clear          Clear the terminal
+  echo <text>    Print text
+  help <topic>   Show help for a topic
+  id             Show computer ID
+  reboot         Reboot the computer
+  shutdown       Shutdown the computer
+  exit           Exit the shell
+
+Built-in shell commands:
+  cd <dir>       Change directory
+
+APIs (available as globals):
+  term           Terminal I/O
+  fs             Filesystem
+  os             Operating system (events, time, reboot)
+  redstone / rs  Redstone I/O
+  peripheral     Peripheral access
+  turtle         Turtle control (turtle computers only)
+  colors/colours Colour constants
+  keys           Key code constants
+  textutils      Text serialization utilities
+
+Writing programs:
+  Create a .js file on the computer disk:
+
+    // /hello.js
+    export default async function(shell) {
+        print("Hello, world!");
+    }
+
+  Then run it: hello

@@ -310,7 +310,7 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
 
     @Nullable
     private Mount getRomMount() {
-        return computer.getGlobalEnvironment().createResourceMount("computercraft", "lua/rom");
+        return computer.getGlobalEnvironment().createResourceMount("computercraft", "js/rom");
     }
 
     @Nullable

@@ -137,7 +137,6 @@ public class JSMachine implements ILuaMachine, AutoCloseable {
         emitter          = bindings.getMember("__emitter__");
         createPromiseFn  = bindings.getMember("__createPromise__");
 
-        // Expose each ILuaAPI as a JS global object first, so os/term/fs/etc. are defined
         for (var api : environment.apis()) {
             var proxy = JSAPIBuilder.build(api, environment.luaMethods(), luaContext, this);
             for (var name : api.getNames()) bindings.putMember(name, proxy);
