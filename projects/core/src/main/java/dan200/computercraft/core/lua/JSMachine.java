@@ -41,31 +41,28 @@ public class JSMachine implements ILuaMachine, AutoCloseable {
         .option("engine.WarnInterpreterOnly", "false")
         .build();
 
-    /** Minimal Node.js-compatible EventEmitter, evaluated once per context. */
-    private static final String EMITTER_JS = """
-        class EventEmitter {
-            constructor() { this._listeners = {}; }
-            on(event, fn) { (this._listeners[event] ??= []).push({ fn, once: false }); return this; }
-            once(event, fn) { (this._listeners[event] ??= []).push({ fn, once: true }); return this; }
-            off(event, fn) {
-                const ls = this._listeners[event];
-                if (ls) this._listeners[event] = ls.filter(l => l.fn !== fn);
-                return this;
-            }
-            emit(event, ...args) {
-                const ls = this._listeners[event];
-                if (!ls || ls.length === 0) return false;
-                const snapshot = [...ls];
-                this._listeners[event] = ls.filter(l => !l.once);
-                for (const l of snapshot) l.fn(...args);
-                return true;
-            }
-            listenerCount(event) { return (this._listeners[event] ?? []).length; }
+    /**
+     * Boot scripts evaluated, in order, in the global scope before bios.js runs.
+     * <p>
+     * These set up globals that both the Java host and the bios depend on (the
+     * {@code EventEmitter} class, the shared {@code __emitter__} instance, and the
+     * {@code __createPromise__} factory). They are bundled engine internals loaded
+     * from the classpath — not user-overridable like bios.js — and live under
+     * {@code js/boot/} so they can be edited as real JS rather than Java strings.
+     */
+    private static final String BOOT_DIR = "/data/computercraft/js/boot/";
+    private static final String[] BOOT_SCRIPTS = { "emitter.js" };
+
+    /** Reads a boot script from the classpath as a {@link Source}. */
+    private static Source loadBootScript(String name) throws MachineException {
+        try (var in = JSMachine.class.getResourceAsStream(BOOT_DIR + name)) {
+            if (in == null) throw new MachineException("Missing boot script: " + name);
+            var reader = new InputStreamReader(in, StandardCharsets.UTF_8);
+            return Source.newBuilder("js", reader, name).build();
+        } catch (IOException e) {
+            throw new MachineException("Failed to read boot script " + name + ": " + e.getMessage());
         }
-        globalThis.EventEmitter = EventEmitter;
-        globalThis.__emitter__ = new EventEmitter();
-        globalThis.__createPromise__ = cb => new Promise(cb);
-        """;
+    }
 
     // -------------------------------------------------------------------------
     // Pending callback: stores state for a method that returned MethodResult.pullEvent()
@@ -132,8 +129,8 @@ public class JSMachine implements ILuaMachine, AutoCloseable {
             .option("js.esm-eval-returns-exports", "true")
             .build();
 
-        // Boot EventEmitter and Promise factory
-        context.eval("js", EMITTER_JS);
+        // Run boot scripts (EventEmitter, shared emitter, Promise factory) before bios.
+        for (var name : BOOT_SCRIPTS) context.eval(loadBootScript(name));
         var bindings = context.getBindings("js");
         emitter          = bindings.getMember("__emitter__");
         createPromiseFn  = bindings.getMember("__createPromise__");

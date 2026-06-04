@@ -186,6 +186,46 @@ Each file is a JS module (`export default { ... }`) that bios.js imports and inj
 
 ---
 
+## Phase 10 — Author ROM/bios in TypeScript, transpile on build
+
+Move the hand-written `.js` sources (`data/computercraft/js/` — bios + `rom/apis/` + `rom/programs/`,
+~30 files) to TypeScript and transpile them to `.js` during the Gradle build. The runtime keeps
+loading `.js` from resources unchanged; only the authoring format changes.
+
+### 10.A — Mechanical conversion (transpile-on-build)
+
+- [ ] **10.A.1** Create `projects/core/src/ts/` and move the 30 `.js` files there as `.ts`, mirroring the
+  `rom/apis` / `rom/programs` layout. Author imports with explicit `.js` extensions
+  (e.g. `import colors from "./colors.js"`) — GraalJS ESM resolves real paths, so the emitted
+  output must keep identical filenames/structure.
+- [ ] **10.A.2** Add `projects/core/src/ts/tsconfig.json` (base it on `projects/web/tsconfig.json`:
+  `module: esNext`, `moduleResolution: bundler`, `target: es2017`, `strict`, `noEmitOnError`).
+  Emit-only — no bundling — so the on-disk layout maps 1:1 to `data/computercraft/js/`.
+- [ ] **10.A.3** Wire transpile into the `:core` build, reusing the existing `cc-tweaked.node`
+  convention plugin + `NpxExecToDir` task (see `projects/web/build.gradle.kts:69`). Register a
+  `transpileJs` task that runs `tsc` into `build/generated/js`, with `inputs.dir(src/ts)` /
+  `outputs.dir` for incremental, cacheable builds.
+- [ ] **10.A.4** Feed the generated dir into `processResources` under `data/computercraft/js/`
+  (and add to the main sourceSet resources) so the jar ships the transpiled `.js`. Remove the
+  now-generated `.js` files from `src/main/resources` and gitignore the generated output.
+- [ ] **10.A.5** Use `tsc` (not swc/esbuild) so type errors fail the build via `noEmitOnError`.
+- [ ] **10.A.6** Verify: `./gradlew :core:processResources` emits `.js` with unchanged paths;
+  `JSMachineTest` + in-game boot still pass.
+
+### 10.B — Type definitions (the actual TS payoff — optional, defer until API surface settles)
+
+- [ ] **10.B.1** Write ambient `.d.ts` (`declare global`) for the injected CC globals/APIs
+  (`term`, `os`, `fs`, `turtle`, `peripheral`, `colors`, …). These come from Java proxies in
+  `JSMachine`, so they are not importable and must be hand-declared.
+- [ ] **10.B.2** Model the async signatures (`await turtle.dig()`, `executeMainThreadTask` results)
+  as `Promise`-returning so `strict` mode is meaningful.
+- [ ] **10.B.3** Keep the `.d.ts` in sync as Phase 7.5 / Phase 9 reshape the API surface.
+
+> Note: 10.A is cheap (~½ day) and worth doing whenever; 10.B is days of work + ongoing
+> maintenance and only pays off once the API is stable, so it can lag behind 10.A.
+
+---
+
 ## Cross-cutting reference
 
 | Concern | Approach |

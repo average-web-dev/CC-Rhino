@@ -6,9 +6,10 @@
 //
 // In the Lua implementation each function is a coroutine that yields on events,
 // and parallel switches between them by hand. The JS runtime is already
-// cooperatively scheduled through the async event loop: the native event APIs
-// (os.pullEvent, os.sleep, rednet.receive, ...) return Promises, so an `async`
-// function naturally "pauses" on `await` and lets the others run. We therefore
+// cooperatively scheduled through the async event loop: the async APIs
+// (os.sleep, rednet.receive, event waits built on os.on/once, ...) return
+// Promises, so an `async` function naturally "pauses" on `await` and lets the
+// others run. We therefore
 // model each parallel function as an async function and compose their Promises.
 //
 // WARNING (same as Lua): pass the functions themselves, not the result of
