@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2024 The CC: Tweaked Developers
+// SPDX-FileCopyrightText: 2026 average-web-dev
 //
 // SPDX-License-Identifier: MPL-2.0
 

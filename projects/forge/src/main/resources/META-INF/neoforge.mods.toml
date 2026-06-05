@@ -13,14 +13,14 @@ license="ComputerCraft Public License (https://raw.githubusercontent.com/dan200/
 [[mods]]
 modId="computercraft"
 version="${file.jarVersion}"
-displayName="CC: Tweaked"
+displayName="CC: Rhino"
 displayURL="https://tweaked.cc"
 updateJSONURL = "https://api.modrinth.com/updates/cc-tweaked/forge_updates.json"
 
 credits="Created by Daniel Ratcliffe (@DanTwoHundred)"
 authors="Daniel Ratcliffe, Aaron Mills, SquidDev"
 description='''
-CC: Tweaked is a fork of ComputerCraft, adding programmable computers, turtles and more to Minecraft.
+CC: Rhino is a fork of CC: Tweaked that runs in-game computers on a Rhino JavaScript engine instead of Lua.
 '''
 
 [[dependencies.computercraft]]

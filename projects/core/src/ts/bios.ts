@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 average-web-dev
+//
+// SPDX-License-Identifier: MPL-2.0
+
 const term = require('term');
 const os   = require('os');
 

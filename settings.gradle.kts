@@ -31,7 +31,7 @@ plugins {
 }
 
 val mcVersion: String by settings
-rootProject.name = "cc-tweaked-$mcVersion"
+rootProject.name = "cc-rhino-$mcVersion"
 
 include(":core-api")
 include(":core")

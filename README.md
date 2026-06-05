@@ -4,28 +4,21 @@ SPDX-FileCopyrightText: 2017 The CC: Tweaked Developers
 SPDX-License-Identifier: MPL-2.0
 -->
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./doc/logo-darkmode.png">
-  <source media="(prefers-color-scheme: light)" srcset="./doc/logo.png">
-  <img alt="CC: Tweaked" src="./doc/logo.png">
-</picture>
+# CC: Rhino
 
-[![Current build status](https://github.com/cc-tweaked/CC-Tweaked/workflows/Build/badge.svg)](https://github.com/cc-tweaked/CC-Tweaked/actions "Current build status")
-[![Download CC: Tweaked on Modrinth](https://img.shields.io/static/v1?label=Download&color=00AF5C&logoColor=00AF5C&logo=Modrinth&message=CC:%20Tweaked)][Modrinth]
+CC: Rhino is a fork of [CC: Tweaked][cc-tweaked] that replaces the Lua/Cobalt runtime with a Mozilla
+Rhino-based JavaScript engine, letting you program in-game computers and turtles in JavaScript instead of Lua.
+Like its parent, it builds on the much-beloved [ComputerCraft] and runs on both [Minecraft Forge] and [Fabric].
 
-CC: Tweaked is a mod for Minecraft which adds programmable computers, turtles and more to the game. A fork of the
-much-beloved [ComputerCraft], it continues its legacy with improved performance and stability, along with a wealth of
-new features.
-
-CC: Tweaked can be installed from [Modrinth]. It runs on both [Minecraft Forge] and [Fabric].
+CC: Rhino is an independent fork and is not affiliated with or endorsed by the CC: Tweaked or ComputerCraft teams.
 
 ## Contributing
 Any contribution is welcome, be that using the mod, reporting bugs or contributing code. If you want to get started
 developing the mod, [check out the instructions here](CONTRIBUTING.md#developing).
 
 ## Community
-If you need help getting started with CC: Tweaked, want to show off your latest project, or just want to chat about
-ComputerCraft, do check out our [GitHub discussions page][GitHub discussions]! There's also a fairly populated,
+If you need help getting started with CC: Rhino, want to show off your latest project, or just want to chat about
+ComputerCraft, do check out the CC: Tweaked [GitHub discussions page][GitHub discussions]! There's also a fairly populated,
 albeit quiet IRC channel on [EsperNet], if that's more your cup of tea. You can join `#computercraft` through your
 desktop client, or online using [KiwiIRC].
 
@@ -67,6 +60,7 @@ an issue to let me know!
 We bundle the API sources with the jar, so documentation should be easily viewable within your editor. Alternatively,
 the generated documentation [can be browsed online](https://tweaked.cc/javadoc/).
 
+[cc-tweaked]: https://github.com/cc-tweaked/CC-Tweaked "CC: Tweaked on GitHub"
 [computercraft]: https://github.com/dan200/ComputerCraft "ComputerCraft on GitHub"
 [modrinth]: https://modrinth.com/mod/gu7yAYhd "Download CC: Tweaked from Modrinth"
 [Minecraft Forge]: https://files.minecraftforge.net/ "Download Minecraft Forge."

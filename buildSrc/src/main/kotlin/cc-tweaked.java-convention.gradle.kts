@@ -27,7 +27,7 @@ val mcVersion: String by extra
 group = "cc.tweaked"
 version = modVersion
 
-base.archivesName.convention("cc-tweaked-$mcVersion-${project.name}")
+base.archivesName.convention("cc-rhino-$mcVersion-${project.name}")
 
 java {
     toolchain { languageVersion = CCTweakedPlugin.JDK_VERSION }

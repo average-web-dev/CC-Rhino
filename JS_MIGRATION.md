@@ -1,4 +1,10 @@
-# CC: Tweaked — Lua/Cobalt → Rhino JS Migration
+<!--
+SPDX-FileCopyrightText: 2026 average-web-dev
+
+SPDX-License-Identifier: MPL-2.0
+-->
+
+# CC: Rhino — Lua/Cobalt → Rhino JS Migration
 
 Replace the Cobalt Lua runtime with a Mozilla Rhino-based JavaScript engine.
 Users write JavaScript (ES6 subset) instead of Lua inside the mod.

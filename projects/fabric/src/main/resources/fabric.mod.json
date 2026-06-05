@@ -1,9 +1,9 @@
 {
     "schemaVersion": 1,
     "id": "computercraft",
-    "name": "CC: Tweaked",
+    "name": "CC: Rhino",
     "version": "${version}",
-    "description": "CC: Tweaked is a fork of ComputerCraft, adding programmable computers, turtles and more to Minecraft.",
+    "description": "CC: Rhino is a fork of CC: Tweaked that runs in-game computers on a Rhino JavaScript engine instead of Lua.",
     "license": "ComputerCraft Public License (https://raw.githubusercontent.com/dan200/ComputerCraft/master/LICENSE)",
     "icon": "pack.png",
     "contact": {
