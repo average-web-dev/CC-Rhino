@@ -310,7 +310,7 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
 
     @Nullable
     private Mount getRomMount() {
-        return computer.getGlobalEnvironment().createResourceMount("computercraft", "lua/rom");
+        return computer.getGlobalEnvironment().createResourceMount("computercraft", "js/rom");
     }
 
     @Nullable
@@ -369,7 +369,8 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
                 new JSContext(computer), metrics, executor.timeoutState(),
                 () -> apis.stream().map(ApiWrapper::api).iterator(),
                 luaMethods,
-                computer.getGlobalEnvironment().getHostString()
+                computer.getGlobalEnvironment().getHostString(),
+                computer.getFileSystem()
             ), bios);
         } catch (IOException e) {
             LOG.error("Failed to read bios.js", e);

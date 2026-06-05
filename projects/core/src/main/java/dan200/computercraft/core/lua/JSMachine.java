@@ -6,8 +6,7 @@ package dan200.computercraft.core.lua;
 
 import dan200.computercraft.core.CoreConfig;
 import org.jspecify.annotations.Nullable;
-import org.mozilla.javascript.Context;
-import org.mozilla.javascript.Scriptable;
+import org.mozilla.javascript.*;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -17,6 +16,7 @@ public class JSMachine implements ILuaMachine {
     private final Context cx;
     private final Scriptable scope;
     private final String biosSource;
+    private final JSRequire require;
 
     private boolean started = false;
     private volatile boolean isDisposed = false;
@@ -31,7 +31,21 @@ public class JSMachine implements ILuaMachine {
         cx.setLanguageVersion(Context.VERSION_ES6);
         cx.setInstructionObserverThreshold(CoreConfig.jsInstructionThreshold);
         cx.setClassShutter(className -> false);
+
         scope = cx.initStandardObjects();
+
+        require = new JSRequire(scope, environment.fileSystem());
+        var cache = cx.newObject(scope);
+        var paths = cx.newArray(scope, new Object[]{ "/rom/apis" });
+        ScriptableObject.putProperty(require, "cache", cache);
+        ScriptableObject.putProperty(require, "paths", paths);
+
+        // require is the only global — all CC APIs will be loaded through it
+        ScriptableObject.putProperty(scope, "require", require);
+    }
+
+    public JSRequire getRequire() {
+        return require;
     }
 
     @Override

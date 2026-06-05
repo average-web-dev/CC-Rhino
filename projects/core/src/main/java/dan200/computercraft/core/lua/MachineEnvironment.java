@@ -8,9 +8,11 @@ import dan200.computercraft.api.lua.ILuaAPI;
 import dan200.computercraft.api.lua.ILuaContext;
 import dan200.computercraft.core.computer.GlobalEnvironment;
 import dan200.computercraft.core.computer.TimeoutState;
+import dan200.computercraft.core.filesystem.FileSystem;
 import dan200.computercraft.core.methods.LuaMethod;
 import dan200.computercraft.core.methods.MethodSupplier;
 import dan200.computercraft.core.metrics.MetricsObserver;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Arguments used to construct a {@link ILuaMachine}.
@@ -22,6 +24,7 @@ import dan200.computercraft.core.metrics.MetricsObserver;
  *                   (following the same rules as any other value), and then set to all names in {@link ILuaAPI#getNames()}.
  * @param luaMethods A {@link MethodSupplier} to find methods on returned values.
  * @param hostString A {@linkplain GlobalEnvironment#getHostString() host string} to identify the current environment.
+ * @param fileSystem The computer's filesystem, used by the JS machine's require() to load modules. May be null in tests.
  * @see ILuaMachine.Factory
  */
 public record MachineEnvironment(
@@ -30,6 +33,7 @@ public record MachineEnvironment(
     TimeoutState timeout,
     Iterable<ILuaAPI> apis,
     MethodSupplier<LuaMethod> luaMethods,
-    String hostString
+    String hostString,
+    @Nullable FileSystem fileSystem
 ) {
 }

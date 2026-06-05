@@ -18,7 +18,8 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.*;
+
 
 class JSMachineTest {
     private static final TimeoutState NO_TIMEOUT = new TimeoutState() {
@@ -43,7 +44,7 @@ class JSMachineTest {
 
     private static JSMachine machineWith(String js) throws Exception {
         InputStream bios = new ByteArrayInputStream(js.getBytes(StandardCharsets.UTF_8));
-        var env = new MachineEnvironment(NO_CONTEXT, MetricsObserver.discard(), NO_TIMEOUT, List.of(), NO_METHODS, "test");
+        var env = new MachineEnvironment(NO_CONTEXT, MetricsObserver.discard(), NO_TIMEOUT, List.of(), NO_METHODS, "test", null);
         return new JSMachine(env, bios);
     }
 
@@ -80,4 +81,29 @@ class JSMachineTest {
             machine.close();
         }
     }
+
+    @Test
+    void require_is_accessible_as_global() throws Exception {
+        var machine = machineWith("if (typeof require !== 'function') throw new Error('require not found');");
+        try {
+            var result = machine.handleEvent(null, null);
+            assertFalse(result.isError(), "require should be a global function");
+        } finally {
+            machine.close();
+        }
+    }
+
+    @Test
+    void require_missing_module_produces_error() throws Exception {
+        // No filesystem — any require call should fail with MODULE_NOT_FOUND
+        var machine = machineWith("require('missing');");
+        try {
+            var result = machine.handleEvent(null, null);
+            assertTrue(result.isError(), "missing module should cause an error");
+            assertTrue(result.getMessage().contains("MODULE_NOT_FOUND"), "error should mention MODULE_NOT_FOUND");
+        } finally {
+            machine.close();
+        }
+    }
+
 }

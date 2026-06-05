@@ -8,6 +8,7 @@ import dan200.computercraft.api.lua.ILuaContext;
 import dan200.computercraft.api.lua.LuaException;
 import dan200.computercraft.api.lua.LuaTask;
 import dan200.computercraft.core.Logging;
+import dan200.computercraft.core.filesystem.FileSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,6 +18,10 @@ class JSContext implements ILuaContext {
 
     JSContext(Computer computer) {
         this.computer = computer;
+    }
+
+    FileSystem getFileSystem() {
+        return computer.getFileSystem();
     }
 
     @Override
