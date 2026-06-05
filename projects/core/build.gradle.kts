@@ -12,11 +12,36 @@ plugins {
     alias(libs.plugins.shadow)
 
     id("cc-tweaked.java-convention")
+    id("cc-tweaked.node")
     id("cc-tweaked.publishing")
     id("cc-tweaked")
 }
 
 val modVersion: String by extra
+
+node {
+    projectRoot = rootProject.projectDir
+}
+
+val hasTypeScriptSources get() = fileTree("src/ts") { include("**/*.ts") }.files.isNotEmpty()
+
+tasks.named("npmInstall") {
+    onlyIf { hasTypeScriptSources }
+}
+
+val transpileTypeScript by tasks.registering(cc.tweaked.gradle.NpxExecToDir::class) {
+    group = LifecycleBasePlugin.BUILD_GROUP
+    description = "Transpile TypeScript sources under src/ts/ to JavaScript"
+
+    inputs.files(fileTree("src/ts") { include("**/*.ts") }).withPropertyName("sources")
+    inputs.file("src/ts/tsconfig.json").withPropertyName("tsconfig")
+
+    output = layout.buildDirectory.dir("generated/js")
+
+    args = listOf("tsc", "--project", "src/ts/tsconfig.json")
+
+    onlyIf { hasTypeScriptSources }
+}
 
 dependencies {
     api(project(":core-api"))
@@ -45,6 +70,8 @@ kotlin.compilerOptions.jvmTarget = CCTweakedPlugin.KOTLIN_TARGET
 
 tasks.processResources {
     inputs.property("gitHash", cct.gitHash)
+
+    from(transpileTypeScript) { into("data/computercraft/js") }
 
     var props = mapOf("gitContributors" to cct.gitContributors.get().joinToString("\n"))
     filesMatching("data/computercraft/lua/rom/help/credits.md") { expand(props) }
