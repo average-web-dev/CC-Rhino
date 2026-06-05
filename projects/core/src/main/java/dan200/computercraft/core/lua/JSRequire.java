@@ -18,97 +18,52 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * CommonJS {@code require()} implementation for the Rhino-based JS machine.
+ * Module-loader infrastructure for the JS machine, exposed as {@code __cc_loader__} on the global scope.
  *
- * <p>Each computer has one root {@code JSRequire}. When a module is loaded, a bound copy is
- * created with {@code currentDir} set to that module's directory so that relative imports work.
- * Native CC APIs are registered via {@link #registerNative} and take priority over filesystem
- * modules.
+ * <p>The actual module execution is intentionally handled by the JS-side {@code require()} function
+ * (defined in {@link JSMachine#REQUIRE_SETUP_JS}) via {@code new Function()}.  Keeping execution on
+ * the JS side preserves Rhino's interpreter frame chain, which is required for
+ * {@link Context#captureContinuation()} to work through {@code require()}'d module code.
  */
-final class JSRequire extends BaseFunction {
+@SuppressWarnings("serial")
+final class JSRequire extends ScriptableObject {
 
-    private final Scriptable globalScope;
-    private final Map<String, Scriptable> nativeModules;
     private final @Nullable FileSystem fileSystem;
-    private final String currentDir;
-    private final JSRequire root;
+    private final Map<String, Object> nativeModules = new HashMap<>();
+    // Cache is stored here; the JS side calls setCache() after a module executes.
+    private final Map<String, Object> cache = new HashMap<>();
 
-    /** Create the root require for a computer. */
-    JSRequire(Scriptable globalScope, @Nullable FileSystem fileSystem) {
-        this.globalScope = globalScope;
+    JSRequire(Scriptable scope, @Nullable FileSystem fileSystem) {
         this.fileSystem = fileSystem;
-        this.nativeModules = new HashMap<>();
-        this.currentDir = "";
-        this.root = this;
-        setParentScope(globalScope);
-        setPrototype(getFunctionPrototype(globalScope));
+        setParentScope(scope);
+        setPrototype(ScriptableObject.getClassPrototype(scope, "Object"));
+        ScriptableObject.putProperty(this, "lookup", new LookupFn());
+        ScriptableObject.putProperty(this, "setCache", new SetCacheFn());
     }
 
-    /** Bound require for a specific module directory — shares nativeModules and cache with root. */
-    private JSRequire(JSRequire root, String currentDir) {
-        this.globalScope = root.globalScope;
-        this.fileSystem = root.fileSystem;
-        this.nativeModules = root.nativeModules;
-        this.currentDir = currentDir;
-        this.root = root;
-        setParentScope(root.globalScope);
-        setPrototype(getFunctionPrototype(root.globalScope));
-    }
-
-    void registerNative(String id, Scriptable exports) {
+    void registerNative(String id, Object exports) {
         nativeModules.put(id, exports);
     }
 
     @Override
-    public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
-        if (args.length == 0) throw Context.reportRuntimeError("require() called with no arguments");
-        var id = Context.toString(args[0]);
-        return require(cx, id);
+    public String getClassName() {
+        return "JSRequire";
     }
 
-    private Object require(Context cx, String id) {
-        // 1. Native module registry takes priority
-        var nativeMod = nativeModules.get(id);
-        if (nativeMod != null) return nativeMod;
+    // --- path helpers -------------------------------------------------------
 
-        // 2. Resolve to an absolute CC filesystem path
-        var resolved = resolvePath(id);
-
-        // 3. Module cache (stored on root require)
-        var cache = (Scriptable) ScriptableObject.getProperty(root, "cache");
-        var cached = ScriptableObject.getProperty(cache, resolved);
-        if (cached != Scriptable.NOT_FOUND) return cached;
-
-        // 4. Load source from CC filesystem
-        var source = loadSource(id, resolved);
-
-        // 5. Evaluate and cache
-        return evalModule(cx, resolved, source, cache);
-    }
-
-    private String resolvePath(String id) {
-        String candidate;
+    private String resolvePath(String id, String currentDir) {
         if (id.startsWith("./") || id.startsWith("../")) {
             var base = currentDir.isEmpty() ? id : currentDir + "/" + id;
-            candidate = addJsExtension(normalize(base));
-        } else if (id.startsWith("/")) {
-            candidate = addJsExtension(normalize(id));
-        } else {
-            // Bare name — search require.paths (array stored on root require)
-            var paths = ScriptableObject.getProperty(root, "paths");
-            if (paths instanceof Scriptable pathList) {
-                var lenVal = ScriptableObject.getProperty(pathList, "length");
-                var len = lenVal == Scriptable.NOT_FOUND ? 0 : (int) Context.toNumber(lenVal);
-                for (int i = 0; i < len; i++) {
-                    var dir = Context.toString(pathList.get(i, pathList));
-                    var c = addJsExtension(normalize(dir + "/" + id));
-                    if (existsQuietly(c)) return c;
-                }
-            }
-            // Fall back to root-relative
-            candidate = addJsExtension(normalize(id));
+            return addJsExtension(normalize(base));
         }
-        return candidate;
+        if (id.startsWith("/")) {
+            return addJsExtension(normalize(id));
+        }
+        // Bare name: search /rom/apis
+        var candidate = addJsExtension(normalize("/rom/apis/" + id));
+        if (existsQuietly(candidate)) return candidate;
+        return addJsExtension(normalize(id));
     }
 
     private static String addJsExtension(String path) {
@@ -140,29 +95,51 @@ final class JSRequire extends BaseFunction {
         }
     }
 
-    private Object evalModule(Context cx, String resolved, String source, Scriptable cache) {
-        var wrapped = "(function(module,exports,require,__filename,__dirname){\n" + source + "\n})";
-        var fn = (Function) cx.evaluateString(globalScope, wrapped, resolved, 0, null);
+    // --- JS-callable methods ------------------------------------------------
 
-        var module = cx.newObject(globalScope);
-        var exports = cx.newObject(globalScope);
-        ScriptableObject.putProperty(module, "exports", exports);
-        ScriptableObject.putProperty(module, "filename", resolved);
-        ScriptableObject.putProperty(module, "id", resolved);
+    /**
+     * {@code loader.lookup(id, currentDir)} — resolves a module without executing it.
+     *
+     * Returns:
+     * <ul>
+     *   <li>The exports object directly if the module is native or cached.</li>
+     *   <li>A load-spec object {@code {__CC_LOAD__:true, resolved, source, dir}} if the module
+     *       source was found on the filesystem and needs to be executed by the JS side.</li>
+     * </ul>
+     * Throws a JS error if the module cannot be found.
+     */
+    private final class LookupFn extends BaseFunction {
+        @Override
+        public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+            var id = Context.toString(args[0]);
+            var currentDir = args.length > 1 && !(args[1] instanceof Undefined) ? Context.toString(args[1]) : "";
 
-        var dir = FileSystem.getDirectory(resolved);
-        var boundRequire = new JSRequire(root, dir);
+            var nat = nativeModules.get(id);
+            if (nat != null) return nat;
 
-        fn.call(cx, globalScope, module, new Object[]{ module, exports, boundRequire, resolved, dir });
+            var resolved = resolvePath(id, currentDir);
 
-        // Return module.exports — the module may have reassigned it
-        var result = ScriptableObject.getProperty(module, "exports");
-        ScriptableObject.putProperty(cache, resolved, result);
-        return result;
+            var cached = cache.get(resolved);
+            if (cached != null) return cached;
+
+            var source = loadSource(id, resolved);
+            var dir = FileSystem.getDirectory(resolved);
+
+            var spec = cx.newObject(scope);
+            ScriptableObject.putProperty(spec, "__CC_LOAD__", Boolean.TRUE);
+            ScriptableObject.putProperty(spec, "resolved", resolved);
+            ScriptableObject.putProperty(spec, "source", source);
+            ScriptableObject.putProperty(spec, "dir", dir.isEmpty() ? "/" : dir);
+            return spec;
+        }
     }
 
-    @Override
-    public String getFunctionName() {
-        return "require";
+    /** {@code loader.setCache(resolved, exports)} — stores executed module exports. */
+    private final class SetCacheFn extends BaseFunction {
+        @Override
+        public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+            cache.put(Context.toString(args[0]), args[1]);
+            return Undefined.instance;
+        }
     }
 }

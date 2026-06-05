@@ -126,7 +126,7 @@ class JSMachineTest {
         var machine = machineWith("if (typeof require !== 'function') throw new Error('require not found');");
         try {
             var result = machine.handleEvent(null, null);
-            assertFalse(result.isError(), "require should be a global function");
+            assertFalse(result.isError(), "require should be a global function: " + result.getMessage());
         } finally {
             machine.close();
         }
@@ -134,12 +134,13 @@ class JSMachineTest {
 
     @Test
     void require_missing_module_produces_error() throws Exception {
-        // No filesystem — any require call should fail with MODULE_NOT_FOUND
+        // No filesystem — any require call for a non-native module should fail with MODULE_NOT_FOUND
         var machine = machineWith("require('missing');");
         try {
             var result = machine.handleEvent(null, null);
             assertTrue(result.isError(), "missing module should cause an error");
-            assertTrue(result.getMessage().contains("MODULE_NOT_FOUND"), "error should mention MODULE_NOT_FOUND");
+            assertTrue(result.getMessage() != null && result.getMessage().contains("MODULE_NOT_FOUND"),
+                "error should mention MODULE_NOT_FOUND, got: " + result.getMessage());
         } finally {
             machine.close();
         }

@@ -4,6 +4,8 @@
 
 package dan200.computercraft.core.lua;
 
+import dan200.computercraft.api.lua.LuaException;
+import dan200.computercraft.api.lua.MethodResult;
 import dan200.computercraft.core.CoreConfig;
 import dan200.computercraft.core.computer.TimeoutState;
 import org.jspecify.annotations.Nullable;
@@ -17,16 +19,45 @@ import java.util.concurrent.locks.LockSupport;
 public class JSMachine implements ILuaMachine {
     private static final String HARD_ABORT_MESSAGE = "hard abort";
 
+    /**
+     * JS bootstrap that installs the global {@code require()} function using the {@code __cc_loader__}
+     * infrastructure object.  Module execution is done via {@code new Function()} so that the call
+     * happens inside the Rhino interpreter's frame chain — a requirement for
+     * {@link Context#captureContinuation()} to work through module boundaries.
+     */
+    static final String REQUIRE_SETUP_JS = """
+        var require;
+        (function () {
+            var L = __cc_loader__;
+            function makeRequire(currentDir) {
+                return function (id) {
+                    var r = L.lookup(id, currentDir);
+                    if (!r || typeof r !== 'object' || !r.__CC_LOAD__) return r;
+                    var module = { exports: {}, id: r.resolved, filename: r.resolved };
+                    (new Function('module', 'exports', 'require', '__filename', '__dirname', r.source))(
+                        module, module.exports, makeRequire(r.dir), r.resolved, r.dir
+                    );
+                    L.setCache(r.resolved, module.exports);
+                    return module.exports;
+                };
+            }
+            require = makeRequire('');
+        })();
+        """;
+
     private final CCContextFactory factory;
     private final Context cx;
     private final Scriptable scope;
-    private final String biosSource;
-    private final JSRequire require;
+    private final Script biosScript;
     private final TimeoutState timeout;
 
     // Stored by observeInstructionCount so the abort listener can unpark this thread.
     private volatile @Nullable Thread executionThread;
     private @Nullable Runnable abortListener;
+
+    // Pending Rhino continuation — non-null while JS is waiting for an event.
+    // Application state holds the current MethodResult (with its ILuaCallback and event filter).
+    private @Nullable ContinuationPending pendingContinuation;
 
     private boolean started = false;
     private volatile boolean isDisposed = false;
@@ -34,24 +65,33 @@ public class JSMachine implements ILuaMachine {
     // Read the bios eagerly: ComputerExecutor closes the stream in a try-with-resources
     // immediately after construction, before handleEvent() is ever called.
     public JSMachine(MachineEnvironment environment, InputStream bios) throws IOException {
-        biosSource = new String(bios.readAllBytes(), StandardCharsets.UTF_8);
+        var biosSource = new String(bios.readAllBytes(), StandardCharsets.UTF_8);
         timeout = environment.timeout();
 
         factory = new CCContextFactory();
         cx = factory.enterContext();
         scope = cx.initStandardObjects();
 
-        require = new JSRequire(scope, environment.fileSystem());
-        var cache = cx.newObject(scope);
-        var paths = cx.newArray(scope, new Object[]{ "/rom/apis" });
-        ScriptableObject.putProperty(require, "cache", cache);
-        ScriptableObject.putProperty(require, "paths", paths);
+        // Compile bios now so we can use executeScriptWithContinuations later.
+        biosScript = cx.compileString(biosSource, "bios.js", 1, null);
 
-        // require is the only global — all CC APIs will be loaded through it
-        ScriptableObject.putProperty(scope, "require", require);
+        // Build the module loader and register all CC APIs as native modules.
+        var loader = new JSRequire(scope, environment.fileSystem());
+        var context = environment.context();
+        var methods = environment.luaMethods();
+        for (var api : environment.apis()) {
+            for (var name : api.getNames()) {
+                loader.registerNative(name, JSAPIBuilder.build(cx, scope, api, context, methods));
+            }
+        }
 
-        // Wake up the pause spin-loop immediately when a hard abort is requested,
-        // rather than waiting for the next 1 ms park to expire.
+        // Expose loader, run the JS require() setup, then remove the loader from global scope.
+        // The setup script captures a reference via closure so require() still works after deletion.
+        ScriptableObject.putProperty(scope, "__cc_loader__", loader);
+        cx.evaluateString(scope, REQUIRE_SETUP_JS, "require-setup.js", 1, null);
+        ScriptableObject.deleteProperty(scope, "__cc_loader__");
+
+        // Wake up the pause spin-loop immediately when a hard abort is requested.
         abortListener = () -> {
             if (timeout.isHardAborted()) {
                 var t = executionThread;
@@ -61,29 +101,108 @@ public class JSMachine implements ILuaMachine {
         timeout.addListener(abortListener);
     }
 
-    public JSRequire getRequire() {
-        return require;
-    }
-
     @Override
     public MachineResult handleEvent(@Nullable String eventName, @Nullable Object @Nullable [] arguments) {
         if (isDisposed) return MachineResult.OK;
 
-        if (!started) {
-            started = true;
-            try {
-                cx.evaluateString(scope, biosSource, "bios.js", 1, null);
-            } catch (EvaluatorException e) {
-                return mapException(e);
-            } catch (RhinoException e) {
-                close();
-                return MachineResult.error(e.getMessage() != null ? e.getMessage() : e.toString());
-            } catch (Exception e) {
-                close();
-                return MachineResult.error(e.getMessage() != null ? e.getMessage() : e.toString());
+        executionThread = Thread.currentThread();
+        try {
+            if (pendingContinuation != null) {
+                return resumePending(eventName, arguments);
             }
+
+            if (!started) {
+                started = true;
+                try {
+                    cx.executeScriptWithContinuations(biosScript, scope);
+                } catch (ContinuationPending pending) {
+                    pendingContinuation = pending;
+                    return MachineResult.OK;
+                } catch (EvaluatorException e) {
+                    return mapException(e);
+                } catch (RhinoException e) {
+                    close();
+                    return MachineResult.error(e.getMessage() != null ? e.getMessage() : e.toString());
+                } catch (Exception e) {
+                    close();
+                    return MachineResult.error(e.getMessage() != null ? e.getMessage() : e.toString());
+                }
+            }
+        } finally {
+            executionThread = null;
         }
 
+        return MachineResult.OK;
+    }
+
+    /**
+     * Drive the pending callback chain with the given event, then resume the Rhino continuation if it resolves.
+     * If the callback chain is still waiting (filter mismatch or intermediate yield), we just update state and return.
+     */
+    private MachineResult resumePending(@Nullable String eventName, @Nullable Object @Nullable [] arguments) {
+        var saved = pendingContinuation;
+        if (saved == null) return MachineResult.OK;
+        var mr = (MethodResult) saved.getApplicationState();
+
+        // Check event filter — null filter accepts any event.
+        var filterResult = mr.getResult();
+        @Nullable String filter = filterResult != null && filterResult.length > 0 && filterResult[0] instanceof String s
+            ? s : null;
+        if (filter != null && !filter.equals(eventName)) return MachineResult.OK;
+
+        // Build the argument array to pass to the callback (event name first, then args).
+        var args = arguments != null ? arguments : new Object[0];
+        var fullArgs = new Object[args.length + 1];
+        fullArgs[0] = eventName;
+        System.arraycopy(args, 0, fullArgs, 1, args.length);
+
+        var callback = mr.getCallback();
+        if (callback == null) {
+            // Shouldn't happen — we only store MethodResults with non-null callbacks.
+            pendingContinuation = null;
+            return MachineResult.OK;
+        }
+        try {
+            var newMr = callback.resume(fullArgs);
+            var newCallback = newMr.getCallback();
+            if (newCallback == null) {
+                // Callback chain resolved — resume the suspended Rhino script.
+                var jsResult = JSValues.toJsResult(cx, scope, newMr.getResult());
+                return resumeContinuation(jsResult);
+            } else {
+                // Still waiting for another event — update application state.
+                saved.setApplicationState(newMr);
+                return MachineResult.OK;
+            }
+        } catch (LuaException e) {
+            // The callback threw a Lua error — we can't inject errors into Rhino continuations, so close.
+            var msg = e.getMessage();
+            close();
+            return MachineResult.error(msg != null ? msg : e.toString());
+        }
+    }
+
+    private MachineResult resumeContinuation(Object jsResult) {
+        var saved = pendingContinuation;
+        if (saved == null) return MachineResult.OK;
+        try {
+            cx.resumeContinuation(saved.getContinuation(), scope, jsResult);
+            // Script ran to completion — no new continuation.
+            pendingContinuation = null;
+        } catch (ContinuationPending newPending) {
+            pendingContinuation = newPending;
+        } catch (EvaluatorException e) {
+            pendingContinuation = null;
+            return mapException(e);
+        } catch (RhinoException e) {
+            pendingContinuation = null;
+            close();
+            return MachineResult.error(e.getMessage() != null ? e.getMessage() : e.toString());
+        } catch (Exception e) {
+            pendingContinuation = null;
+            close();
+            return MachineResult.error(e.getMessage() != null ? e.getMessage() : e.toString());
+        }
         return MachineResult.OK;
     }
 
@@ -109,6 +228,7 @@ public class JSMachine implements ILuaMachine {
     public void close() {
         if (isDisposed) return;
         isDisposed = true;
+        pendingContinuation = null;
         var listener = abortListener;
         if (listener != null) {
             timeout.removeListener(listener);

@@ -552,6 +552,7 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
     private void resumeMachine(@Nullable String event, @Nullable Object @Nullable [] args) throws InterruptedException {
         var result = Nullability.assertNonNull(machine).handleEvent(event, args);
         if (result.isError()) {
+            System.err.println("Error running computer: " + result.getMessage());
             displayFailure("Error running computer", result.getMessage());
             shutdown();
         } else if (result.isPause()) {
