@@ -9,19 +9,22 @@ import org.jspecify.annotations.Nullable;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Scriptable;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 public class JSMachine implements ILuaMachine {
     private final Context cx;
     private final Scriptable scope;
-    private final InputStream bios;
+    private final String biosSource;
 
     private boolean started = false;
     private volatile boolean isDisposed = false;
 
-    public JSMachine(MachineEnvironment environment, InputStream bios) {
-        this.bios = bios;
+    // Read the bios eagerly: ComputerExecutor closes the stream in a try-with-resources
+    // immediately after construction, before handleEvent() is ever called.
+    public JSMachine(MachineEnvironment environment, InputStream bios) throws IOException {
+        biosSource = new String(bios.readAllBytes(), StandardCharsets.UTF_8);
 
         cx = Context.enter();
         cx.setOptimizationLevel(-1);
@@ -38,8 +41,7 @@ public class JSMachine implements ILuaMachine {
         if (!started) {
             started = true;
             try {
-                var source = new String(bios.readAllBytes(), StandardCharsets.UTF_8);
-                cx.evaluateString(scope, source, "bios.js", 1, null);
+                cx.evaluateString(scope, biosSource, "bios.js", 1, null);
             } catch (Exception e) {
                 close();
                 return MachineResult.error(e.getMessage() != null ? e.getMessage() : e.toString());
