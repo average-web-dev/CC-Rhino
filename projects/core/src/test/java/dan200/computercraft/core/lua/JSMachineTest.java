@@ -83,6 +83,45 @@ class JSMachineTest {
     }
 
     @Test
+    void hard_abort_returns_timeout() throws Exception {
+        // Arm hard abort before boot so the first instruction check fires it.
+        var timeout = new TimeoutState() {
+            @Override public void refresh() {}
+            { hardAbort = true; }
+        };
+
+        InputStream bios = new ByteArrayInputStream("while(true){}".getBytes(StandardCharsets.UTF_8));
+        var env = new MachineEnvironment(NO_CONTEXT, MetricsObserver.discard(), timeout, List.of(), NO_METHODS, "test", null);
+        var machine = new JSMachine(env, bios);
+        try {
+            var result = machine.handleEvent(null, null);
+            assertTrue(result.isError(), "hard abort should be an error");
+            assertEquals(MachineResult.TIMEOUT, result);
+        } finally {
+            machine.close();
+        }
+    }
+
+    @Test
+    void soft_abort_returns_too_long() throws Exception {
+        var timeout = new TimeoutState() {
+            @Override public void refresh() {}
+            { softAbort = true; }
+        };
+
+        var bios2 = new ByteArrayInputStream("while(true){}".getBytes(StandardCharsets.UTF_8));
+        var env2 = new MachineEnvironment(NO_CONTEXT, MetricsObserver.discard(), timeout, List.of(), NO_METHODS, "test", null);
+        var machine2 = new JSMachine(env2, bios2);
+        try {
+            var result = machine2.handleEvent(null, null);
+            assertTrue(result.isError(), "soft abort should be an error");
+            assertEquals(TimeoutState.ABORT_MESSAGE, result.getMessage());
+        } finally {
+            machine2.close();
+        }
+    }
+
+    @Test
     void require_is_accessible_as_global() throws Exception {
         var machine = machineWith("if (typeof require !== 'function') throw new Error('require not found');");
         try {
