@@ -11,9 +11,10 @@ Users write JavaScript (ES6 subset) instead of Lua inside the mod.
 
 **API design:**
 
-- Events → `os.on("redstone", cb)` / `os.once("char", cb)` — `os` obtained via `require('os')`
+- Events → `events.on("redstone", cb)` / `events.once("char", cb)` — `events` obtained via `require('events')` (the global event bus)
 - Blocking ops → synchronous `turtle.dig()` — Rhino continuations yield the script, let other events fire, then resume transparently
-- Modules → CommonJS `require()` for everything: Java-backed APIs (`turtle`, `os`, `term`, …) and user/ROM files alike
+- Modules → CommonJS `require()` for everything: Java-backed APIs (`turtle`, `process`, `events`, `term`, …) and user/ROM files alike
+- The old CC `os` is split into **`process`** (computer control + in-game time), **`events`** (event bus + timers/alarms) and global timer functions. See [JS_API_REDESIGN.md](JS_API_REDESIGN.md).
 - **No implicit globals** — `require` is the only global injected by the runtime; all APIs must be required explicitly
 
 **Key constraints:**
@@ -23,21 +24,21 @@ Users write JavaScript (ES6 subset) instead of Lua inside the mod.
 - `ILuaMachine` / `MachineEnvironment` interface surface stays unchanged
 - All Java API implementations (turtle, fs, peripheral, …) kept as-is
 
-**Event loop model (how `os.on` survives a blocking `turtle.dig()`):**
+**Event loop model (how `events.on` survives a blocking `turtle.dig()`):**
 
 ```text
 ┌─────────────────────────────────────────────────────────┐
 │  Computer thread (Rhino Context)                        │
 │                                                         │
 │  handleEvent("__start__")                               │
-│    → eval bios.js → user code registers os.on(…)        │
+│    → eval bios.js → user code registers events.on(…)   │
 │                                                         │
 │  handleEvent("turtle_response")           ←── wakes up  │
 │    → resumes stored continuation with dig result        │
 │    → JS continues: const ok = turtle.dig()  ← returns  │
 │                                                         │
 │  handleEvent("redstone")                  ← fires WHILE │
-│    → fires os.on("redstone", cb) callbacks   dig waits  │
+│    → fires events.on("redstone", cb) callbacks dig waits│
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -179,7 +180,7 @@ object with a clear lifecycle tied to `JSMachine`.
   - `void off(String event, Callable fn)` — removes entries whose `fn` matches
   - `void emit(Context cx, Scriptable scope, String event, Object[] jsArgs)` — snapshots the list, removes `once` entries, calls each `fn.call(cx, scope, scope, jsArgs)`
   - `int listenerCount(String event)` — returns list size
-- [ ] **5.2** Do **not** inject `os` as a global. Instead, register a native `os` module (see Phase 3) that merges the CC `os` Java API with the emitter methods. `JSMachine` holds `JSEventEmitter emitter` as a field; `require('os')` returns a `NativeObject` that wraps `emitter.on/once/off/listenerCount` as `BaseFunction` instances alongside all CC os API methods.
+- [ ] **5.2** Do **not** inject anything as a global. Instead, register a native `events` module (see Phase 3) that exposes the emitter. `JSMachine` holds `JSEventEmitter emitter` as a field; `require('events')` returns a `NativeObject` wrapping `emitter.on/once/off/listenerCount` as `BaseFunction` instances, plus `emit`/`queueEvent` and the CC timer/alarm methods (`startTimer`, `cancelTimer`, `setAlarm`, `cancelAlarm`). The remaining CC `os` methods (shutdown, reboot, label, clock, in-game time/day/epoch) are registered as a separate `process` module. See [JS_API_REDESIGN.md](JS_API_REDESIGN.md) for the split.
 - [ ] **5.3** `handleEvent(String name, Object[] args)`:
   - First call (`!started`) → `started = true` → eval bios.js resource → `emitter.emit(cx, scope, "__start__", new Object[0])`
   - Subsequent calls → convert `args` via `toJsValue()` → `emitter.emit(cx, scope, name, jsArgs)`
@@ -215,18 +216,17 @@ The CC scheduler remains free to process other events while the main-thread task
     - Converts result via `JSValues.toJS()`
     - Calls `cx.resumeContinuation(pendingContinuation.getContinuation(), scope, jsResult)` — JS resumes from `turtle.dig()` call site
     - Clears `pendingContinuation` / `pendingTaskId`
-  - While task is pending, all other events (`"redstone"`, `"char"`, etc.) are dispatched normally via `__emitter__.emit()` — `os.on()` callbacks fire as usual
+  - While task is pending, all other events (`"redstone"`, `"char"`, etc.) are dispatched normally via `__emitter__.emit()` — `events.on()` callbacks fire as usual
 - [ ] **6.5** `JSAPIBuilder.java` — enumerates methods via `forEachMethod`, wraps each as `JSMethodBridge`, returns `NativeObject` (scriptable map)
 - [ ] **6.6** `JSMachine` constructor registers every CC API as a **native module** in `JSRequire` (not as a global):
   - `jsRequire.registerNative(api.getModuleName(), JSAPIBuilder.build(api))` for each API in `env.apis()`
-  - Special case for the `os` API: merge its `NativeObject` with the EventEmitter `on/once/off` methods so `require('os')` returns a single unified object
-  - The only global set on `scope` is `require` itself
-- [ ] **6.7** `bios.ts` updated — loads `term` and `os` via `require`; `print` is a plain TS helper defined in `bios.ts` using `require('term')`:
+  - Split the CC `os` API: the EventEmitter `on/once/off` + `emit`/timers/alarms become the `events` module; the rest (shutdown, reboot, label, clock, in-game time) become the `process` module
+  - The only global set on `scope` is `require` itself (plus the global timer functions `setTimeout`/`setInterval`/`clearTimeout`/`clearInterval` and `sleep`)
+- [ ] **6.7** `bios.ts` updated — loads `term` via `require`; `print` is a plain TS helper defined in `bios.ts`. Terminal coordinates are **0-based** and `getCursorPos()` returns an object:
 
   ```ts
   const term = require('term');
-  const os   = require('os');
-  function print(text: string): void { term.write(String(text)); term.setCursorPos(1, term.getCursorPos()[1] + 1); }
+  function print(text: string): void { term.write(String(text)); const { y } = term.getCursorPos(); term.setCursorPos(0, y + 1); }
   ```
 
 - [ ] **Commit** — stage Phase 6 files; propose commit message; wait for user approval
@@ -262,9 +262,9 @@ after `JS_ROM_FEATURES.md` defines the feature contracts.
 ## Phase 8 — Testing
 
 - [ ] **8.1** `JSMachineTest.java` — create `JSMachine` with a dummy `MachineEnvironment`; call `handleEvent(null, null)`; expect `MachineResult.OK`
-- [ ] **8.2** `JSEventBridgeTest.java` — eval `var os = require('os'); os.on("foo", function(v) { result = v; })` from JS; call `handleEvent("foo", new Object[]{"bar"})` from Java; verify `result` equals `"bar"`
+- [ ] **8.2** `JSEventBridgeTest.java` — eval `var events = require('events'); events.on("foo", function(v) { result = v; })` from JS; call `handleEvent("foo", new Object[]{"bar"})` from Java; verify `result` equals `"bar"`
 - [ ] **8.3** `JSBlockingAPITest.java` — mock a `LuaMethod` that calls `executeMainThreadTask`; verify continuation is captured on first `handleEvent`; fire `task_complete`; verify JS resumes with correct result
-- [ ] **8.4** `JSConcurrentEventTest.java` — while a continuation is pending (dig in progress), call `handleEvent("redstone", ...)` and verify the `os.on("redstone", cb)` callback fires without resuming the dig continuation
+- [ ] **8.4** `JSConcurrentEventTest.java` — while a continuation is pending (dig in progress), call `handleEvent("redstone", ...)` and verify the `events.on("redstone", cb)` callback fires without resuming the dig continuation
 - [ ] **8.5** `JSRequireTest.java` — write a virtual `.js` file to a test filesystem; `require()` it from bios.js; verify it executes and `module.exports` is returned
 - [ ] **8.6** `JSSafePointTest.java` — run `while(true){}` in user JS; verify `MachineResult.TIMEOUT` or error is returned within a bounded time
 - [ ] **8.7** Remove/adapt Cobalt-specific tests:
@@ -297,8 +297,8 @@ The build pipeline is already running from Phase 1.5. This phase adds typed modu
 so the TypeScript compiler can check all ROM/bios sources against the actual CC API surface.
 Defer until the API surface has stabilised (after Phase 9).
 
-- [ ] **10.1** Write typed module declarations for all CC native modules in `projects/core/src/ts/types/cc.d.ts`: `declare module 'turtle' { ... }`, `declare module 'os' { ... }`, `declare module 'term' { ... }`, etc. — no `declare global` needed since nothing is injected globally
-- [ ] **10.2** Model blocking calls as plain synchronous return types (e.g. `dig(): [boolean, string?]`), not Promise
+- [x] **10.1** Typed module declarations for all CC native modules live in `projects/core/src/ts/types/` — one `.d.ts` per module (`fs`, `path`, `process`, `events`, `http`, `term`, `redstone`, `peripheral`, `turtle`, `commands`, `pocket`), plus `globals.d.ts` (`require` overloads, timers, `sleep`) and `modules.d.ts` (ambient `declare module` for `import` syntax). The `bundleTypeDeclarations` Gradle task collects all `.d.ts` into `build/generated/types/` for publishing as an npm types package. See [JS_API_REDESIGN.md](JS_API_REDESIGN.md).
+- [ ] **10.2** Model blocking calls as plain synchronous return types — "can-fail" actions return `{ ok: boolean, reason?: string }` (not a tuple, not a Promise)
 - [ ] **10.3** Keep `.d.ts` in sync as Phase 11 / Phase 9 reshape the API surface
 - [ ] **Commit** — stage Phase 10 files; propose commit message; wait for user approval
 
@@ -354,11 +354,11 @@ matching `/rom/` path at build time. Implement in dependency order as noted in t
 | Soft abort | `throw new EvaluatorException(ABORT_MESSAGE)` from safepoint |
 | Pause/preemption | Spin-wait inside `observeInstructionCount()` until `isPaused()` clears |
 | Main-thread tasks | Rhino continuation captured in JS; CC queues non-blocking task; `task_complete` event resumes continuation |
-| Blocking during pending | Other `os.on()` events dispatch normally while continuation is stored |
+| Blocking during pending | Other `events.on()` events dispatch normally while continuation is stored |
 | Rhino mode | `optimizationLevel(-1)` interpreter — pure Java, no class generation, continuations work |
 | Security | `cx.setClassShutter(name -> false)`, strip `Packages`/`java` globals |
-| Globals | Only `require` — all APIs (`os`, `turtle`, `term`, `fs`, …) must be loaded with `require()` |
-| Event model | `var os = require('os'); os.on(event, cb)` — synchronous callbacks in `handleEvent()` |
-| Sync ops | `turtle.dig()` returns value directly; no `await`, no Promise |
+| Globals | `require` + global timers (`setTimeout`/`setInterval`/`clearTimeout`/`clearInterval`, `sleep`) — all APIs (`process`, `events`, `turtle`, `term`, `fs`, …) must be loaded with `require()` |
+| Event model | `var events = require('events'); events.on(event, cb)` — synchronous callbacks in `handleEvent()` |
+| Sync ops | `turtle.dig()` returns value directly (`{ ok, reason? }`); no `await`, no Promise |
 | Modules | `require(id)`: checks native registry first, then CC filesystem; `require.paths = ["/rom/apis"]` |
-| Native modules | Java APIs registered by name in `JSRequire.nativeModules`; `os` merges CC os API + EventEmitter |
+| Native modules | Java APIs registered by name in `JSRequire.nativeModules`; CC `os` is split into the `process` and `events` modules |

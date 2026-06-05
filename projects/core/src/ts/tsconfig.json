@@ -2,12 +2,14 @@
     "compilerOptions": {
         "module": "commonjs",
         "target": "es2017",
+        "lib": ["es2017"],
         "strict": true,
         "noEmitOnError": true,
+        "declaration": true,
         "outDir": "../../build/generated/js",
         "rootDir": ".",
         "newLine": "LF",
-        "types": ["node"]
+        "types": []
     },
     "include": ["."],
     "exclude": ["node_modules"]

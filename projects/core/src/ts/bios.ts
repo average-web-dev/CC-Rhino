@@ -3,13 +3,12 @@
 // SPDX-License-Identifier: MPL-2.0
 
 const term = require('term');
-const os   = require('os');
 
 function print(...args: unknown[]): void {
     const text = args.map(String).join('\t');
     term.write(text);
-    const [, y] = term.getCursorPos();
-    term.setCursorPos(1, y + 1);
+    const { y } = term.getCursorPos();
+    term.setCursorPos(0, y + 1);
 }
 
 // Bootstrap: try to load the user's startup script.
