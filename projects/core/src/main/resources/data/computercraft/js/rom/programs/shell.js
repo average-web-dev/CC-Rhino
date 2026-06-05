@@ -36,6 +36,21 @@ export default async function shell() {
         run: (cmd, ...args) => runProgram(cmd, args),
         exit: () => { running = false; },
         resolve: (p) => p.startsWith("/") ? p : `${dir}/${p}`,
+        // Returns a sorted list of program names found across the search path.
+        programs: (includeHidden) => {
+            const items = new Set();
+            for (const entry of searchPath) {
+                const d = entry.startsWith("/") ? entry : `/${entry}`;
+                if (!(fs.isDir && fs.isDir(d))) continue;
+                for (let file of fs.list(d)) {
+                    if (fs.isDir(fs.combine(d, file))) continue;
+                    if (!includeHidden && file.startsWith(".")) continue;
+                    if (file.length > 3 && file.endsWith(".js")) file = file.slice(0, -3);
+                    items.add(file);
+                }
+            }
+            return [...items].sort();
+        },
     };
 
     async function runProgram(cmd, args) {

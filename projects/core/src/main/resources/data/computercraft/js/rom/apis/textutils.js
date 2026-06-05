@@ -47,18 +47,99 @@ function formatTime(t, ampm = false) {
     return `${h}:${String(m).padStart(2, "0")}`;
 }
 
-function tabulate(...rows) {
-    const [w] = term.getSize();
-    for (const row of rows) {
-        if (!row || !Array.isArray(row)) { print(""); continue; }
-        const cols = Math.max(1, Math.floor(w / Math.max(...row.map(c => String(c ?? "").length + 2), 1)));
-        let line = "";
-        for (const cell of row) {
-            const s = String(cell ?? "");
-            line += s.padEnd(Math.ceil(w / row.length));
+// Print "Press any key to continue" and wait for a keypress, then clear it.
+async function pageWait() {
+    write("Press any key to continue...");
+    await new Promise((resolve) => os.once("key", resolve));
+    const cy = term.getCursorPos()[1];
+    term.setCursorPos(1, cy);
+    term.clearLine();
+}
+
+// Shared implementation for tabulate / pagedTabulate. Accepts arrays (rows) and
+// numbers (text-colour changes). When `bPaged` is set, it pauses for a keypress
+// once the screen fills. Returns a Promise; the non-paged path never awaits, so
+// tabulate() completes synchronously.
+async function tabulateImpl(bPaged, args) {
+    const [w, h] = term.getSize();
+
+    let nMaxLen = w / 8;
+    for (const t of args) {
+        if (Array.isArray(t)) {
+            for (const item of t) {
+                const ty = type(item);
+                if (ty !== "string" && ty !== "number") {
+                    throw new Error(`bad argument (string expected, got ${ty})`);
+                }
+                nMaxLen = Math.max(tostring(item).length + 1, nMaxLen);
+            }
+        } else if (typeof t !== "number") {
+            throw new Error(`bad argument (number or table expected, got ${type(t)})`);
         }
-        print(line.slice(0, w));
     }
+    nMaxLen = Math.floor(nMaxLen);
+    const nCols = Math.max(1, Math.floor(w / nMaxLen));
+
+    // Lay each row out into fixed-width columns, recording the active colour.
+    const prev = term.getTextColour();
+    let colour = prev;
+    const lines = [];
+    for (const t of args) {
+        if (typeof t === "number") { colour = t; continue; }
+        if (!Array.isArray(t) || t.length === 0) continue;
+
+        let line = "";
+        let nCol = 0;
+        for (const s of t) {
+            if (nCol >= nCols) { lines.push({ text: line, colour }); line = ""; nCol = 0; }
+            const start = nCol * nMaxLen;
+            if (line.length < start) line += " ".repeat(start - line.length);
+            line += tostring(s);
+            nCol++;
+        }
+        lines.push({ text: line, colour });
+    }
+
+    let shown = term.getCursorPos()[1];
+    for (const { text, colour: c } of lines) {
+        term.setTextColor(c);
+        print(text);
+        if (bPaged) {
+            shown++;
+            if (shown >= h) {
+                term.setTextColor(prev);
+                await pageWait();
+                shown = 1;
+            }
+        }
+    }
+    term.setTextColor(prev);
+}
+
+// Print tables in a structured form. Arguments are rows (arrays) or colours
+// (numbers, which set the colour of subsequent rows).
+function tabulate(...args) {
+    return tabulateImpl(false, args);
+}
+
+// As tabulate, but pauses for input when the output does not fit on screen.
+function pagedTabulate(...args) {
+    return tabulateImpl(true, args);
+}
+
+// Print text, pausing for a keypress when the screen fills. Simplified relative
+// to the Lua version (which redirects the terminal's scroll handler).
+async function pagedPrint(text, _freeLines) {
+    const [, h] = term.getSize();
+    let shown = term.getCursorPos()[1];
+    const lines = tostring(text).split("\n");
+    let printed = 0;
+    for (const line of lines) {
+        printed += print(line);
+        shown += 1;
+        if (shown >= h) { await pageWait(); shown = 1; }
+    }
+    return printed;
 }
 
 function slowPrint(text, rate = 20) {
@@ -70,4 +151,8 @@ function urlEncode(str) {
     return encodeURIComponent(String(str));
 }
 
-export default { serialize, unserialize, formatTime, tabulate, slowPrint, urlEncode };
+export default {
+    serialize, unserialize, formatTime,
+    tabulate, pagedTabulate, pagedPrint,
+    slowPrint, urlEncode,
+};

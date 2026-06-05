@@ -122,7 +122,9 @@ globalThis.write = (sText) => {
                 while (text.length > 0) {
                     if (x > w) newLine();
                     term.write(text);
-                    text = text.slice(w - x + 1);
+                    // Always consume at least one character so we can't loop
+                    // forever if the cursor does not advance past the edge.
+                    text = text.slice(Math.max(1, w - x + 1));
                     [x, y] = term.getCursorPos();
                 }
             } else {
