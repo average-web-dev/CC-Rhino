@@ -46,7 +46,7 @@ continues from the `turtle.dig()` call site with the return value.
 ## Phase 1 — Project setup & dependency wiring
 
 - [ ] **1.1** Add Rhino to `gradle/libs.versions.toml`:
-  - `[versions]` entry: `rhino = "1.7.15"`
+  - `[versions]` entry: `rhino = "1.9.1"`
   - `[libraries]` entry: `rhino = { module = "org.mozilla:rhino", version.ref = "rhino" }`
 - [ ] **1.2** Replace GraalJS `implementation` dependency in `projects/core/build.gradle.kts` with `implementation(libs.rhino)`; keep Cobalt for now
 - [ ] **1.3** Add `public static int jsInstructionThreshold = 10_000;` to `CoreConfig.java`
