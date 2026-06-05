@@ -43,6 +43,24 @@ continues from the `turtle.dig()` call site with the return value.
 
 ---
 
+## Commit convention
+
+After completing every phase:
+
+1. `git add` all files introduced or modified by that phase (list them explicitly — no `git add .`)
+2. Propose a commit message using the format below; do **not** run `git commit` until the user explicitly approves
+3. The `Co-Authored-By` trailer marks the commit as AI-generated and must always be present
+
+```text
+feat(js-engine): <one-line summary of the phase>
+
+<2–3 sentences describing what was implemented and why>
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+```
+
+---
+
 ## Phase 1 — Project setup & dependency wiring
 
 - [ ] **1.1** Add Rhino to `gradle/libs.versions.toml`:
@@ -51,6 +69,22 @@ continues from the `turtle.dig()` call site with the return value.
 - [ ] **1.2** Replace GraalJS `implementation` dependency in `projects/core/build.gradle.kts` with `implementation(libs.rhino)`; keep Cobalt for now
 - [ ] **1.3** Add `public static int jsInstructionThreshold = 10_000;` to `CoreConfig.java`
 - [ ] **1.4** Smoke-check: `./gradlew :core:compileJava` passes with no errors
+- [ ] **Commit** — stage Phase 1 files; propose commit message; wait for user approval
+
+---
+
+## Phase 1.5 — TypeScript build pipeline
+
+Set up the transpile-on-build pipeline before writing any bios or ROM files.
+All JS authored for the CC runtime lives under `projects/core/src/ts/` and is never
+committed as raw `.js` — Gradle emits the `.js` output into the resource tree.
+
+- [ ] **1.5.1** Add `projects/core/src/ts/tsconfig.json`:
+  `module: commonjs`, `target: es2017`, `strict`, `noEmitOnError` — emits CommonJS `require()` calls, matching the Rhino runtime
+- [ ] **1.5.2** Wire transpile into the `:core` build reusing `NpxExecToDir` task; `tsc` outputs into `build/generated/js`
+- [ ] **1.5.3** Feed generated dir into `processResources` under `data/computercraft/js/`
+- [ ] **1.5.4** Smoke-check: `./gradlew :core:processResources` succeeds (empty `src/ts/` is fine at this point)
+- [ ] **Commit** — stage Phase 1.5 files; propose commit message; wait for user approval
 
 ---
 
@@ -72,9 +106,16 @@ continues from the `turtle.dig()` call site with the return value.
   - `issueMainThreadTask()` → same as `LuaContext` (queue via `computer.queueMainThread()`, return task ID)
   - `executeMainThreadTask()`: See Phase 5 — this is where continuations are captured instead of blocking
 - [ ] **2.3** In `ComputerContext.Builder.build()` change the default factory from `CobaltLuaMachine::new` to `JSMachine::new`
-- [ ] **2.4** Create `projects/core/src/main/resources/data/computercraft/js/bios.js` — minimal stub: `var term = require('term'); term.write("JS bios loaded");`
-- [ ] **2.5** In `ComputerExecutor.createLuaMachine()` change the resource path from `"lua/bios.lua"` to `"js/bios.js"`, and pass `JSContext` instead of `LuaContext`
+- [ ] **2.4** Create `projects/core/src/ts/bios.ts` — minimal stub (transpiles to `data/computercraft/js/bios.js` at build time):
+
+  ```ts
+  const term = require('term');
+  term.write("JS bios loaded");
+  ```
+
+- [ ] **2.5** In `ComputerExecutor.createLuaMachine()` change the resource path from `"lua/bios.lua"` to `"js/bios.js"` (the transpiled output), and pass `JSContext` instead of `LuaContext`
 - [ ] **2.6** Verify: `JSMachineTest` (3 tests) — boot returns OK, `print()` runs without error, subsequent events return OK
+- [ ] **Commit** — stage Phase 2 files; propose commit message; wait for user approval
 
 ---
 
@@ -92,37 +133,31 @@ continues from the `turtle.dig()` call site with the return value.
   - Message equals `ABORT_MESSAGE` → `error(ABORT_MESSAGE)`
   - Other → `error(message)` + close
 - [ ] **3.3** `onTimeoutChanged()` listener calls `cx.observeInstructionCount(cx, 0)` on hard abort as a wake signal — the safepoint will then throw the hard abort exception on the next instruction check
+- [ ] **Commit** — stage Phase 3 files; propose commit message; wait for user approval
 
 ---
 
 ## Phase 4 — EventEmitter bridge
 
-- [ ] **4.1** Embed a minimal EventEmitter JS object (`on/once/off/emit/listenerCount`) in `JSMachine`; eval at construction, store as `emitterObj` field in `scope`
+The listener registry is implemented entirely in Java — no JS eval, no embedded string, no
+resource file. This avoids bridging overhead and keeps the event infrastructure as a plain Java
+object with a clear lifecycle tied to `JSMachine`.
 
-  ```js
-  var __emitter__ = (function() {
-    var listeners = {};
-    return {
-      on: function(event, fn) { (listeners[event] = listeners[event] || []).push({ fn: fn, once: false }); },
-      once: function(event, fn) { (listeners[event] = listeners[event] || []).push({ fn: fn, once: true }); },
-      off: function(event, fn) { if (listeners[event]) listeners[event] = listeners[event].filter(function(l) { return l.fn !== fn; }); },
-      emit: function(event) {
-        var args = Array.prototype.slice.call(arguments, 1);
-        var ls = listeners[event] ? listeners[event].slice() : [];
-        listeners[event] = (listeners[event] || []).filter(function(l) { return !l.once; });
-        ls.forEach(function(l) { l.fn.apply(null, args); });
-      },
-      listenerCount: function(event) { return (listeners[event] || []).length; }
-    };
-  })();
-  ```
-
-- [ ] **4.2** Do **not** inject `os` as a global. Instead, register a native `os` module (see Phase 6) that merges the CC `os` Java API with the EventEmitter methods. The `__emitter__` object is held privately on the Java side (`JSMachine.emitter`); `require('os')` returns a `NativeObject` that includes both `on/once/off` (delegating to `__emitter__`) and all CC os API methods.
+- [ ] **4.1** Create `JSEventEmitter.java`:
+  - Inner record `ListenerEntry(Callable fn, boolean once)`
+  - Field: `Map<String, List<ListenerEntry>> listeners = new HashMap<>()`
+  - `void on(String event, Callable fn)` — appends `ListenerEntry(fn, false)`
+  - `void once(String event, Callable fn)` — appends `ListenerEntry(fn, true)`
+  - `void off(String event, Callable fn)` — removes entries whose `fn` matches
+  - `void emit(Context cx, Scriptable scope, String event, Object[] jsArgs)` — snapshots the list, removes `once` entries, calls each `fn.call(cx, scope, scope, jsArgs)`
+  - `int listenerCount(String event)` — returns list size
+- [ ] **4.2** Do **not** inject `os` as a global. Instead, register a native `os` module (see Phase 6) that merges the CC `os` Java API with the emitter methods. `JSMachine` holds `JSEventEmitter emitter` as a field; `require('os')` returns a `NativeObject` that wraps `emitter.on/once/off/listenerCount` as `BaseFunction` instances alongside all CC os API methods.
 - [ ] **4.3** `handleEvent(String name, Object[] args)`:
-  - First call (`!started`) → `started = true` → eval bios.js → call Java-side `emitter.emit("__start__")`
-  - Subsequent calls → convert `args` via `toJsValue()` → call Java-side `emitter.emit(name, jsArgs...)`
+  - First call (`!started`) → `started = true` → eval bios.js resource → `emitter.emit(cx, scope, "__start__", new Object[0])`
+  - Subsequent calls → convert `args` via `toJsValue()` → `emitter.emit(cx, scope, name, jsArgs)`
   - `toJsValue()` handles: null → `null`; Boolean/Number/String → wrap; byte[]/ByteBuffer → JS array; Map/Collection → `NativeObject`/`NativeArray`; recursive, cycle-safe
-- [ ] **4.4** `dispatchEvent` returns `MachineResult.OK` immediately when `name` is null
+- [ ] **4.4** `handleEvent` returns `MachineResult.OK` immediately when `name` is null
+- [ ] **Commit** — stage Phase 4 files; propose commit message; wait for user approval
 
 ---
 
@@ -158,13 +193,15 @@ The CC scheduler remains free to process other events while the main-thread task
   - `jsRequire.registerNative(api.getModuleName(), JSAPIBuilder.build(api))` for each API in `env.apis()`
   - Special case for the `os` API: merge its `NativeObject` with the EventEmitter `on/once/off` methods so `require('os')` returns a single unified object
   - The only global set on `scope` is `require` itself
-- [ ] **5.7** `bios.js` updated — loads `term` and `os` via `require`; `print` is a plain JS helper defined in bios.js using `require('term')`:
+- [ ] **5.7** `bios.ts` updated — loads `term` and `os` via `require`; `print` is a plain TS helper defined in `bios.ts` using `require('term')`:
 
-  ```js
-  var term = require('term');
-  var os   = require('os');
-  function print(text) { term.write(String(text)); term.setCursorPos(1, term.getCursorPos()[1] + 1); }
+  ```ts
+  const term = require('term');
+  const os   = require('os');
+  function print(text: string): void { term.write(String(text)); term.setCursorPos(1, term.getCursorPos()[1] + 1); }
   ```
+
+- [ ] **Commit** — stage Phase 5 files; propose commit message; wait for user approval
 
 ---
 
@@ -185,7 +222,8 @@ The CC scheduler remains free to process other events while the main-thread task
   - Call wrapper with fresh `module = { exports: {} }` and `exports = module.exports`
   - Store `require.cache[resolvedPath] = module.exports`; return `module.exports`
 - [ ] **6.2** `JSMachine` creates a `JSRequire` instance, exposes it as the **sole global** (`scope.put("require", scope, jsRequire)`); sets `require.paths = ["/rom/apis"]`; sets `require.cache = {}`; Java APIs are pre-registered via `jsRequire.registerNative(name, obj)` (see Phase 5.6)
-- [ ] **6.3** `bios.js` `__start__` handler does `require("/startup")` (loads `/startup.js` if present); silently ignores `MODULE_NOT_FOUND` error
+- [ ] **6.3** `bios.ts` `__start__` handler does `require("/startup")` (loads `/startup.js` if present); silently ignores `MODULE_NOT_FOUND` error
+- [ ] **Commit** — stage Phase 6 files; propose commit message; wait for user approval
 
 ---
 
@@ -198,53 +236,20 @@ The CC scheduler remains free to process other events while the main-thread task
   - `cx.setOptimizationLevel(-1)` already set — no class generation, no reflection bypass via bytecode
 - [ ] **7.2** Verify `java.lang.Runtime.getRuntime().exec("ls")` throws from JS
 - [ ] **7.3** Verify API objects only expose wrapped `BaseFunction` methods, not arbitrary Java fields
+- [ ] **Commit** — stage Phase 7 files; propose commit message; wait for user approval
 
 ---
 
-## Phase 7.5 — JS ROM & standard library
+## Phase 7.5 — ROM filesystem wiring
 
-Translate the Lua ROM (`lua/rom/`) into a JS equivalent so the computer is fully usable
-out of the box — shell, built-in programs, standard library APIs, and startup sequence.
+Wire the ROM directory into the CC filesystem so Phase 11 programs are accessible at runtime.
+Do **not** write any `.ts` files under `src/ts/rom/` here — all ROM content is authored in Phase 11
+after `JS_ROM_FEATURES.md` defines the feature contracts.
 
-### 7.5.A — Resource layout
-
-- [ ] **7.5.A.1** Create `projects/core/src/main/resources/data/computercraft/js/rom/` mirroring the structure of `lua/rom/`
-- [ ] **7.5.A.2** Update `ComputerExecutor` to mount `js/rom` at `/rom` in the CC filesystem
-- [ ] **7.5.A.3** Update `bios.js` to boot the JS shell (`/rom/programs/shell.js`) after loading startup scripts
-
-### 7.5.B — Standard library JS APIs (`/rom/apis/`)
-
-Each file uses CommonJS `module.exports = { ... }` and is loadable via `require('colors')` etc.
-User code and ROM programs must require them explicitly — bios.js does not inject them as globals.
-
-- [ ] **7.5.B.1** `colors.js` / `colours.js` — colour constants + `combine`, `subtract`, `test`, `packRGB`, `unpackRGB`
-- [ ] **7.5.B.2** `keys.js` — key-name-to-keycode map (LWJGL key codes)
-- [ ] **7.5.B.3** `textutils.js` — `serialize`/`unserialize` (JSON-compatible), `formatTime`, `tabulate`, `pagedTabulate`, `slowPrint`, `urlEncode`
-- [ ] **7.5.B.4** `math.js` — thin wrappers / re-exports of JS `Math` with Lua-compatible naming (`math.floor`, `math.ceil`, `math.random`, `math.huge`, etc.)
-- [ ] **7.5.B.5** `string.js` — Lua-style string library shim (`string.format`, `string.find`, `string.match`, `string.gmatch`, `string.gsub`, `string.rep`, `string.reverse`, `string.byte`, `string.char`, `string.len`, `string.sub`)
-- [ ] **7.5.B.6** `table.js` — `table.insert`, `table.remove`, `table.concat`, `table.sort`, `table.unpack` shims over JS Array methods
-- [ ] **7.5.B.7** `vector.js` — 3D vector class with `add`, `sub`, `mul`, `dot`, `cross`, `length`, `normalize`, `tostring`
-- [ ] **7.5.B.8** `window.js` — terminal window API (sub-terminal redirects)
-
-### 7.5.C — Shell & REPL (`/rom/programs/`)
-
-- [ ] **7.5.C.1** `shell.js` — interactive shell: reads a line, splits into program + args, looks up `/rom/programs/<cmd>.js` or `/<cmd>.js`, requires and runs it; handles `exit`, `cd`, `path`
-- [ ] **7.5.C.2** `ls.js` — lists files in the current/given directory
-- [ ] **7.5.C.3** `help.js` — reads `/rom/help/<topic>.md` and prints it to the terminal
-- [ ] **7.5.C.4** `edit.js` — minimal line editor: open/create a file, edit lines, save
-- [ ] **7.5.C.5** `reboot.js` and `shutdown.js` — call `os.reboot()` / `os.shutdown()`
-- [ ] **7.5.C.6** `echo.js`, `clear.js`, `time.js`, `id.js` — trivial one-liners
-
-### 7.5.D — `read()` and terminal helpers in bios.js
-
-- [ ] **7.5.D.1** Implement `read(replaceChar, history, completeFn)` in bios.js using `os.on("char", ...)` / `os.on("key", ...)` — each keypress resumes the pending continuation via the CC event loop; `os` is obtained via `require('os')` at the top of bios.js
-- [ ] **7.5.D.2** Implement `write(text)` (no newline) using `require('term').write()` + cursor tracking; both `write` and `print` are plain JS functions defined in bios.js scope (not globals — shell programs that need them must `require('/bios')` or define their own)
-- [ ] **7.5.D.3** Compat shims (`tostring`, `tonumber`, `type`, `pairs`, `ipairs`, `pcall`, `xpcall`, `error`) — expose as a `require('compat')` module; programs that need Lua-familiar helpers do `var { tostring, pairs } = require('compat')`
-
-### 7.5.E — Help text
-
-- [ ] **7.5.E.1** Copy `lua/rom/help/` markdown files to `js/rom/help/`
-- [ ] **7.5.E.2** Write `js/rom/help/index.md` listing all available JS programs/APIs
+- [ ] **7.5.1** Create `projects/core/src/ts/rom/` (empty placeholder; populated in Phase 11)
+- [ ] **7.5.2** Update `ComputerExecutor` to mount `js/rom` at `/rom` in the CC filesystem
+- [ ] **7.5.3** Update `bios.ts` to attempt `require("/startup")` (silently ignores `MODULE_NOT_FOUND`) then boot `/rom/programs/shell.js`
+- [ ] **Commit** — stage Phase 7.5 files; propose commit message; wait for user approval
 
 ---
 
@@ -260,6 +265,7 @@ User code and ROM programs must require them explicitly — bios.js does not inj
   - Delete `CobaltLuaTableTest.java`, `VarargArgumentsTest.java`, `ErrorInfoLibTest.java`
   - Adapt `ComputerTestDelegate.java` to use `JSMachine` instead of `CobaltLuaMachine`
   - Delete `LuaCoverage.java` (Lua-specific)
+- [ ] **Commit** — stage Phase 8 files; propose commit message; wait for user approval
 
 ---
 
@@ -275,34 +281,26 @@ User code and ROM programs must require them explicitly — bios.js does not inj
 - [ ] **9.8** Rename `ILuaMachine` → `IMachine` and `ILuaMachine.Factory` → `IMachine.Factory` everywhere
 - [ ] **9.9** Rename `MachineEnvironment`, `MachineResult`, `MachineException` Javadocs to drop Lua-specific language
 - [ ] **9.10** Add SPDX headers (MPL-2.0) to all new source files
-- [ ] **9.11** Decide (with user) whether to remove `lua/rom/` resources or keep Lua machine as opt-in fallback
+- [ ] **Commit** — stage Phase 9 files; propose commit message; wait for user approval
 
 ---
 
-## Phase 10 — Author ROM/bios in TypeScript, transpile on build
+## Phase 10 — TypeScript type definitions
 
-Move the hand-written `.js` sources (`data/computercraft/js/` — bios + `rom/apis/` + `rom/programs/`)
-to TypeScript and transpile them to CommonJS `.js` during the Gradle build.
+The build pipeline is already running from Phase 1.5. This phase adds typed module declarations
+so the TypeScript compiler can check all ROM/bios sources against the actual CC API surface.
+Defer until the API surface has stabilised (after Phase 9).
 
-### 10.A — Mechanical conversion (transpile-on-build)
-
-- [ ] **10.A.1** Create `projects/core/src/ts/` and move the `.js` files there as `.ts`
-- [ ] **10.A.2** Add `projects/core/src/ts/tsconfig.json`:
-  `module: commonjs`, `target: es2017`, `strict`, `noEmitOnError` — emits CommonJS `require()` calls, matching the Rhino runtime
-- [ ] **10.A.3** Wire transpile into the `:core` build reusing `NpxExecToDir` task; `tsc` into `build/generated/js`
-- [ ] **10.A.4** Feed generated dir into `processResources` under `data/computercraft/js/`; remove hand-written `.js` from `src/main/resources`
-- [ ] **10.A.5** `noEmitOnError` — type errors fail the build
-- [ ] **10.A.6** Verify: `./gradlew :core:processResources` emits `.js`; in-game boot still passes
-
-### 10.B — Type definitions (optional, defer until API surface settles)
-
-- [ ] **10.B.1** Write typed module declarations for all CC native modules: `declare module 'turtle' { ... }`, `declare module 'os' { ... }`, `declare module 'term' { ... }`, etc. — no `declare global` needed since nothing is injected globally
-- [ ] **10.B.2** Model blocking calls as plain synchronous return types (e.g. `dig(): [boolean, string?]`), not Promise
-- [ ] **10.B.3** Keep `.d.ts` in sync as Phase 7.5 / Phase 9 reshape the API surface
+- [ ] **10.1** Write typed module declarations for all CC native modules in `projects/core/src/ts/types/cc.d.ts`: `declare module 'turtle' { ... }`, `declare module 'os' { ... }`, `declare module 'term' { ... }`, etc. — no `declare global` needed since nothing is injected globally
+- [ ] **10.2** Model blocking calls as plain synchronous return types (e.g. `dig(): [boolean, string?]`), not Promise
+- [ ] **10.3** Keep `.d.ts` in sync as Phase 11 / Phase 9 reshape the API surface
+- [ ] **Commit** — stage Phase 10 files; propose commit message; wait for user approval
 
 ---
 
-## Phase 11 — JS ROM feature planning (do this before writing any ROM code)
+## Phase 11 — JS ROM feature planning & implementation
+
+### 11.A — Planning (do this before writing any ROM code)
 
 Before implementing any JS ROM program or API, go through every Lua file under
 `projects/core/src/main/resources/data/computercraft/lua/rom/` and write a feature
@@ -320,8 +318,24 @@ capability it gives the user, then design a clean JS equivalent from scratch.
   ROM subdirectory, structured as a design spec — not a port guide. Each entry should describe
   the feature contract (inputs, outputs, user-visible behaviour) that the JS implementation must
   satisfy, without referring to how the Lua version achieves it.
-- [ ] **11.3** Use `JS_ROM_FEATURES.md` as the authoritative todo list when writing the files in
-  Phase 7.5 — each Phase 7.5 checkbox maps to one feature spec from that document.
+
+### 11.B — Implementation (driven by `JS_ROM_FEATURES.md`)
+
+Each item below corresponds to a section in `JS_ROM_FEATURES.md`. Write each file as a `.ts`
+source under `projects/core/src/ts/rom/`; the Phase 1.5 pipeline transpiles it to the
+matching `/rom/` path at build time. Implement in dependency order as noted in the feature specs.
+
+- [ ] **11.3** `bios.ts` — full boot sequence + `read()`, `write()`, `print()` terminal helpers;
+  copy/move the stub from Phase 2.4/5.7 and expand it here
+- [ ] **11.4** Standard library APIs (`src/ts/rom/apis/`) — one `.ts` per feature spec entry;
+  each uses `module.exports = { ... }` and is loadable via `require('<name>')`
+- [ ] **11.5** Shell & built-in programs (`src/ts/rom/programs/`) — one `.ts` per feature spec entry
+- [ ] **11.6** Compat module (`src/ts/rom/apis/compat.ts`) — Lua-style shims (`tostring`, `tonumber`,
+  `type`, `pairs`, `ipairs`, `pcall`, `xpcall`, `error`) for programs that need them
+- [ ] **11.7** Help text — copy `lua/rom/help/` markdown files to `src/ts/rom/help/` (copied as-is,
+  not transpiled); write `src/ts/rom/help/index.md` listing all available JS programs/APIs
+- [ ] **11.8** Verify: full in-game boot reaches the shell prompt; each built-in program runs without error
+- [ ] **Commit** — stage Phase 11 files; propose commit message; wait for user approval
 
 ---
 
