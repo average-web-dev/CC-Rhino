@@ -22,6 +22,7 @@ public final class CoreConfig {
     }
 
     public static int maximumFilesOpen = 128;
+    public static int jsInstructionThreshold = 10_000;
     public static String defaultComputerSettings = "";
 
     public static boolean httpEnabled = true;

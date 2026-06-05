@@ -27,6 +27,7 @@ asm = "9.9.1"
 autoService = "1.1.1"
 checkerFramework = "4.0.0"
 cobalt = { strictly = "0.9.9" }
+rhino = "1.9.1"
 commonsCli = "1.11.0"
 jetbrainsAnnotations = "26.1.0"
 jspecify = "1.0.0"
@@ -84,6 +85,7 @@ asm-commons = { module = "org.ow2.asm:asm-commons", version.ref = "asm" }
 autoService = { module = "com.google.auto.service:auto-service", version.ref = "autoService" }
 checkerFramework = { module = "org.checkerframework:checker-qual", version.ref = "checkerFramework" }
 cobalt = { module = "cc.tweaked:cobalt", version.ref = "cobalt" }
+rhino = { module = "org.mozilla:rhino", version.ref = "rhino" }
 commonsCli = { module = "commons-cli:commons-cli", version.ref = "commonsCli" }
 fastutil = { module = "it.unimi.dsi:fastutil", version.ref = "fastutil" }
 neoMergeTool = { module = "net.neoforged:mergetool", version.ref = "neoMergeTool" }
