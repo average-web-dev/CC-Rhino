@@ -50,6 +50,7 @@ public class JSMachine implements ILuaMachine {
     private final Scriptable scope;
     private final Script biosScript;
     private final TimeoutState timeout;
+    private final JSEventEmitter emitter;
 
     // Stored by observeInstructionCount so the abort listener can unpark this thread.
     private volatile @Nullable Thread executionThread;
@@ -75,13 +76,19 @@ public class JSMachine implements ILuaMachine {
         // Compile bios now so we can use executeScriptWithContinuations later.
         biosScript = cx.compileString(biosSource, "bios.js", 1, null);
 
+        emitter = new JSEventEmitter();
+
         // Build the module loader and register all CC APIs as native modules.
         var loader = new JSRequire(scope, environment.fileSystem());
         var context = environment.context();
         var methods = environment.luaMethods();
         for (var api : environment.apis()) {
             for (var name : api.getNames()) {
-                loader.registerNative(name, JSAPIBuilder.build(cx, scope, api, context, methods));
+                var obj = JSAPIBuilder.build(cx, scope, api, context, methods);
+                if ("os".equals(name)) {
+                    addEmitterMethods(obj);
+                }
+                loader.registerNative(name, obj);
             }
         }
 
@@ -101,23 +108,55 @@ public class JSMachine implements ILuaMachine {
         timeout.addListener(abortListener);
     }
 
+    /** Attach on/once/off/listenerCount to the given object, backed by this machine's emitter. */
+    private void addEmitterMethods(Scriptable obj) {
+        ScriptableObject.putProperty(obj, "on", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length < 2 || !(args[1] instanceof Callable fn))
+                    throw Context.reportRuntimeError("os.on(event, fn): fn must be a function");
+                emitter.on(Context.toString(args[0]), fn);
+                return Undefined.instance;
+            }
+        });
+        ScriptableObject.putProperty(obj, "once", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length < 2 || !(args[1] instanceof Callable fn))
+                    throw Context.reportRuntimeError("os.once(event, fn): fn must be a function");
+                emitter.once(Context.toString(args[0]), fn);
+                return Undefined.instance;
+            }
+        });
+        ScriptableObject.putProperty(obj, "off", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length < 2 || !(args[1] instanceof Callable fn))
+                    throw Context.reportRuntimeError("os.off(event, fn): fn must be a function");
+                emitter.off(Context.toString(args[0]), fn);
+                return Undefined.instance;
+            }
+        });
+        ScriptableObject.putProperty(obj, "listenerCount", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                return (double) emitter.listenerCount(Context.toString(args[0]));
+            }
+        });
+    }
+
     @Override
     public MachineResult handleEvent(@Nullable String eventName, @Nullable Object @Nullable [] arguments) {
         if (isDisposed) return MachineResult.OK;
 
         executionThread = Thread.currentThread();
         try {
-            if (pendingContinuation != null) {
-                return resumePending(eventName, arguments);
-            }
-
             if (!started) {
                 started = true;
                 try {
                     cx.executeScriptWithContinuations(biosScript, scope);
                 } catch (ContinuationPending pending) {
                     pendingContinuation = pending;
-                    return MachineResult.OK;
                 } catch (EvaluatorException e) {
                     return mapException(e);
                 } catch (RhinoException e) {
@@ -127,11 +166,49 @@ public class JSMachine implements ILuaMachine {
                     close();
                     return MachineResult.error(e.getMessage() != null ? e.getMessage() : e.toString());
                 }
+                // Fire __start__ so any os.on("__start__", cb) listeners run.
+                return emitSafe("__start__", new Object[0]);
             }
+
+            // Null event after startup is a no-op (Phase 5.4).
+            if (eventName == null) return MachineResult.OK;
+
+            // Resume a pending blocking continuation if the event matches its filter.
+            if (pendingContinuation != null) {
+                var contResult = resumePending(eventName, arguments);
+                if (contResult.isError()) return contResult;
+            }
+
+            // Dispatch to os.on() listeners regardless of whether a continuation is pending.
+            var jsArgs = toJsArgs(arguments);
+            return emitSafe(eventName, jsArgs);
+
         } finally {
             executionThread = null;
         }
+    }
 
+    /** Convert a Java argument array to JS values for emitter dispatch. */
+    private Object[] toJsArgs(@Nullable Object @Nullable [] args) {
+        if (args == null) return new Object[0];
+        var result = new Object[args.length];
+        for (int i = 0; i < args.length; i++) result[i] = JSValues.toJs(cx, scope, args[i]);
+        return result;
+    }
+
+    /** Call emitter.emit(), mapping any Rhino exceptions to MachineResult. */
+    private MachineResult emitSafe(String event, Object[] jsArgs) {
+        try {
+            emitter.emit(cx, scope, event, jsArgs);
+        } catch (EvaluatorException e) {
+            return mapException(e);
+        } catch (RhinoException e) {
+            close();
+            return MachineResult.error(e.getMessage() != null ? e.getMessage() : e.toString());
+        } catch (Exception e) {
+            close();
+            return MachineResult.error(e.getMessage() != null ? e.getMessage() : e.toString());
+        }
         return MachineResult.OK;
     }
 
@@ -158,7 +235,6 @@ public class JSMachine implements ILuaMachine {
 
         var callback = mr.getCallback();
         if (callback == null) {
-            // Shouldn't happen — we only store MethodResults with non-null callbacks.
             pendingContinuation = null;
             return MachineResult.OK;
         }
@@ -166,16 +242,13 @@ public class JSMachine implements ILuaMachine {
             var newMr = callback.resume(fullArgs);
             var newCallback = newMr.getCallback();
             if (newCallback == null) {
-                // Callback chain resolved — resume the suspended Rhino script.
                 var jsResult = JSValues.toJsResult(cx, scope, newMr.getResult());
                 return resumeContinuation(jsResult);
             } else {
-                // Still waiting for another event — update application state.
                 saved.setApplicationState(newMr);
                 return MachineResult.OK;
             }
         } catch (LuaException e) {
-            // The callback threw a Lua error — we can't inject errors into Rhino continuations, so close.
             var msg = e.getMessage();
             close();
             return MachineResult.error(msg != null ? msg : e.toString());
@@ -187,7 +260,6 @@ public class JSMachine implements ILuaMachine {
         if (saved == null) return MachineResult.OK;
         try {
             cx.resumeContinuation(saved.getContinuation(), scope, jsResult);
-            // Script ran to completion — no new continuation.
             pendingContinuation = null;
         } catch (ContinuationPending newPending) {
             pendingContinuation = newPending;
