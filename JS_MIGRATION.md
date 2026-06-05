@@ -119,95 +119,9 @@ committed as raw `.js` — Gradle emits the `.js` output into the resource tree.
 
 ---
 
-## Phase 3 — Tight loop safepoint (observeInstructionCount)
+## Phase 3 — CommonJS `require()` module resolver
 
-- [ ] **3.1** Subclass `ContextFactory` as `CCContextFactory` in `JSMachine`:
-  - Override `observeInstructionCount(Context cx, int instructionCount)`:
-    - `isDisposed || timeout.isHardAborted()` → `throw new EvaluatorException("hard abort")` (terminates script)
-    - `timeout.isSoftAborted()` → `throw new EvaluatorException(ABORT_MESSAGE)`
-    - `timeout.isPaused()` → spin-wait with `LockSupport.parkNanos(1ms)` (blocks this call; Rhino will retry)
-    - Normal → return (threshold resets automatically, execution continues)
-  - Register via `ContextFactory.initGlobal(new CCContextFactory())`
-- [ ] **3.2** In `handleEvent()` / `mapException()`: catch `EvaluatorException` / `RhinoException`:
-  - Message equals hard-abort sentinel → `MachineResult.TIMEOUT`
-  - Message equals `ABORT_MESSAGE` → `error(ABORT_MESSAGE)`
-  - Other → `error(message)` + close
-- [ ] **3.3** `onTimeoutChanged()` listener calls `cx.observeInstructionCount(cx, 0)` on hard abort as a wake signal — the safepoint will then throw the hard abort exception on the next instruction check
-- [ ] **Commit** — stage Phase 3 files; propose commit message; wait for user approval
-
----
-
-## Phase 4 — EventEmitter bridge
-
-The listener registry is implemented entirely in Java — no JS eval, no embedded string, no
-resource file. This avoids bridging overhead and keeps the event infrastructure as a plain Java
-object with a clear lifecycle tied to `JSMachine`.
-
-- [ ] **4.1** Create `JSEventEmitter.java`:
-  - Inner record `ListenerEntry(Callable fn, boolean once)`
-  - Field: `Map<String, List<ListenerEntry>> listeners = new HashMap<>()`
-  - `void on(String event, Callable fn)` — appends `ListenerEntry(fn, false)`
-  - `void once(String event, Callable fn)` — appends `ListenerEntry(fn, true)`
-  - `void off(String event, Callable fn)` — removes entries whose `fn` matches
-  - `void emit(Context cx, Scriptable scope, String event, Object[] jsArgs)` — snapshots the list, removes `once` entries, calls each `fn.call(cx, scope, scope, jsArgs)`
-  - `int listenerCount(String event)` — returns list size
-- [ ] **4.2** Do **not** inject `os` as a global. Instead, register a native `os` module (see Phase 6) that merges the CC `os` Java API with the emitter methods. `JSMachine` holds `JSEventEmitter emitter` as a field; `require('os')` returns a `NativeObject` that wraps `emitter.on/once/off/listenerCount` as `BaseFunction` instances alongside all CC os API methods.
-- [ ] **4.3** `handleEvent(String name, Object[] args)`:
-  - First call (`!started`) → `started = true` → eval bios.js resource → `emitter.emit(cx, scope, "__start__", new Object[0])`
-  - Subsequent calls → convert `args` via `toJsValue()` → `emitter.emit(cx, scope, name, jsArgs)`
-  - `toJsValue()` handles: null → `null`; Boolean/Number/String → wrap; byte[]/ByteBuffer → JS array; Map/Collection → `NativeObject`/`NativeArray`; recursive, cycle-safe
-- [ ] **4.4** `handleEvent` returns `MachineResult.OK` immediately when `name` is null
-- [ ] **Commit** — stage Phase 4 files; propose commit message; wait for user approval
-
----
-
-## Phase 5 — Continuation-based blocking API bridge
-
-This is the heart of the event loop. Instead of blocking the computer thread inside
-`executeMainThreadTask()`, we capture a Rhino continuation and return immediately.
-The CC scheduler remains free to process other events while the main-thread task runs.
-
-- [ ] **5.1** Create `JSValues.java` — bidirectional Java ↔ JS value converter
-  - `toJS(Scriptable scope, Object java)` → handles null, Number, Boolean, String, byte[], Map, Collection, Object[], ILuaFunction, IDynamicLuaObject (recursive, cycle-safe)
-  - `toJava(Object v)` → unwrap NativeObject/NativeArray/primitives back to Java types
-- [ ] **5.2** `JSArguments.java` — `IArguments` backed by `Object[]` (Rhino values); `get()` uses `JSValues.toJava()`; `drop()` via offset
-- [ ] **5.3** `JSMethodBridge.java` — `BaseFunction` wrapping `LuaMethod`:
-  - `call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args)`:
-    - Wrap args as `JSArguments`
-    - If method requires `ILuaContext` (i.e. calls `executeMainThreadTask`): capture continuation via `throw cx.captureContinuation()` after queuing; see **5.4**
-    - No-callback methods: call method, convert result with `JSValues.toJS()`, return directly
-- [ ] **5.4** Continuation flow in `JSContext.executeMainThreadTask()`:
-  - Queue task via `computer.queueMainThread()` (non-blocking, stores `taskId`)
-  - Capture continuation: `throw cx.captureContinuation()` — **this unwinds the Rhino call stack back to `handleEvent()`**
-  - `handleEvent()` catches `ContinuationPending`:
-    - Store `ContinuationPending continuation` + `int taskId` in `JSMachine` as `pendingContinuation` / `pendingTaskId`
-    - Return `MachineResult.OK` — scheduler is now free to handle other events
-  - When CC fires `"task_complete"` event with `[taskId, success, results...]`:
-    - `handleEvent("task_complete", args)` detects `pendingTaskId` matches
-    - Converts result via `JSValues.toJS()`
-    - Calls `cx.resumeContinuation(pendingContinuation.getContinuation(), scope, jsResult)` — JS resumes from `turtle.dig()` call site
-    - Clears `pendingContinuation` / `pendingTaskId`
-  - While task is pending, all other events (`"redstone"`, `"char"`, etc.) are dispatched normally via `__emitter__.emit()` — `os.on()` callbacks fire as usual
-- [ ] **5.5** `JSAPIBuilder.java` — enumerates methods via `forEachMethod`, wraps each as `JSMethodBridge`, returns `NativeObject` (scriptable map)
-- [ ] **5.6** `JSMachine` constructor registers every CC API as a **native module** in `JSRequire` (not as a global):
-  - `jsRequire.registerNative(api.getModuleName(), JSAPIBuilder.build(api))` for each API in `env.apis()`
-  - Special case for the `os` API: merge its `NativeObject` with the EventEmitter `on/once/off` methods so `require('os')` returns a single unified object
-  - The only global set on `scope` is `require` itself
-- [ ] **5.7** `bios.ts` updated — loads `term` and `os` via `require`; `print` is a plain TS helper defined in `bios.ts` using `require('term')`:
-
-  ```ts
-  const term = require('term');
-  const os   = require('os');
-  function print(text: string): void { term.write(String(text)); term.setCursorPos(1, term.getCursorPos()[1] + 1); }
-  ```
-
-- [ ] **Commit** — stage Phase 5 files; propose commit message; wait for user approval
-
----
-
-## Phase 6 — CommonJS `require()` module resolver
-
-- [ ] **6.1** `JSRequire.java` — `BaseFunction` implementing CommonJS `require(id)`:
+- [ ] **3.1** `JSRequire.java` — `BaseFunction` implementing CommonJS `require(id)`:
   - Resolution order for `id`:
     1. **Native module registry** — `nativeModules.get(id)` (Java `Map<String, Scriptable>`); return immediately if found (no caching needed, they are singletons)
     2. **Path resolution** for file-based modules:
@@ -221,8 +135,94 @@ The CC scheduler remains free to process other events while the main-thread task
   - Eval with `cx.evaluateString(moduleScope, wrapped, path, 1, null)`
   - Call wrapper with fresh `module = { exports: {} }` and `exports = module.exports`
   - Store `require.cache[resolvedPath] = module.exports`; return `module.exports`
-- [ ] **6.2** `JSMachine` creates a `JSRequire` instance, exposes it as the **sole global** (`scope.put("require", scope, jsRequire)`); sets `require.paths = ["/rom/apis"]`; sets `require.cache = {}`; Java APIs are pre-registered via `jsRequire.registerNative(name, obj)` (see Phase 5.6)
-- [ ] **6.3** `bios.ts` `__start__` handler does `require("/startup")` (loads `/startup.js` if present); silently ignores `MODULE_NOT_FOUND` error
+- [ ] **3.2** `JSMachine` creates a `JSRequire` instance, exposes it as the **sole global** (`scope.put("require", scope, jsRequire)`); sets `require.paths = ["/rom/apis"]`; sets `require.cache = {}`; Java APIs are pre-registered via `jsRequire.registerNative(name, obj)` (see Phase 6.6)
+- [ ] **3.3** `bios.ts` `__start__` handler does `require("/startup")` (loads `/startup.js` if present); silently ignores `MODULE_NOT_FOUND` error
+- [ ] **Commit** — stage Phase 3 files; propose commit message; wait for user approval
+
+---
+
+## Phase 4 — Tight loop safepoint (observeInstructionCount)
+
+- [ ] **4.1** Subclass `ContextFactory` as `CCContextFactory` in `JSMachine`:
+  - Override `observeInstructionCount(Context cx, int instructionCount)`:
+    - `isDisposed || timeout.isHardAborted()` → `throw new EvaluatorException("hard abort")` (terminates script)
+    - `timeout.isSoftAborted()` → `throw new EvaluatorException(ABORT_MESSAGE)`
+    - `timeout.isPaused()` → spin-wait with `LockSupport.parkNanos(1ms)` (blocks this call; Rhino will retry)
+    - Normal → return (threshold resets automatically, execution continues)
+  - Register via `ContextFactory.initGlobal(new CCContextFactory())`
+- [ ] **4.2** In `handleEvent()` / `mapException()`: catch `EvaluatorException` / `RhinoException`:
+  - Message equals hard-abort sentinel → `MachineResult.TIMEOUT`
+  - Message equals `ABORT_MESSAGE` → `error(ABORT_MESSAGE)`
+  - Other → `error(message)` + close
+- [ ] **4.3** `onTimeoutChanged()` listener calls `cx.observeInstructionCount(cx, 0)` on hard abort as a wake signal — the safepoint will then throw the hard abort exception on the next instruction check
+- [ ] **Commit** — stage Phase 4 files; propose commit message; wait for user approval
+
+---
+
+## Phase 5 — EventEmitter bridge
+
+The listener registry is implemented entirely in Java — no JS eval, no embedded string, no
+resource file. This avoids bridging overhead and keeps the event infrastructure as a plain Java
+object with a clear lifecycle tied to `JSMachine`.
+
+- [ ] **5.1** Create `JSEventEmitter.java`:
+  - Inner record `ListenerEntry(Callable fn, boolean once)`
+  - Field: `Map<String, List<ListenerEntry>> listeners = new HashMap<>()`
+  - `void on(String event, Callable fn)` — appends `ListenerEntry(fn, false)`
+  - `void once(String event, Callable fn)` — appends `ListenerEntry(fn, true)`
+  - `void off(String event, Callable fn)` — removes entries whose `fn` matches
+  - `void emit(Context cx, Scriptable scope, String event, Object[] jsArgs)` — snapshots the list, removes `once` entries, calls each `fn.call(cx, scope, scope, jsArgs)`
+  - `int listenerCount(String event)` — returns list size
+- [ ] **5.2** Do **not** inject `os` as a global. Instead, register a native `os` module (see Phase 3) that merges the CC `os` Java API with the emitter methods. `JSMachine` holds `JSEventEmitter emitter` as a field; `require('os')` returns a `NativeObject` that wraps `emitter.on/once/off/listenerCount` as `BaseFunction` instances alongside all CC os API methods.
+- [ ] **5.3** `handleEvent(String name, Object[] args)`:
+  - First call (`!started`) → `started = true` → eval bios.js resource → `emitter.emit(cx, scope, "__start__", new Object[0])`
+  - Subsequent calls → convert `args` via `toJsValue()` → `emitter.emit(cx, scope, name, jsArgs)`
+  - `toJsValue()` handles: null → `null`; Boolean/Number/String → wrap; byte[]/ByteBuffer → JS array; Map/Collection → `NativeObject`/`NativeArray`; recursive, cycle-safe
+- [ ] **5.4** `handleEvent` returns `MachineResult.OK` immediately when `name` is null
+- [ ] **Commit** — stage Phase 5 files; propose commit message; wait for user approval
+
+---
+
+## Phase 6 — Continuation-based blocking API bridge
+
+This is the heart of the event loop. Instead of blocking the computer thread inside
+`executeMainThreadTask()`, we capture a Rhino continuation and return immediately.
+The CC scheduler remains free to process other events while the main-thread task runs.
+
+- [ ] **6.1** Create `JSValues.java` — bidirectional Java ↔ JS value converter
+  - `toJS(Scriptable scope, Object java)` → handles null, Number, Boolean, String, byte[], Map, Collection, Object[], ILuaFunction, IDynamicLuaObject (recursive, cycle-safe)
+  - `toJava(Object v)` → unwrap NativeObject/NativeArray/primitives back to Java types
+- [ ] **6.2** `JSArguments.java` — `IArguments` backed by `Object[]` (Rhino values); `get()` uses `JSValues.toJava()`; `drop()` via offset
+- [ ] **6.3** `JSMethodBridge.java` — `BaseFunction` wrapping `LuaMethod`:
+  - `call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args)`:
+    - Wrap args as `JSArguments`
+    - If method requires `ILuaContext` (i.e. calls `executeMainThreadTask`): capture continuation via `throw cx.captureContinuation()` after queuing; see **6.4**
+    - No-callback methods: call method, convert result with `JSValues.toJS()`, return directly
+- [ ] **6.4** Continuation flow in `JSContext.executeMainThreadTask()`:
+  - Queue task via `computer.queueMainThread()` (non-blocking, stores `taskId`)
+  - Capture continuation: `throw cx.captureContinuation()` — **this unwinds the Rhino call stack back to `handleEvent()`**
+  - `handleEvent()` catches `ContinuationPending`:
+    - Store `ContinuationPending continuation` + `int taskId` in `JSMachine` as `pendingContinuation` / `pendingTaskId`
+    - Return `MachineResult.OK` — scheduler is now free to handle other events
+  - When CC fires `"task_complete"` event with `[taskId, success, results...]`:
+    - `handleEvent("task_complete", args)` detects `pendingTaskId` matches
+    - Converts result via `JSValues.toJS()`
+    - Calls `cx.resumeContinuation(pendingContinuation.getContinuation(), scope, jsResult)` — JS resumes from `turtle.dig()` call site
+    - Clears `pendingContinuation` / `pendingTaskId`
+  - While task is pending, all other events (`"redstone"`, `"char"`, etc.) are dispatched normally via `__emitter__.emit()` — `os.on()` callbacks fire as usual
+- [ ] **6.5** `JSAPIBuilder.java` — enumerates methods via `forEachMethod`, wraps each as `JSMethodBridge`, returns `NativeObject` (scriptable map)
+- [ ] **6.6** `JSMachine` constructor registers every CC API as a **native module** in `JSRequire` (not as a global):
+  - `jsRequire.registerNative(api.getModuleName(), JSAPIBuilder.build(api))` for each API in `env.apis()`
+  - Special case for the `os` API: merge its `NativeObject` with the EventEmitter `on/once/off` methods so `require('os')` returns a single unified object
+  - The only global set on `scope` is `require` itself
+- [ ] **6.7** `bios.ts` updated — loads `term` and `os` via `require`; `print` is a plain TS helper defined in `bios.ts` using `require('term')`:
+
+  ```ts
+  const term = require('term');
+  const os   = require('os');
+  function print(text: string): void { term.write(String(text)); term.setCursorPos(1, term.getCursorPos()[1] + 1); }
+  ```
+
 - [ ] **Commit** — stage Phase 6 files; propose commit message; wait for user approval
 
 ---
@@ -326,7 +326,7 @@ source under `projects/core/src/ts/rom/`; the Phase 1.5 pipeline transpiles it t
 matching `/rom/` path at build time. Implement in dependency order as noted in the feature specs.
 
 - [ ] **11.3** `bios.ts` — full boot sequence + `read()`, `write()`, `print()` terminal helpers;
-  copy/move the stub from Phase 2.4/5.7 and expand it here
+  copy/move the stub from Phase 2.4/6.7 and expand it here
 - [ ] **11.4** Standard library APIs (`src/ts/rom/apis/`) — one `.ts` per feature spec entry;
   each uses `module.exports = { ... }` and is loadable via `require('<name>')`
 - [ ] **11.5** Shell & built-in programs (`src/ts/rom/programs/`) — one `.ts` per feature spec entry
