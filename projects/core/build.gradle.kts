@@ -41,6 +41,18 @@ val transpileTypeScript by tasks.registering(cc.tweaked.gradle.NpxExecToDir::cla
     args = listOf("tsc", "--project", "src/ts/tsconfig.json")
 
     onlyIf { hasTypeScriptSources }
+
+    // TypeScript's CommonJS output always emits "use strict", which Rhino's continuation
+    // implementation does not handle correctly. Strip it from every generated file.
+    doLast {
+        fileTree(output).matching { include("**/*.js") }.files.forEach { file ->
+            val original = file.readText()
+            val stripped = original
+                .replace("\"use strict\";\n", "")
+                .replace("'use strict';\n", "")
+            if (stripped != original) file.writeText(stripped)
+        }
+    }
 }
 
 dependencies {
