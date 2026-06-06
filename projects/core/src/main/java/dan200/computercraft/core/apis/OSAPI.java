@@ -13,11 +13,6 @@ import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import org.jspecify.annotations.Nullable;
 
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatterBuilder;
 import java.util.*;
 
 import static dan200.computercraft.api.scripting.ScriptValues.checkFinite;
@@ -175,7 +170,7 @@ public class OSAPI implements IComputerAPI {
     }
 
     /**
-     * Sets an alarm that will fire at the specified {@linkplain #time(IArguments) in-game time}.
+     * Sets an alarm that will fire at the specified in-game time.
      * When it fires, an {@code alarm} event will be added to the event queue with the
      * ID returned from this function as the first parameter.
      *
@@ -282,15 +277,11 @@ public class OSAPI implements IComputerAPI {
      * * If called with {@code utc}, returns the hour of the day in UTC time.
      * * If called with {@code local}, returns the hour of the day in the
      * timezone the server is located in.
-     * <p>
-     * This function can also be called with a table returned from {@link #date},
-     * which will convert the date fields into a UNIX timestamp (number of
-     * seconds since 1 January 1970).
      *
-     * @param args The locale of the time, or a table filled by {@code os.date("*t")} to decode. Defaults to {@code ingame} locale if not specified.
-     * @return The hour of the selected locale, or a UNIX timestamp from the table, depending on the argument passed in.
+     * @param locale The locale of the time. Defaults to {@code ingame} if not specified.
+     * @return The hour of the selected locale.
      * @throws ScriptException If an invalid locale is passed.
-     * @cc.tparam [opt] string|table locale The locale of the time, or a table filled by {@code os.date("*t")} to decode. Defaults to {@code ingame} locale if not specified.
+     * @cc.tparam [opt] string locale The locale of the time. Defaults to {@code ingame} if not specified.
      * @cc.see textutils.formatTime To convert times into a user-readable string.
      * @cc.usage Print the current in-game time.
      * <pre>{@code
@@ -299,16 +290,10 @@ public class OSAPI implements IComputerAPI {
      * @cc.since 1.2
      * @cc.changed 1.80pr1 Add support for getting the local and UTC time.
      * @cc.changed 1.82.0 Arguments are now case insensitive.
-     * @cc.changed 1.83.0 {@link #time(IArguments)} now accepts table arguments and converts them to UNIX timestamps.
-     * @see #date To get a date table that can be converted with this function.
      */
     @ScriptFunction
-    public final Object time(IArguments args) throws ScriptException {
-        var value = args.get(0);
-        if (value instanceof Map) return DateTime.fromTable((Map<?, ?>) value);
-
-        var param = args.optString(0, "ingame");
-        return switch (param.toLowerCase(Locale.ROOT)) {
+    public final Object time(Optional<String> locale) throws ScriptException {
+        return switch (locale.orElse("ingame").toLowerCase(Locale.ROOT)) {
             case "utc" -> getTimeForCalendar(Calendar.getInstance(TimeZone.getTimeZone("UTC")));
             case "local" -> getTimeForCalendar(Calendar.getInstance());
             case "ingame" -> time;
@@ -363,13 +348,6 @@ public class OSAPI implements IComputerAPI {
      * @return The milliseconds since the epoch depending on the selected locale.
      * @throws ScriptException If an invalid locale is passed.
      * @cc.since 1.80pr1
-     * @cc.usage Get the current time and use {@link #date} to convert it to a table.
-     * <pre>{@code
-     * -- Dividing by 1000 converts it from milliseconds to seconds.
-     * local time = os.epoch("local") / 1000
-     * local time_table = os.date("*t", time)
-     * print(textutils.serialize(time_table))
-     * }</pre>
      */
     @ScriptFunction
     public final long epoch(Optional<String> locale) throws ScriptException {
@@ -379,75 +357,6 @@ public class OSAPI implements IComputerAPI {
             case "ingame" -> day * 86400000L + (long) (time * 3600000.0); // Get in-game epoch
             default -> throw new ScriptException("Unsupported operation");
         };
-    }
-
-    /**
-     * Returns a date string (or table) using a specified format string and
-     * optional time to format.
-     * <p>
-     * The format string takes the same formats as C's [strftime](http://www.cplusplus.com/reference/ctime/strftime/)
-     * function. The format string can also be prefixed with an exclamation mark
-     * ({@code !}) to use UTC time instead of the server's local timezone.
-     * <p>
-     * If the format is exactly {@code "*t"} (or {@code "!*t"} ), a table
-     * representation of the timestamp will be returned instead. This table has
-     * fields for the year, month, day, hour, minute, second, day of the week,
-     * day of the year, and whether Daylight Savings Time is in effect. This
-     * table can be converted back to a timestamp with {@link #time(IArguments)}.
-     *
-     * @param formatA The format of the string to return. This defaults to {@code %c}, which expands to a string similar to "Sat Dec 24 16:58:00 2011".
-     * @param timeA   The timestamp to convert to a string. This defaults to the current time.
-     * @return The resulting formated string, or table.
-     * @throws ScriptException If an invalid format is passed.
-     * @cc.since 1.83.0
-     * @cc.usage Print the current date in a user-friendly string.
-     * <pre>{@code
-     * os.date("%A %d %B %Y") -- See the reference above!
-     * }</pre>
-     *
-     * @cc.usage Convert a timestamp to a table.
-     * <pre>{@code
-     * os.date("!*t", 1242534247)
-     * --[=[ {
-     *   -- Date
-     *   year  = 2009,
-     *   month = 5,
-     *   day   = 17,
-     *   yday  = 137,
-     *   wday  = 1,
-     *   -- Time
-     *   hour  = 4,
-     *   min   = 24,
-     *   sec   = 7,
-     *   isdst = false,
-     * } ]=]
-     * }</pre>
-     */
-    @ScriptFunction
-    public final Object date(Optional<String> formatA, Optional<Long> timeA) throws ScriptException {
-        var format = formatA.orElse("%c");
-        long time = timeA.orElseGet(() -> Instant.now().getEpochSecond());
-
-        var instant = Instant.ofEpochSecond(time);
-        ZonedDateTime date;
-        ZoneOffset offset;
-        if (format.startsWith("!")) {
-            offset = ZoneOffset.UTC;
-            date = ZonedDateTime.ofInstant(instant, offset);
-            format = format.substring(1);
-        } else {
-            var id = ZoneId.systemDefault();
-            offset = id.getRules().getOffset(instant);
-            date = ZonedDateTime.ofInstant(instant, id);
-        }
-
-        if (format.equals("*t")) return DateTime.toTable(date, offset, instant);
-
-        var formatter = new DateTimeFormatterBuilder();
-        DateTime.format(formatter, format);
-        // ROOT would be more sensible, but US appears more consistent with the default C locale
-        // on Linux.
-        return formatter.toFormatter(Locale.US).format(date);
     }
 
 }
