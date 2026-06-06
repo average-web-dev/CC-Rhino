@@ -262,11 +262,11 @@ after `JS_ROM_FEATURES.md` defines the feature contracts.
 ## Phase 8 — Testing
 
 - [x] **8.1** `JSMachineTest.java` — create `JSMachine` with a dummy `MachineEnvironment`; call `handleEvent(null, null)`; expect `MachineResult.OK`
-- [ ] **8.2** `JSEventBridgeTest.java` — eval `var events = require('events'); events.on("foo", function(v) { result = v; })` from JS; call `handleEvent("foo", new Object[]{"bar"})` from Java; verify `result` equals `"bar"`
-- [ ] **8.3** `JSBlockingAPITest.java` — mock a `LuaMethod` that calls `executeMainThreadTask`; verify continuation is captured on first `handleEvent`; fire `task_complete`; verify JS resumes with correct result
-- [ ] **8.4** `JSConcurrentEventTest.java` — while a continuation is pending (dig in progress), call `handleEvent("redstone", ...)` and verify the `events.on("redstone", cb)` callback fires without resuming the dig continuation
-- [ ] **8.5** `JSRequireTest.java` — write a virtual `.js` file to a test filesystem; `require()` it from bios.js; verify it executes and `module.exports` is returned
-- [ ] **8.6** `JSSafePointTest.java` — run `while(true){}` in user JS; verify `MachineResult.TIMEOUT` or error is returned within a bounded time
+- [x] **8.2** `JSEventBridgeTest.java` — eval `var os = require('os'); os.on("foo", cb)` from JS (the emitter is exposed on the `os` module, not a separate `events` module); call `handleEvent("foo", new Object[]{"bar"})` from Java; verify the callback receives `"bar"`. Also covers `once`/`off`.
+- [x] **8.3** `JSBlockingAPITest.java` — mock an `ApiMethod` that calls `executeMainThreadTask`; verify the continuation is captured on the first `handleEvent` (code after the call has not run); fire `task_complete`; verify JS resumes with the task result. Also covers a non-matching task id.
+- [x] **8.4** `JSConcurrentEventTest.java` — while a continuation is pending (dig in progress), call `handleEvent("redstone", ...)` and verify the `os.on("redstone", cb)` callback fires without resuming the dig continuation; then `task_complete` resumes it.
+- [x] **8.5** `JSRequireTest.java` — write a virtual `.js` file to a `MemoryMount` filesystem; `require()` it from bios.js; verify it executes and `module.exports` is returned, is cached across requires, and that a missing module throws `MODULE_NOT_FOUND`.
+- [x] **8.6** `JSSafePointTest.java` — run `while(true){}` in user JS and trigger an abort from another thread; verify `MachineResult.TIMEOUT` (hard) / abort-message error (soft) is returned within a bounded time.
 - [ ] **8.7** Remove/adapt Cobalt-specific tests:
   - Delete `CobaltLuaTableTest.java`, `VarargArgumentsTest.java`, `ErrorInfoLibTest.java`
   - Adapt `ComputerTestDelegate.java` to use `JSMachine` instead of `CobaltLuaMachine`
