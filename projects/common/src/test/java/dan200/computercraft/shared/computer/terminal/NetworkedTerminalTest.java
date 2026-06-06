@@ -4,7 +4,7 @@
 
 package dan200.computercraft.shared.computer.terminal;
 
-import dan200.computercraft.api.lua.LuaValues;
+import dan200.computercraft.api.scripting.ScriptValues;
 import dan200.computercraft.core.terminal.Terminal;
 import dan200.computercraft.test.core.CallCounter;
 import net.minecraft.nbt.CompoundTag;
@@ -70,6 +70,6 @@ class NetworkedTerminalTest {
     }
 
     private static void blit(Terminal terminal, String text, String fg, String bg) {
-        terminal.blit(LuaValues.encode(text), LuaValues.encode(fg), LuaValues.encode(bg));
+        terminal.blit(ScriptValues.encode(text), ScriptValues.encode(fg), ScriptValues.encode(bg));
     }
 }

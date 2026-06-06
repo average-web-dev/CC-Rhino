@@ -4,15 +4,15 @@
 
 package dan200.computercraft.core.computer;
 
-import dan200.computercraft.api.lua.ILuaContext;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaTask;
+import dan200.computercraft.api.scripting.IContext;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptTask;
 import dan200.computercraft.core.Logging;
 import dan200.computercraft.core.filesystem.FileSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class JSContext implements ILuaContext {
+class JSContext implements IContext {
     private static final Logger LOG = LoggerFactory.getLogger(JSContext.class);
     private final Computer computer;
 
@@ -25,7 +25,7 @@ class JSContext implements ILuaContext {
     }
 
     @Override
-    public long issueMainThreadTask(LuaTask task) throws LuaException {
+    public long issueMainThreadTask(ScriptTask task) throws ScriptException {
         final var taskID = computer.getUniqueTaskId();
         final Runnable iTask = () -> {
             try {
@@ -39,7 +39,7 @@ class JSContext implements ILuaContext {
                 } else {
                     computer.queueEvent("task_complete", new Object[]{ taskID, true });
                 }
-            } catch (LuaException e) {
+            } catch (ScriptException e) {
                 computer.queueEvent("task_complete", new Object[]{ taskID, false, e.getMessage() });
             } catch (Exception t) {
                 LOG.error(Logging.JAVA_ERROR, "Error running task", t);
@@ -49,7 +49,7 @@ class JSContext implements ILuaContext {
         if (computer.queueMainThread(iTask)) {
             return taskID;
         } else {
-            throw new LuaException("Task limit exceeded");
+            throw new ScriptException("Task limit exceeded");
         }
     }
 }

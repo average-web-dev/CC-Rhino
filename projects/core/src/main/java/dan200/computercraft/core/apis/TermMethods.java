@@ -4,10 +4,10 @@
 
 package dan200.computercraft.core.apis;
 
-import dan200.computercraft.api.lua.Coerced;
-import dan200.computercraft.api.lua.IArguments;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.Coerced;
+import dan200.computercraft.api.scripting.IArguments;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.terminal.Palette;
 import dan200.computercraft.core.terminal.Terminal;
 
@@ -36,7 +36,7 @@ public abstract class TermMethods {
         return 32 - Integer.numberOfLeadingZeros(group);
     }
 
-    public abstract Terminal getTerminal() throws LuaException;
+    public abstract Terminal getTerminal() throws ScriptException;
 
     /**
      * Write {@code text} at the current cursor position, moving the cursor to the end of the text.
@@ -45,10 +45,10 @@ public abstract class TermMethods {
      * text to the current terminal line.
      *
      * @param textA The text to write.
-     * @throws LuaException (hidden) If the terminal cannot be found.
+     * @throws ScriptException (hidden) If the terminal cannot be found.
      */
-    @LuaFunction
-    public final void write(Coerced<String> textA) throws LuaException {
+    @ScriptFunction
+    public final void write(Coerced<String> textA) throws ScriptException {
         var text = textA.value();
         var terminal = getTerminal();
         synchronized (terminal) {
@@ -64,10 +64,10 @@ public abstract class TermMethods {
      * will copy pixels from above instead.
      *
      * @param y The number of lines to move up by. This may be a negative number.
-     * @throws LuaException (hidden) If the terminal cannot be found.
+     * @throws ScriptException (hidden) If the terminal cannot be found.
      */
-    @LuaFunction
-    public final void scroll(int y) throws LuaException {
+    @ScriptFunction
+    public final void scroll(int y) throws ScriptException {
         getTerminal().scroll(y);
     }
 
@@ -75,10 +75,10 @@ public abstract class TermMethods {
      * Get the position of the cursor. Coordinates are 0-based, so {@code { x: 0, y: 0 }} is the top-left cell.
      *
      * @return The cursor's position, as an object with {@code x} and {@code y} fields.
-     * @throws LuaException (hidden) If the terminal cannot be found.
+     * @throws ScriptException (hidden) If the terminal cannot be found.
      */
-    @LuaFunction
-    public final CursorPosition getCursorPos() throws LuaException {
+    @ScriptFunction
+    public final CursorPosition getCursorPos() throws ScriptException {
         var terminal = getTerminal();
         return new CursorPosition(terminal.getCursorX(), terminal.getCursorY());
     }
@@ -90,10 +90,10 @@ public abstract class TermMethods {
      * ({@code setCursorPos({ x, y })}). Coordinates are 0-based.
      *
      * @param pos The new cursor position, as an object with {@code x} and {@code y} fields.
-     * @throws LuaException (hidden) If the terminal cannot be found.
+     * @throws ScriptException (hidden) If the terminal cannot be found.
      */
-    @LuaFunction
-    public final void setCursorPos(CursorPosition pos) throws LuaException {
+    @ScriptFunction
+    public final void setCursorPos(CursorPosition pos) throws ScriptException {
         var terminal = getTerminal();
         synchronized (terminal) {
             terminal.setCursorPos(pos.x(), pos.y());
@@ -104,11 +104,11 @@ public abstract class TermMethods {
      * Checks if the cursor is currently blinking.
      *
      * @return If the cursor is blinking.
-     * @throws LuaException (hidden) If the terminal cannot be found.
+     * @throws ScriptException (hidden) If the terminal cannot be found.
      * @cc.since 1.80pr1.9
      */
-    @LuaFunction
-    public final boolean getCursorBlink() throws LuaException {
+    @ScriptFunction
+    public final boolean getCursorBlink() throws ScriptException {
         return getTerminal().getCursorBlink();
     }
 
@@ -116,10 +116,10 @@ public abstract class TermMethods {
      * Sets whether the cursor should be visible (and blinking) at the current {@link #getCursorPos() cursor position}.
      *
      * @param blink Whether the cursor should blink.
-     * @throws LuaException (hidden) If the terminal cannot be found.
+     * @throws ScriptException (hidden) If the terminal cannot be found.
      */
-    @LuaFunction
-    public final void setCursorBlink(boolean blink) throws LuaException {
+    @ScriptFunction
+    public final void setCursorBlink(boolean blink) throws ScriptException {
         var terminal = getTerminal();
         synchronized (terminal) {
             terminal.setCursorBlink(blink);
@@ -130,10 +130,10 @@ public abstract class TermMethods {
      * Get the size of the terminal.
      *
      * @return The terminal's size, as an object with {@code width} and {@code height} fields.
-     * @throws LuaException (hidden) If the terminal cannot be found.
+     * @throws ScriptException (hidden) If the terminal cannot be found.
      */
-    @LuaFunction
-    public final TermSize getSize() throws LuaException {
+    @ScriptFunction
+    public final TermSize getSize() throws ScriptException {
         var terminal = getTerminal();
         return new TermSize(terminal.getWidth(), terminal.getHeight());
     }
@@ -141,10 +141,10 @@ public abstract class TermMethods {
     /**
      * Clears the terminal, filling it with the {@link #getBackgroundColour() current background colour}.
      *
-     * @throws LuaException (hidden) If the terminal cannot be found.
+     * @throws ScriptException (hidden) If the terminal cannot be found.
      */
-    @LuaFunction
-    public final void clear() throws LuaException {
+    @ScriptFunction
+    public final void clear() throws ScriptException {
         getTerminal().clear();
     }
 
@@ -152,10 +152,10 @@ public abstract class TermMethods {
      * Clears the line the cursor is currently on, filling it with the {@link #getBackgroundColour() current background
      * colour}.
      *
-     * @throws LuaException (hidden) If the terminal cannot be found.
+     * @throws ScriptException (hidden) If the terminal cannot be found.
      */
-    @LuaFunction
-    public final void clearLine() throws LuaException {
+    @ScriptFunction
+    public final void clearLine() throws ScriptException {
         getTerminal().clearLine();
     }
 
@@ -163,12 +163,12 @@ public abstract class TermMethods {
      * Return the colour that new text will be written as.
      *
      * @return The current text colour.
-     * @throws LuaException (hidden) If the terminal cannot be found.
+     * @throws ScriptException (hidden) If the terminal cannot be found.
      * @cc.see colors For a list of colour constants, returned by this function.
      * @cc.since 1.74
      */
-    @LuaFunction({ "getTextColour", "getTextColor" })
-    public final int getTextColour() throws LuaException {
+    @ScriptFunction({ "getTextColour", "getTextColor" })
+    public final int getTextColour() throws ScriptException {
         return encodeColour(getTerminal().getTextColour());
     }
 
@@ -176,13 +176,13 @@ public abstract class TermMethods {
      * Set the colour that new text will be written as.
      *
      * @param colourArg The new text colour.
-     * @throws LuaException (hidden) If the terminal cannot be found.
+     * @throws ScriptException (hidden) If the terminal cannot be found.
      * @cc.see colors For a list of colour constants.
      * @cc.since 1.45
      * @cc.changed 1.80pr1 Standard computers can now use all 16 colors, being changed to grayscale on screen.
      */
-    @LuaFunction({ "setTextColour", "setTextColor" })
-    public final void setTextColour(int colourArg) throws LuaException {
+    @ScriptFunction({ "setTextColour", "setTextColor" })
+    public final void setTextColour(int colourArg) throws ScriptException {
         var colour = parseColour(colourArg);
         var terminal = getTerminal();
         synchronized (terminal) {
@@ -195,12 +195,12 @@ public abstract class TermMethods {
      * the terminal.
      *
      * @return The current background colour.
-     * @throws LuaException (hidden) If the terminal cannot be found.
+     * @throws ScriptException (hidden) If the terminal cannot be found.
      * @cc.see colors For a list of colour constants, returned by this function.
      * @cc.since 1.74
      */
-    @LuaFunction({ "getBackgroundColour", "getBackgroundColor" })
-    public final int getBackgroundColour() throws LuaException {
+    @ScriptFunction({ "getBackgroundColour", "getBackgroundColor" })
+    public final int getBackgroundColour() throws ScriptException {
         return encodeColour(getTerminal().getBackgroundColour());
     }
 
@@ -209,13 +209,13 @@ public abstract class TermMethods {
      * terminal.
      *
      * @param colourArg The new background colour.
-     * @throws LuaException (hidden) If the terminal cannot be found.
+     * @throws ScriptException (hidden) If the terminal cannot be found.
      * @cc.see colors For a list of colour constants.
      * @cc.since 1.45
      * @cc.changed 1.80pr1 Standard computers can now use all 16 colors, being changed to grayscale on screen.
      */
-    @LuaFunction({ "setBackgroundColour", "setBackgroundColor" })
-    public final void setBackgroundColour(int colourArg) throws LuaException {
+    @ScriptFunction({ "setBackgroundColour", "setBackgroundColor" })
+    public final void setBackgroundColour(int colourArg) throws ScriptException {
         var colour = parseColour(colourArg);
         var terminal = getTerminal();
         synchronized (terminal) {
@@ -230,11 +230,11 @@ public abstract class TermMethods {
      * displayed in greyscale.
      *
      * @return Whether this terminal supports colour.
-     * @throws LuaException (hidden) If the terminal cannot be found.
+     * @throws ScriptException (hidden) If the terminal cannot be found.
      * @cc.since 1.45
      */
-    @LuaFunction({ "isColour", "isColor" })
-    public final boolean getIsColour() throws LuaException {
+    @ScriptFunction({ "isColour", "isColor" })
+    public final boolean getIsColour() throws ScriptException {
         return getTerminal().isColour();
     }
 
@@ -251,7 +251,7 @@ public abstract class TermMethods {
      * @param text             The text to write.
      * @param textColour       The corresponding text colours.
      * @param backgroundColour The corresponding background colours.
-     * @throws LuaException If the three inputs are not the same length.
+     * @throws ScriptException If the three inputs are not the same length.
      * @cc.see colors For a list of colour constants, and their hexadecimal values.
      * @cc.since 1.74
      * @cc.changed 1.80pr1 Standard computers can now use all 16 colors, being changed to grayscale on screen.
@@ -260,10 +260,10 @@ public abstract class TermMethods {
      * term.blit("Hello, world!","01234456789ab","0000000000000")
      * }</pre>
      */
-    @LuaFunction
-    public final void blit(ByteBuffer text, ByteBuffer textColour, ByteBuffer backgroundColour) throws LuaException {
+    @ScriptFunction
+    public final void blit(ByteBuffer text, ByteBuffer textColour, ByteBuffer backgroundColour) throws ScriptException {
         if (textColour.remaining() != text.remaining() || backgroundColour.remaining() != text.remaining()) {
-            throw new LuaException("Arguments must be the same length");
+            throw new ScriptException("Arguments must be the same length");
         }
 
         var terminal = getTerminal();
@@ -282,7 +282,7 @@ public abstract class TermMethods {
      * used.
      *
      * @param args The new palette values.
-     * @throws LuaException (hidden) If the terminal cannot be found.
+     * @throws ScriptException (hidden) If the terminal cannot be found.
      * @cc.tparam [1] number index The colour whose palette should be changed.
      * @cc.tparam number colour A 24-bit integer representing the RGB value of the colour. For instance the integer
      * `0xFF0000` corresponds to the colour #FF0000.
@@ -306,8 +306,8 @@ public abstract class TermMethods {
      * @cc.see colors.packRGB To convert from three separate channels to the 24-bit format.
      * @cc.since 1.80pr1
      */
-    @LuaFunction({ "setPaletteColour", "setPaletteColor" })
-    public final void setPaletteColour(IArguments args) throws LuaException {
+    @ScriptFunction({ "setPaletteColour", "setPaletteColor" })
+    public final void setPaletteColour(IArguments args) throws ScriptException {
         var colour = 15 - parseColour(args.getInt(0));
         if (args.count() == 2) {
             var hex = args.getInt(1);
@@ -326,11 +326,11 @@ public abstract class TermMethods {
      *
      * @param colourArg The colour whose palette should be fetched.
      * @return The resulting colour, as an object with {@code r}, {@code g} and {@code b} fields (each between 0 and 1).
-     * @throws LuaException (hidden) If the terminal cannot be found.
+     * @throws ScriptException (hidden) If the terminal cannot be found.
      * @cc.since 1.80pr1
      */
-    @LuaFunction({ "getPaletteColour", "getPaletteColor" })
-    public final RGB getPaletteColour(int colourArg) throws LuaException {
+    @ScriptFunction({ "getPaletteColour", "getPaletteColor" })
+    public final RGB getPaletteColour(int colourArg) throws ScriptException {
         var colour = 15 - parseColour(colourArg);
         var terminal = getTerminal();
         synchronized (terminal) {
@@ -339,10 +339,10 @@ public abstract class TermMethods {
         }
     }
 
-    public static int parseColour(int colour) throws LuaException {
-        if (colour <= 0) throw new LuaException("Colour out of range");
+    public static int parseColour(int colour) throws ScriptException {
+        if (colour <= 0) throw new ScriptException("Colour out of range");
         colour = getHighestBit(colour) - 1;
-        if (colour < 0 || colour > 15) throw new LuaException("Colour out of range");
+        if (colour < 0 || colour > 15) throw new ScriptException("Colour out of range");
         return colour;
     }
 

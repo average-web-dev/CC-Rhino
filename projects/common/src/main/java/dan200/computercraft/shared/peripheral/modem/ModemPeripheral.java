@@ -5,8 +5,8 @@
 package dan200.computercraft.shared.peripheral.modem;
 
 import com.google.errorprone.annotations.concurrent.GuardedBy;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.network.Packet;
 import dan200.computercraft.api.network.PacketNetwork;
 import dan200.computercraft.api.network.PacketReceiver;
@@ -144,8 +144,8 @@ public abstract class ModemPeripheral implements IPeripheral, PacketSender, Pack
         return "modem";
     }
 
-    private static int parseChannel(int channel) throws LuaException {
-        if (channel < 0 || channel > 65535) throw new LuaException("Expected number in range 0-65535");
+    private static int parseChannel(int channel) throws ScriptException {
+        if (channel < 0 || channel > 65535) throw new ScriptException("Expected number in range 0-65535");
         return channel;
     }
 
@@ -154,11 +154,11 @@ public abstract class ModemPeripheral implements IPeripheral, PacketSender, Pack
      * channels open at one time.
      *
      * @param channel The channel to open. This must be a number between 0 and 65535.
-     * @throws LuaException If the channel is out of range.
-     * @throws LuaException If there are too many open channels.
+     * @throws ScriptException If the channel is out of range.
+     * @throws ScriptException If there are too many open channels.
      */
-    @LuaFunction
-    public final void open(int channel) throws LuaException {
+    @ScriptFunction
+    public final void open(int channel) throws ScriptException {
         state.open(parseChannel(channel));
     }
 
@@ -167,10 +167,10 @@ public abstract class ModemPeripheral implements IPeripheral, PacketSender, Pack
      *
      * @param channel The channel to check.
      * @return Whether the channel is open.
-     * @throws LuaException If the channel is out of range.
+     * @throws ScriptException If the channel is out of range.
      */
-    @LuaFunction
-    public final boolean isOpen(int channel) throws LuaException {
+    @ScriptFunction
+    public final boolean isOpen(int channel) throws ScriptException {
         return state.isOpen(parseChannel(channel));
     }
 
@@ -178,17 +178,17 @@ public abstract class ModemPeripheral implements IPeripheral, PacketSender, Pack
      * Close an open channel, meaning it will no longer receive messages.
      *
      * @param channel The channel to close.
-     * @throws LuaException If the channel is out of range.
+     * @throws ScriptException If the channel is out of range.
      */
-    @LuaFunction
-    public final void close(int channel) throws LuaException {
+    @ScriptFunction
+    public final void close(int channel) throws ScriptException {
         state.close(parseChannel(channel));
     }
 
     /**
      * Close all open channels.
      */
-    @LuaFunction
+    @ScriptFunction
     public final void closeAll() {
         state.closeAll();
     }
@@ -206,7 +206,7 @@ public abstract class ModemPeripheral implements IPeripheral, PacketSender, Pack
      *                     the sending computer in order to receive the replies.
      * @param payload      The object to send. This can be any primitive type (boolean, number, string) as well as
      *                     tables. Other types (like functions), as well as metatables, will not be transmitted.
-     * @throws LuaException If the channel is out of range.
+     * @throws ScriptException If the channel is out of range.
      * @cc.usage Wrap a modem and a message on channel 15, requesting a response on channel 43.
      *
      * <pre>{@code
@@ -214,8 +214,8 @@ public abstract class ModemPeripheral implements IPeripheral, PacketSender, Pack
      * modem.transmit(15, 43, "Hello, world!")
      * }</pre>
      */
-    @LuaFunction
-    public final void transmit(int channel, int replyChannel, Object payload) throws LuaException {
+    @ScriptFunction
+    public final void transmit(int channel, int replyChannel, Object payload) throws ScriptException {
         parseChannel(channel);
         parseChannel(replyChannel);
 
@@ -241,7 +241,7 @@ public abstract class ModemPeripheral implements IPeripheral, PacketSender, Pack
      *
      * @return {@code true} if this is a wireless modem.
      */
-    @LuaFunction
+    @ScriptFunction
     public final boolean isWireless() {
         var network = this.network;
         return network != null && network.isWireless();

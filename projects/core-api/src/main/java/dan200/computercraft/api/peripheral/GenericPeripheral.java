@@ -4,7 +4,7 @@
 
 package dan200.computercraft.api.peripheral;
 
-import dan200.computercraft.api.lua.GenericSource;
+import dan200.computercraft.api.scripting.GenericSource;
 
 /**
  * A {@link GenericSource} which provides methods for a peripheral.

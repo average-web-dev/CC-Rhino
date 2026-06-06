@@ -4,9 +4,9 @@
 
 package dan200.computercraft.shared.peripheral.printer;
 
-import dan200.computercraft.api.lua.Coerced;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.Coerced;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.core.terminal.Terminal;
 import dan200.computercraft.core.util.StringUtil;
@@ -76,10 +76,10 @@ public class PrinterPeripheral implements IPeripheral {
      * Writes text to the current page.
      *
      * @param textA The value to write to the page.
-     * @throws LuaException If any values couldn't be converted to a string, or if no page is started.
+     * @throws ScriptException If any values couldn't be converted to a string, or if no page is started.
      */
-    @LuaFunction
-    public final void write(Coerced<String> textA) throws LuaException {
+    @ScriptFunction
+    public final void write(Coerced<String> textA) throws ScriptException {
         var text = textA.value();
         var page = getCurrentPage();
         page.write(text);
@@ -90,12 +90,12 @@ public class PrinterPeripheral implements IPeripheral {
      * Returns the current position of the cursor on the page.
      *
      * @return The position of the cursor.
-     * @throws LuaException If a page isn't being printed.
+     * @throws ScriptException If a page isn't being printed.
      * @cc.treturn number The X position of the cursor.
      * @cc.treturn number The Y position of the cursor.
      */
-    @LuaFunction
-    public final Object[] getCursorPos() throws LuaException {
+    @ScriptFunction
+    public final Object[] getCursorPos() throws ScriptException {
         var page = getCurrentPage();
         var x = page.getCursorX();
         var y = page.getCursorY();
@@ -107,10 +107,10 @@ public class PrinterPeripheral implements IPeripheral {
      *
      * @param x The X coordinate to set the cursor at.
      * @param y The Y coordinate to set the cursor at.
-     * @throws LuaException If a page isn't being printed.
+     * @throws ScriptException If a page isn't being printed.
      */
-    @LuaFunction
-    public final void setCursorPos(int x, int y) throws LuaException {
+    @ScriptFunction
+    public final void setCursorPos(int x, int y) throws ScriptException {
         var page = getCurrentPage();
         page.setCursorPos(x - 1, y - 1);
     }
@@ -119,12 +119,12 @@ public class PrinterPeripheral implements IPeripheral {
      * Returns the size of the current page.
      *
      * @return The size of the page.
-     * @throws LuaException If a page isn't being printed.
+     * @throws ScriptException If a page isn't being printed.
      * @cc.treturn number The width of the page.
      * @cc.treturn number The height of the page.
      */
-    @LuaFunction
-    public final Object[] getPageSize() throws LuaException {
+    @ScriptFunction
+    public final Object[] getPageSize() throws ScriptException {
         var page = getCurrentPage();
         var width = page.getWidth();
         var height = page.getHeight();
@@ -136,7 +136,7 @@ public class PrinterPeripheral implements IPeripheral {
      *
      * @return Whether a new page could be started.
      */
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public final boolean newPage() {
         return printer.startNewPage();
     }
@@ -145,10 +145,10 @@ public class PrinterPeripheral implements IPeripheral {
      * Finalizes printing of the current page and outputs it to the tray.
      *
      * @return Whether the page could be successfully finished.
-     * @throws LuaException If a page isn't being printed.
+     * @throws ScriptException If a page isn't being printed.
      */
-    @LuaFunction(mainThread = true)
-    public final boolean endPage() throws LuaException {
+    @ScriptFunction(mainThread = true)
+    public final boolean endPage() throws ScriptException {
         getCurrentPage();
         return printer.endCurrentPage();
     }
@@ -157,10 +157,10 @@ public class PrinterPeripheral implements IPeripheral {
      * Sets the title of the current page.
      *
      * @param title The title to set for the page.
-     * @throws LuaException If a page isn't being printed.
+     * @throws ScriptException If a page isn't being printed.
      */
-    @LuaFunction
-    public final void setPageTitle(Optional<String> title) throws LuaException {
+    @ScriptFunction
+    public final void setPageTitle(Optional<String> title) throws ScriptException {
         getCurrentPage();
         printer.setPageTitle(title.map(StringUtil::normaliseLabel).orElse(""));
     }
@@ -170,7 +170,7 @@ public class PrinterPeripheral implements IPeripheral {
      *
      * @return The amount of ink available to print with.
      */
-    @LuaFunction
+    @ScriptFunction
     public final int getInkLevel() {
         return printer.getInkLevel();
     }
@@ -180,7 +180,7 @@ public class PrinterPeripheral implements IPeripheral {
      *
      * @return The amount of paper available to print with.
      */
-    @LuaFunction
+    @ScriptFunction
     public final int getPaperLevel() {
         return printer.getPaperLevel();
     }
@@ -195,9 +195,9 @@ public class PrinterPeripheral implements IPeripheral {
         return printer;
     }
 
-    private Terminal getCurrentPage() throws LuaException {
+    private Terminal getCurrentPage() throws ScriptException {
         var currentPage = printer.getCurrentPage();
-        if (currentPage == null) throw new LuaException("Page not started");
+        if (currentPage == null) throw new ScriptException("Page not started");
         return currentPage;
     }
 }

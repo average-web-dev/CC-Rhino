@@ -4,7 +4,7 @@
 
 package dan200.computercraft.core.asm;
 
-import dan200.computercraft.api.lua.MethodResult;
+import dan200.computercraft.api.scripting.MethodResult;
 import org.jspecify.annotations.Nullable;
 
 final class ResultHelpers {

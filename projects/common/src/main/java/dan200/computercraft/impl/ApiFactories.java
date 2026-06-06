@@ -4,7 +4,7 @@
 
 package dan200.computercraft.impl;
 
-import dan200.computercraft.api.lua.ILuaAPIFactory;
+import dan200.computercraft.api.scripting.IComputerAPIFactory;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -12,22 +12,22 @@ import java.util.LinkedHashSet;
 import java.util.Objects;
 
 /**
- * The global factory for {@link ILuaAPIFactory}s.
+ * The global factory for {@link IComputerAPIFactory}s.
  *
- * @see dan200.computercraft.api.ComputerCraftAPI#registerAPIFactory(ILuaAPIFactory)
+ * @see dan200.computercraft.api.ComputerCraftAPI#registerAPIFactory(IComputerAPIFactory)
  */
 public final class ApiFactories {
     private ApiFactories() {
     }
 
-    private static final Collection<ILuaAPIFactory> factories = new LinkedHashSet<>();
+    private static final Collection<IComputerAPIFactory> factories = new LinkedHashSet<>();
 
-    static synchronized void register(ILuaAPIFactory factory) {
+    static synchronized void register(IComputerAPIFactory factory) {
         Objects.requireNonNull(factory, "provider cannot be null");
         factories.add(factory);
     }
 
-    public static Collection<ILuaAPIFactory> getAll() {
+    public static Collection<IComputerAPIFactory> getAll() {
         return Collections.unmodifiableCollection(factories);
     }
 }

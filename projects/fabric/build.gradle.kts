@@ -88,7 +88,6 @@ dependencies {
     "modTestWithIris"(libs.iris.fabric)
     "modTestWithIris"(libs.sodium.fabric)
 
-    "includeRuntimeOnly"(libs.cobalt)
     "includeRuntimeOnly"(libs.jzlib)
     "includeRuntimeOnly"(libs.netty.http)
     "includeRuntimeOnly"(libs.netty.socks)

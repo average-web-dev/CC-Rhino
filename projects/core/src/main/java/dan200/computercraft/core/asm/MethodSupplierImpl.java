@@ -4,8 +4,8 @@
 
 package dan200.computercraft.core.asm;
 
-import dan200.computercraft.api.lua.LuaFunction;
-import dan200.computercraft.api.lua.MethodResult;
+import dan200.computercraft.api.scripting.ScriptFunction;
+import dan200.computercraft.api.scripting.MethodResult;
 import dan200.computercraft.api.peripheral.PeripheralType;
 import dan200.computercraft.core.methods.MethodSupplier;
 import dan200.computercraft.core.methods.NamedMethod;
@@ -102,11 +102,11 @@ final class MethodSupplierImpl<T> implements MethodSupplier<T> {
 
         // Find all methods on the current class
         for (var method : klass.getMethods()) {
-            var annotation = method.getAnnotation(LuaFunction.class);
+            var annotation = method.getAnnotation(ScriptFunction.class);
             if (annotation == null) continue;
 
             if (Modifier.isStatic(method.getModifiers())) {
-                LOG.warn("LuaFunction method {}.{} should be an instance method.", method.getDeclaringClass(), method.getName());
+                LOG.warn("ScriptFunction method {}.{} should be an instance method.", method.getDeclaringClass(), method.getName());
                 continue;
             }
 
@@ -133,7 +133,7 @@ final class MethodSupplierImpl<T> implements MethodSupplier<T> {
         return Collections.unmodifiableList(methods);
     }
 
-    private void addMethod(List<NamedMethod<T>> methods, Method method, LuaFunction annotation, @Nullable PeripheralType genericType, T instance) {
+    private void addMethod(List<NamedMethod<T>> methods, Method method, ScriptFunction annotation, @Nullable PeripheralType genericType, T instance) {
         var names = annotation.value();
         var isSimple = method.getReturnType() != MethodResult.class && !annotation.mainThread();
         if (names.length == 0) {

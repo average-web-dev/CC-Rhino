@@ -4,8 +4,8 @@
 
 package dan200.computercraft.shared.pocket.apis;
 
-import dan200.computercraft.api.lua.ILuaAPI;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.IComputerAPI;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.pocket.IPocketAccess;
 import dan200.computercraft.api.pocket.IPocketUpgrade;
 import dan200.computercraft.api.upgrades.UpgradeData;
@@ -39,7 +39,7 @@ import java.util.Objects;
  *
  * @cc.module pocket
  */
-public class PocketAPI implements ILuaAPI {
+public class PocketAPI implements IComputerAPI {
     private final IPocketAccess pocket;
 
     public PocketAPI(IPocketAccess pocket) {
@@ -60,7 +60,7 @@ public class PocketAPI implements ILuaAPI {
      * @cc.treturn boolean If an item was equipped.
      * @cc.treturn string|nil The reason an item was not equipped.
      */
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public final Object[] equipBack() {
         var entity = pocket.getEntity();
         if (!(entity instanceof Player player)) return new Object[]{ false, "Cannot find player" };
@@ -91,7 +91,7 @@ public class PocketAPI implements ILuaAPI {
      * @cc.treturn boolean If the upgrade was unequipped.
      * @cc.treturn string|nil The reason an upgrade was not unequipped.
      */
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public final Object[] unequipBack() {
         var entity = pocket.getEntity();
         if (!(entity instanceof Player player)) return new Object[]{ false, "Cannot find player" };

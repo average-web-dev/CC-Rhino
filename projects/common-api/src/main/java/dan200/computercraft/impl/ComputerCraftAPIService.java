@@ -10,8 +10,8 @@ import dan200.computercraft.api.detail.BlockReference;
 import dan200.computercraft.api.detail.DetailRegistry;
 import dan200.computercraft.api.filesystem.Mount;
 import dan200.computercraft.api.filesystem.WritableMount;
-import dan200.computercraft.api.lua.GenericSource;
-import dan200.computercraft.api.lua.ILuaAPIFactory;
+import dan200.computercraft.api.scripting.GenericSource;
+import dan200.computercraft.api.scripting.IComputerAPIFactory;
 import dan200.computercraft.api.media.MediaProvider;
 import dan200.computercraft.api.media.PrintoutContents;
 import dan200.computercraft.api.network.PacketNetwork;
@@ -65,7 +65,7 @@ public interface ComputerCraftAPIService {
 
     PacketNetwork getWirelessNetwork(MinecraftServer server);
 
-    void registerAPIFactory(ILuaAPIFactory factory);
+    void registerAPIFactory(IComputerAPIFactory factory);
 
     WiredNode createWiredNodeForElement(WiredElement element);
 

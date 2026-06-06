@@ -9,9 +9,9 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.primitives.Primitives;
 import com.google.common.reflect.TypeToken;
-import dan200.computercraft.api.lua.*;
-import dan200.computercraft.core.methods.LuaMethod;
-import dan200.computercraft.core.util.LuaUtil;
+import dan200.computercraft.api.scripting.*;
+import dan200.computercraft.core.methods.ApiMethod;
+import dan200.computercraft.core.util.ScriptUtil;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,11 +25,11 @@ import java.util.*;
 import java.util.function.Function;
 
 /**
- * The underlying generator for {@link LuaFunction}-annotated methods.
+ * The underlying generator for {@link ScriptFunction}-annotated methods.
  * <p>
  * The constructor {@link Generator#Generator(List, Function, Function)} takes in the type of interface to generate
- * (i.e. {@link LuaMethod}), the context arguments for this function (in the case of {@link LuaMethod}, this will just
- * be {@link ILuaContext}), a factory function (which invokes a method handle), and a "wrapper" function to lift a
+ * (i.e. {@link ApiMethod}), the context arguments for this function (in the case of {@link ApiMethod}, this will just
+ * be {@link IContext}), a factory function (which invokes a method handle), and a "wrapper" function to lift a
  * function to execute on the main thread.
  * <p>
  * For each input function, the generator then fabricates a {@link MethodHandle} which performs the argument validation,
@@ -75,25 +75,25 @@ final class Generator<T> {
             addArgType(argMethodMap, Map.class, "Table");
             addArgType(argMethodMap, String.class, "String");
             addArgType(argMethodMap, ByteBuffer.class, "Bytes");
-            argMethodMap.put(LuaTable.class, new ArgMethods(
-                // i -> new ObjectLuaTable(getTable(i))
+            argMethodMap.put(ScriptTable.class, new ArgMethods(
+                // i -> new ObjectTable(getTable(i))
                 MethodHandles.filterReturnValue(
                     LOOKUP.findVirtual(IArguments.class, "getTable", MethodType.methodType(Map.class, int.class)),
-                    LOOKUP.findConstructor(ObjectLuaTable.class, MethodType.methodType(void.class, Map.class))
-                        .asType(MethodType.methodType(LuaTable.class, Map.class))
+                    LOOKUP.findConstructor(ObjectTable.class, MethodType.methodType(void.class, Map.class))
+                        .asType(MethodType.methodType(ScriptTable.class, Map.class))
                 ),
-                // i -> optTable(i).map(ObjectLuaTable::new)
+                // i -> optTable(i).map(ObjectTable::new)
                 MethodHandles.filterReturnValue(
                     LOOKUP.findVirtual(IArguments.class, "optTable", MethodType.methodType(Optional.class, int.class)),
                     MethodHandles.insertArguments(
                         LOOKUP.findVirtual(Optional.class, "map", MethodType.methodType(Optional.class, Function.class)),
-                        1, (Function<Map<?, ?>, LuaTable<?, ?>>) ObjectLuaTable::new
+                        1, (Function<Map<?, ?>, ScriptTable<?, ?>>) ObjectTable::new
                     )
                 )
             ));
             argMethods = Map.copyOf(argMethodMap);
 
-            ARG_TABLE_UNSAFE = ArgMethods.of(LuaTable.class, "TableUnsafe");
+            ARG_TABLE_UNSAFE = ArgMethods.of(ScriptTable.class, "TableUnsafe");
             ARG_GET_OBJECT = LOOKUP.findVirtual(IArguments.class, "get", MethodType.methodType(Object.class, int.class));
             ARG_GET_ENUM = LOOKUP.findVirtual(IArguments.class, "getEnum", MethodType.methodType(Enum.class, int.class, Class.class));
             ARG_OPT_ENUM = LOOKUP.findVirtual(IArguments.class, "optEnum", MethodType.methodType(Optional.class, int.class, Class.class));
@@ -161,7 +161,7 @@ final class Generator<T> {
     }
 
     /**
-     * Check if a {@link LuaFunction}-annotated method can be used in this context.
+     * Check if a {@link ScriptFunction}-annotated method can be used in this context.
      *
      * @param method The method to check.
      * @return Whether the method is valid.
@@ -175,14 +175,14 @@ final class Generator<T> {
         // Check we don't throw additional exceptions.
         var exceptions = method.getExceptionTypes();
         for (var exception : exceptions) {
-            if (exception != LuaException.class) {
+            if (exception != ScriptException.class) {
                 LOG.error("Lua Method {}.{} cannot throw {}.", method.getDeclaringClass().getName(), method.getName(), exception.getName());
                 return false;
             }
         }
 
         // unsafe can only be used on the computer thread, so reject it for mainThread functions.
-        var annotation = method.getAnnotation(LuaFunction.class);
+        var annotation = method.getAnnotation(ScriptFunction.class);
         if (annotation.unsafe() && annotation.mainThread()) {
             LOG.error("Lua Method {}.{} cannot use unsafe and mainThread.", method.getDeclaringClass().getName(), method.getName());
             return false;
@@ -234,7 +234,7 @@ final class Generator<T> {
     private Optional<T> build(Method method, MethodHandle handle, List<Type> parameters) {
         LOG.debug("Generating method wrapper for {}.{}.", method.getDeclaringClass().getName(), method.getName());
 
-        var annotation = method.getAnnotation(LuaFunction.class);
+        var annotation = method.getAnnotation(ScriptFunction.class);
         var wrappedHandle = buildMethodHandle(method, handle, parameters, annotation.unsafe());
         if (wrappedHandle == null) return Optional.empty();
 
@@ -360,14 +360,14 @@ final class Generator<T> {
 
     /**
      * Read a record argument from a table, used by {@link #loadArg}. The argument is fetched as a table and each record
-     * component is read from it by name (see {@link LuaUtil#toRecord(Map, Class)}).
+     * component is read from it by name (see {@link ScriptUtil#toRecord(Map, Class)}).
      */
-    private static Object getRecord(IArguments arguments, int index, Class<?> type) throws LuaException {
-        return LuaUtil.toRecord(arguments.getTable(index), type);
+    private static Object getRecord(IArguments arguments, int index, Class<?> type) throws ScriptException {
+        return ScriptUtil.toRecord(arguments.getTable(index), type);
     }
 
     private static @Nullable ArgMethods getArgMethods(Class<?> type, boolean unsafe) {
-        if (type == LuaTable.class && unsafe) return ARG_TABLE_UNSAFE;
+        if (type == ScriptTable.class && unsafe) return ARG_TABLE_UNSAFE;
 
         return argMethods.get(type);
     }
@@ -396,7 +396,7 @@ final class Generator<T> {
             } catch (Exception | LinkageError e) {
                 // LinkageError due to possible codegen bugs and NoClassDefFoundError. The latter occurs when fetching
                 // methods on a class which references non-existent (i.e. client-only) types.
-                LOG.error("Error generating @LuaFunction for {}", x, e);
+                LOG.error("Error generating @ScriptFunction for {}", x, e);
                 return def;
             }
         };

@@ -2,9 +2,9 @@ package com.example.examplemod;
 
 import dan200.computercraft.api.ComputerCraftAPI;
 import dan200.computercraft.api.component.ComputerComponents;
-import dan200.computercraft.api.lua.Coerced;
-import dan200.computercraft.api.lua.ILuaAPI;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.Coerced;
+import dan200.computercraft.api.scripting.IComputerAPI;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.turtle.ITurtleAccess;
 import org.jspecify.annotations.Nullable;
 
@@ -21,7 +21,7 @@ import org.jspecify.annotations.Nullable;
  * print("Turtle is facing " .. my_api.getDirection())
  * }</pre>
  */
-public class ExampleAPI implements ILuaAPI {
+public class ExampleAPI implements IComputerAPI {
     private final ITurtleAccess turtle;
 
     public ExampleAPI(ITurtleAccess turtle) {
@@ -54,19 +54,19 @@ public class ExampleAPI implements ILuaAPI {
      *
      * @return The turtle's direction.
      */
-    @LuaFunction
+    @ScriptFunction
     public final String getDirection() {
         return turtle.getDirection().getName();
     }
 
     /**
-     * A Lua-facing function using {@link Coerced}. Unlike a {@link LuaFunction} taking a raw {@link String}, this will
+     * A Lua-facing function using {@link Coerced}. Unlike a {@link ScriptFunction} taking a raw {@link String}, this will
      * accept any value, and convert it to a string.
      *
      * @param myString The value to write.
      */
     // @start region=coerced
-    @LuaFunction
+    @ScriptFunction
     public final void writeString(Coerced<String> myString) {
         String contents = myString.value();
         System.out.println("Got " + contents);

@@ -7,11 +7,11 @@ package dan200.computercraft.core.asm;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
-import dan200.computercraft.api.lua.ILuaContext;
-import dan200.computercraft.api.lua.LuaFunction;
-import dan200.computercraft.api.lua.MethodResult;
+import dan200.computercraft.api.scripting.IContext;
+import dan200.computercraft.api.scripting.ScriptFunction;
+import dan200.computercraft.api.scripting.MethodResult;
 import dan200.computercraft.api.peripheral.PeripheralType;
-import dan200.computercraft.core.methods.LuaMethod;
+import dan200.computercraft.core.methods.ApiMethod;
 import dan200.computercraft.core.methods.NamedMethod;
 import org.jspecify.annotations.Nullable;
 import org.teavm.metaprogramming.*;
@@ -25,17 +25,17 @@ import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
 /**
- * Compile-time generation of {@link LuaMethod} methods.
+ * Compile-time generation of {@link ApiMethod} methods.
  *
- * @see TLuaMethodSupplier
+ * @see TApiMethodSupplier
  * @see StaticGenerator
  */
 @CompileTime
 public class MethodReflection {
     @Meta
-    public static native boolean getMethods(Class<?> type, Consumer<NamedMethod<LuaMethod>> make);
+    public static native boolean getMethods(Class<?> type, Consumer<NamedMethod<ApiMethod>> make);
 
-    private static void getMethods(ReflectClass<?> klass, Value<Consumer<NamedMethod<LuaMethod>>> make) {
+    private static void getMethods(ReflectClass<?> klass, Value<Consumer<NamedMethod<ApiMethod>>> make) {
         var result = getMethodsImpl(klass, make);
         //  Using "unsupportedCase" here causes us to skip generating any code and just return null. While null isn't
         // a boolean, it's still false-y and thus has the same effect in the generated JS!
@@ -43,7 +43,7 @@ public class MethodReflection {
         Metaprogramming.exit(() -> result);
     }
 
-    private static boolean getMethodsImpl(ReflectClass<?> klass, Value<Consumer<NamedMethod<LuaMethod>>> make) {
+    private static boolean getMethodsImpl(ReflectClass<?> klass, Value<Consumer<NamedMethod<ApiMethod>>> make) {
         if (!klass.getName().startsWith("dan200.computercraft.") && !klass.getName().startsWith("cc.tweaked.web.peripheral")) {
             return false;
         }
@@ -62,22 +62,22 @@ public class MethodReflection {
             var nonYielding = method.nonYielding();
             var actualField = method.method().getField("INSTANCE");
 
-            Metaprogramming.emit(() -> make.get().accept(new NamedMethod<>(name, (LuaMethod) actualField.get(null), nonYielding, null)));
+            Metaprogramming.emit(() -> make.get().accept(new NamedMethod<>(name, (ApiMethod) actualField.get(null), nonYielding, null)));
         }
 
         return !methods.isEmpty();
     }
 
     private static final class Internal {
-        private static final LoadingCache<Class<?>, List<NamedMethod<ReflectClass<LuaMethod>>>> CLASS_CACHE = CacheBuilder
+        private static final LoadingCache<Class<?>, List<NamedMethod<ReflectClass<ApiMethod>>>> CLASS_CACHE = CacheBuilder
             .newBuilder()
             .build(CacheLoader.from(Internal::getMethodsImpl));
 
-        private static final StaticGenerator<LuaMethod> GENERATOR = new StaticGenerator<>(
-            LuaMethod.class, List.of(ILuaContext.class), Internal::createClass
+        private static final StaticGenerator<ApiMethod> GENERATOR = new StaticGenerator<>(
+            ApiMethod.class, List.of(IContext.class), Internal::createClass
         );
 
-        static List<NamedMethod<ReflectClass<LuaMethod>>> getMethods(Class<?> klass) {
+        static List<NamedMethod<ReflectClass<ApiMethod>>> getMethods(Class<?> klass) {
             try {
                 return CLASS_CACHE.get(klass);
             } catch (ExecutionException e) {
@@ -97,16 +97,16 @@ public class MethodReflection {
             return Metaprogramming.createClass(bytes);
         }
 
-        private static List<NamedMethod<ReflectClass<LuaMethod>>> getMethodsImpl(Class<?> klass) {
-            ArrayList<NamedMethod<ReflectClass<LuaMethod>>> methods = null;
+        private static List<NamedMethod<ReflectClass<ApiMethod>>> getMethodsImpl(Class<?> klass) {
+            ArrayList<NamedMethod<ReflectClass<ApiMethod>>> methods = null;
 
             // Find all methods on the current class
             for (var method : klass.getMethods()) {
-                var annotation = method.getAnnotation(LuaFunction.class);
+                var annotation = method.getAnnotation(ScriptFunction.class);
                 if (annotation == null) continue;
 
                 if (Modifier.isStatic(method.getModifiers())) {
-                    System.err.printf("LuaFunction method %s.%s should be an instance method.\n", method.getDeclaringClass(), method.getName());
+                    System.err.printf("ScriptFunction method %s.%s should be an instance method.\n", method.getDeclaringClass(), method.getName());
                     continue;
                 }
 
@@ -122,7 +122,7 @@ public class MethodReflection {
             return Collections.unmodifiableList(methods);
         }
 
-        private static void addMethod(List<NamedMethod<ReflectClass<LuaMethod>>> methods, Method method, LuaFunction annotation, @Nullable PeripheralType genericType, ReflectClass<LuaMethod> instance) {
+        private static void addMethod(List<NamedMethod<ReflectClass<ApiMethod>>> methods, Method method, ScriptFunction annotation, @Nullable PeripheralType genericType, ReflectClass<ApiMethod> instance) {
             var names = annotation.value();
             var isSimple = method.getReturnType() != MethodResult.class && !annotation.mainThread();
             if (names.length == 0) {

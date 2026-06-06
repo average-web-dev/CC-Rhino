@@ -7,8 +7,8 @@ package dan200.computercraft.core.filesystem;
 import com.google.common.io.Files;
 import dan200.computercraft.api.filesystem.MountConstants;
 import dan200.computercraft.api.filesystem.WritableMount;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.ObjectArguments;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ObjectArguments;
 import dan200.computercraft.core.TestFiles;
 import dan200.computercraft.core.apis.handles.WriteHandle;
 import org.junit.jupiter.api.Test;
@@ -36,11 +36,11 @@ public class FileSystemTest {
      * Ensures writing a file truncates it.
      *
      * @throws FileSystemException When the file system cannot be constructed.
-     * @throws LuaException        When Lua functions fail.
+     * @throws ScriptException        When Lua functions fail.
      * @throws IOException         When reading and writing from strings
      */
     @Test
-    public void testWriteTruncates() throws FileSystemException, LuaException, IOException {
+    public void testWriteTruncates() throws FileSystemException, ScriptException, IOException {
         var fs = mkFs();
 
         {
@@ -73,7 +73,7 @@ public class FileSystemTest {
 
         fs.unmount("disk");
 
-        var err = assertThrows(LuaException.class, () -> handle.write(new ObjectArguments("Tiny line")));
+        var err = assertThrows(ScriptException.class, () -> handle.write(new ObjectArguments("Tiny line")));
         assertEquals("attempt to use a closed file", err.getMessage());
     }
 

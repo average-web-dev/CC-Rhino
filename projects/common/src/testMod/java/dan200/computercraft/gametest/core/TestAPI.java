@@ -4,10 +4,10 @@
 
 package dan200.computercraft.gametest.core;
 
-import dan200.computercraft.api.lua.IComputerSystem;
-import dan200.computercraft.api.lua.ILuaAPI;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.IComputerSystem;
+import dan200.computercraft.api.scripting.IComputerAPI;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.gametest.api.ComputerState;
 import dan200.computercraft.gametest.api.TestExtensionsKt;
 import net.minecraft.gametest.framework.GameTestSequence;
@@ -24,7 +24,7 @@ import java.util.Optional;
  *
  * @see TestExtensionsKt#thenComputerOk(GameTestSequence, String, String)   To check tests on the computer have passed.
  */
-public class TestAPI extends ComputerState implements ILuaAPI {
+public class TestAPI extends ComputerState implements IComputerAPI {
     private static final Logger LOG = LoggerFactory.getLogger(TestAPI.class);
 
     private final IComputerSystem system;
@@ -59,26 +59,26 @@ public class TestAPI extends ComputerState implements ILuaAPI {
         return new String[]{ "test" };
     }
 
-    @LuaFunction
-    public final void fail(String message) throws LuaException {
+    @ScriptFunction
+    public final void fail(String message) throws ScriptException {
         LOG.error("Computer '{}' failed with {}", label, message);
-        if (markers.contains(ComputerState.DONE)) throw new LuaException("Cannot call fail/ok multiple times.");
+        if (markers.contains(ComputerState.DONE)) throw new ScriptException("Cannot call fail/ok multiple times.");
         markers.add(ComputerState.DONE);
         error = message;
-        throw new LuaException(message);
+        throw new ScriptException(message);
     }
 
-    @LuaFunction
-    public final void ok(Optional<String> marker) throws LuaException {
+    @ScriptFunction
+    public final void ok(Optional<String> marker) throws ScriptException {
         var actualMarker = marker.orElse(ComputerState.DONE);
         if (markers.contains(ComputerState.DONE) || markers.contains(actualMarker)) {
-            throw new LuaException("Cannot call fail/ok multiple times.");
+            throw new ScriptException("Cannot call fail/ok multiple times.");
         }
 
         markers.add(actualMarker);
     }
 
-    @LuaFunction
+    @ScriptFunction
     public final void log(String message) {
         LOG.info("[Computer '{}'] {}", label, message);
     }

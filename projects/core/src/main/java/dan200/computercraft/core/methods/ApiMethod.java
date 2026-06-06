@@ -1,0 +1,31 @@
+// SPDX-FileCopyrightText: 2020 The CC: Tweaked Developers
+//
+// SPDX-License-Identifier: MPL-2.0
+
+package dan200.computercraft.core.methods;
+
+import dan200.computercraft.api.scripting.*;
+
+/**
+ * A basic Lua function (i.e. one not associated with a peripheral) on some object (such as a {@link IDynamicObject}
+ * or {@link IComputerAPI}.
+ * <p>
+ * This interface is not typically implemented yourself, but instead generated from a {@link ScriptFunction}-annotated
+ * method.
+ *
+ * @see NamedMethod
+ */
+@FunctionalInterface
+public interface ApiMethod {
+    /**
+     * Apply this method.
+     *
+     * @param target  The object instance that this method targets.
+     * @param context The Lua context for this function call.
+     * @param args    Arguments to this function.
+     * @return The return call of this function.
+     * @throws ScriptException Thrown by the underlying method call.
+     * @see IDynamicObject#callMethod(IContext, int, IArguments)
+     */
+    MethodResult apply(Object target, IContext context, IArguments args) throws ScriptException;
+}

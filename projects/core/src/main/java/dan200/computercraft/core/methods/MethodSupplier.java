@@ -12,7 +12,7 @@ import java.util.Map;
 /**
  * Finds methods available on an object and yields them.
  *
- * @param <T> The type of method, such as {@link LuaMethod} or {@link PeripheralMethod}.
+ * @param <T> The type of method, such as {@link ApiMethod} or {@link PeripheralMethod}.
  */
 public interface MethodSupplier<T> {
     /**
@@ -48,7 +48,7 @@ public interface MethodSupplier<T> {
     /**
      * A function which is called for each method on an object.
      *
-     * @param <T> The type of method, such as {@link LuaMethod} or {@link PeripheralMethod}.
+     * @param <T> The type of method, such as {@link ApiMethod} or {@link PeripheralMethod}.
      * @see #forEachSelfMethod(Object, UntargetedConsumer)
      */
     @FunctionalInterface
@@ -66,7 +66,7 @@ public interface MethodSupplier<T> {
     /**
      * A function which is called for each method on an object and possibly nested objects.
      *
-     * @param <T> The type of method, such as {@link LuaMethod} or {@link PeripheralMethod}.
+     * @param <T> The type of method, such as {@link ApiMethod} or {@link PeripheralMethod}.
      * @see #forEachMethod(Object, TargetedConsumer)
      */
     @FunctionalInterface

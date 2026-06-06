@@ -4,7 +4,7 @@
 
 package dan200.computercraft.impl;
 
-import dan200.computercraft.api.lua.GenericSource;
+import dan200.computercraft.api.scripting.GenericSource;
 import dan200.computercraft.core.asm.GenericMethod;
 import dan200.computercraft.shared.config.ConfigSpec;
 

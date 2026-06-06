@@ -4,7 +4,7 @@
 
 package dan200.computercraft.core.asm;
 
-import dan200.computercraft.api.lua.Coerced;
+import dan200.computercraft.api.scripting.Coerced;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -46,7 +46,7 @@
  * <p>
  * Then, we can start adding methods to your block entity. Each method should take its target type as the first
  * argument, which in this case is a {@code AbstractFurnaceBlockEntity}. We then annotate this method with
- * {@link dan200.computercraft.api.lua.LuaFunction} to expose it to computers.
+ * {@link dan200.computercraft.api.scripting.ScriptFunction} to expose it to computers.
  *
  * {@snippet class=com.example.examplemod.peripheral.FurnacePeripheral region=body}
  *
@@ -59,7 +59,7 @@
  * requires a couple of boilerplate methods: one to get the type of the peripheral, and an equality function.
  * <p>
  * We can then start adding peripheral methods to our class. Each method should be {@code final}, and annotated with
- * {@link dan200.computercraft.api.lua.LuaFunction}.
+ * {@link dan200.computercraft.api.scripting.ScriptFunction}.
  *
  * {@snippet class=com.example.examplemod.peripheral.BrewingStandPeripheral region=body}
  *

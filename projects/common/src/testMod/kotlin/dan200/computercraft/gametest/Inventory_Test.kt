@@ -4,7 +4,7 @@
 
 package dan200.computercraft.gametest
 
-import dan200.computercraft.api.lua.ObjectArguments
+import dan200.computercraft.api.scripting.ObjectArguments
 import dan200.computercraft.core.apis.PeripheralAPI
 import dan200.computercraft.gametest.api.assertContainerExactly
 import dan200.computercraft.gametest.api.sequence

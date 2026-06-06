@@ -5,8 +5,8 @@
 package dan200.computercraft.shared.peripheral.generic.methods;
 
 import dan200.computercraft.api.ComputerCraftAPI;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.peripheral.GenericPeripheral;
 import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.api.peripheral.PeripheralType;
@@ -45,7 +45,7 @@ public abstract class AbstractFluidMethods<T> implements GenericPeripheral {
      * @return All tanks.
      * @cc.treturn { (table|nil)... } Basic information about all fluids in this fluid storage.
      */
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public abstract Map<Integer, Map<String, ?>> tanks(T fluids);
 
     /**
@@ -61,13 +61,13 @@ public abstract class AbstractFluidMethods<T> implements GenericPeripheral {
      * @param limit     The maximum amount of fluid to move.
      * @param fluidName The fluid to move. If not given, an arbitrary fluid will be chosen.
      * @return The amount of moved fluid.
-     * @throws LuaException If the peripheral to transfer to doesn't exist or isn't an fluid container.
+     * @throws ScriptException If the peripheral to transfer to doesn't exist or isn't an fluid container.
      * @cc.see peripheral.getName Allows you to get the name of a [wrapped][`peripheral.wrap`] peripheral.
      */
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public abstract int pushFluid(
         T from, IComputerAccess computer, String toName, Optional<Integer> limit, Optional<String> fluidName
-    ) throws LuaException;
+    ) throws ScriptException;
 
     /**
      * Move a fluid from a connected fluid container into this one.
@@ -82,11 +82,11 @@ public abstract class AbstractFluidMethods<T> implements GenericPeripheral {
      * @param limit     The maximum amount of fluid to move.
      * @param fluidName The fluid to move. If not given, an arbitrary fluid will be chosen.
      * @return The amount of moved fluid.
-     * @throws LuaException If the peripheral to transfer to doesn't exist or isn't an fluid container.
+     * @throws ScriptException If the peripheral to transfer to doesn't exist or isn't an fluid container.
      * @cc.see peripheral.getName Allows you to get the name of a [wrapped][`peripheral.wrap`] peripheral.
      */
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public abstract int pullFluid(
         T to, IComputerAccess computer, String fromName, Optional<Integer> limit, Optional<String> fluidName
-    ) throws LuaException;
+    ) throws ScriptException;
 }

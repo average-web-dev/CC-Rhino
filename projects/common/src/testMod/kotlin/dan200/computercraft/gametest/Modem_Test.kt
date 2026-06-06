@@ -4,7 +4,7 @@
 
 package dan200.computercraft.gametest
 
-import dan200.computercraft.api.lua.ObjectArguments
+import dan200.computercraft.api.scripting.ObjectArguments
 import dan200.computercraft.core.apis.PeripheralAPI
 import dan200.computercraft.core.computer.ComputerSide
 import dan200.computercraft.gametest.api.*
@@ -13,7 +13,7 @@ import dan200.computercraft.shared.ModRegistry
 import dan200.computercraft.shared.peripheral.modem.wired.CableBlock
 import dan200.computercraft.shared.peripheral.modem.wired.CableModemVariant
 import dan200.computercraft.test.core.assertArrayEquals
-import dan200.computercraft.test.core.computer.LuaTaskContext
+import dan200.computercraft.test.core.computer.ScriptTaskContext
 import dan200.computercraft.test.core.computer.getApi
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
@@ -170,7 +170,7 @@ class Modem_Test {
     }
 }
 
-private fun LuaTaskContext.findPeripheral(type: String): String? {
+private fun ScriptTaskContext.findPeripheral(type: String): String? {
     val peripheral = getApi<PeripheralAPI>()
     for (side in ComputerSide.NAMES) {
         val hasType = peripheral.hasType(side, type)
@@ -180,7 +180,7 @@ private fun LuaTaskContext.findPeripheral(type: String): String? {
     return null
 }
 
-private suspend fun LuaTaskContext.getPeripheralNames(): List<String> {
+private suspend fun ScriptTaskContext.getPeripheralNames(): List<String> {
     val peripheral = getApi<PeripheralAPI>()
     val peripherals = mutableListOf<String>()
     for (side in ComputerSide.NAMES) {
@@ -199,7 +199,7 @@ private suspend fun LuaTaskContext.getPeripheralNames(): List<String> {
     return peripherals
 }
 
-private suspend fun LuaTaskContext.callRemotePeripheral(name: String, method: String, vararg args: Any): Array<out Any?>? {
+private suspend fun ScriptTaskContext.callRemotePeripheral(name: String, method: String, vararg args: Any): Array<out Any?>? {
     val peripheral = getApi<PeripheralAPI>()
     if (peripheral.isPresent(name)) return peripheral.call(context, ObjectArguments(name, method, *args)).await()
 

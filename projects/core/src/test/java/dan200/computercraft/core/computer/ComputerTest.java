@@ -5,8 +5,8 @@
 package dan200.computercraft.core.computer;
 
 import com.google.common.io.CharStreams;
-import dan200.computercraft.api.lua.ILuaAPI;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.IComputerAPI;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -35,13 +35,13 @@ public class ComputerTest {
 
     @Test
     public void testDuplicateObjects() {
-        class CustomApi implements ILuaAPI {
+        class CustomApi implements IComputerAPI {
             @Override
             public String[] getNames() {
                 return new String[]{ "custom" };
             }
 
-            @LuaFunction
+            @ScriptFunction
             public final Object[] getObjects() {
                 return new Object[]{ List.of(), List.of() };
             }

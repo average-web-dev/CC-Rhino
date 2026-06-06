@@ -4,8 +4,8 @@
 
 package dan200.computercraft.core.apis.handles;
 
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.filesystem.TrackingCloseable;
 import org.jspecify.annotations.Nullable;
 
@@ -30,8 +30,8 @@ public class ReadHandle extends AbstractHandle {
      * {@inheritDoc}
      */
     @Override
-    @LuaFunction
-    public final Object @Nullable [] read(Optional<Integer> countArg) throws LuaException {
+    @ScriptFunction
+    public final Object @Nullable [] read(Optional<Integer> countArg) throws ScriptException {
         return super.read(countArg);
     }
 
@@ -39,8 +39,8 @@ public class ReadHandle extends AbstractHandle {
      * {@inheritDoc}
      */
     @Override
-    @LuaFunction
-    public final Object @Nullable [] readAll() throws LuaException {
+    @ScriptFunction
+    public final Object @Nullable [] readAll() throws ScriptException {
         return super.readAll();
     }
 
@@ -48,8 +48,8 @@ public class ReadHandle extends AbstractHandle {
      * {@inheritDoc}
      */
     @Override
-    @LuaFunction
-    public final Object @Nullable [] readLine(Optional<Boolean> withTrailingArg) throws LuaException {
+    @ScriptFunction
+    public final Object @Nullable [] readLine(Optional<Boolean> withTrailingArg) throws ScriptException {
         return super.readLine(withTrailingArg);
     }
 
@@ -57,8 +57,8 @@ public class ReadHandle extends AbstractHandle {
      * {@inheritDoc}
      */
     @Override
-    @LuaFunction
-    public final Object @Nullable [] seek(Optional<String> whence, Optional<Long> offset) throws LuaException {
+    @ScriptFunction
+    public final Object @Nullable [] seek(Optional<String> whence, Optional<Long> offset) throws ScriptException {
         return super.seek(whence, offset);
     }
 }

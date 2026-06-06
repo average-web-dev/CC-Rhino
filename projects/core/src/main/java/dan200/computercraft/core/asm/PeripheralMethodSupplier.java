@@ -4,8 +4,8 @@
 
 package dan200.computercraft.core.asm;
 
-import dan200.computercraft.api.lua.ILuaContext;
-import dan200.computercraft.api.lua.MethodResult;
+import dan200.computercraft.api.scripting.IContext;
+import dan200.computercraft.api.scripting.MethodResult;
 import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.api.peripheral.IDynamicPeripheral;
 import dan200.computercraft.core.ComputerContext;
@@ -22,7 +22,7 @@ import java.util.Objects;
  * method supplier}. It should not be used directly.
  */
 public final class PeripheralMethodSupplier {
-    private static final Generator<PeripheralMethod> GENERATOR = new Generator<>(List.of(ILuaContext.class, IComputerAccess.class),
+    private static final Generator<PeripheralMethod> GENERATOR = new Generator<>(List.of(IContext.class, IComputerAccess.class),
         m -> (target, context, computer, args) -> {
             try {
                 return (MethodResult) m.invokeExact(target, context, computer, args);

@@ -5,8 +5,8 @@
 package dan200.computercraft.shared.turtle.core;
 
 import com.mojang.authlib.GameProfile;
-import dan200.computercraft.api.lua.ILuaCallback;
-import dan200.computercraft.api.lua.MethodResult;
+import dan200.computercraft.api.scripting.ICallback;
+import dan200.computercraft.api.scripting.MethodResult;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.api.turtle.ITurtleUpgrade;
 import dan200.computercraft.api.turtle.TurtleAnimation;
@@ -728,7 +728,7 @@ public class TurtleBrain implements TurtleAccessInternal {
         return owner.getItemSnapshot(slot);
     }
 
-    private static final class CommandCallback implements ILuaCallback {
+    private static final class CommandCallback implements ICallback {
         final MethodResult pull = MethodResult.pullEvent("turtle_response", this);
         private final int command;
 

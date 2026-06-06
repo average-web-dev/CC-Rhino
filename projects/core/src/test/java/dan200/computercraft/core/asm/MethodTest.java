@@ -4,7 +4,7 @@
 
 package dan200.computercraft.core.asm;
 
-import dan200.computercraft.api.lua.*;
+import dan200.computercraft.api.scripting.*;
 import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.api.peripheral.IDynamicPeripheral;
 import dan200.computercraft.api.peripheral.IPeripheral;
@@ -101,7 +101,7 @@ public class MethodTest {
             x -> x.addApi(new IsModule()), 50);
     }
 
-    public static class MainThread implements ILuaAPI, IPeripheral {
+    public static class MainThread implements IComputerAPI, IPeripheral {
         public final String thread = Thread.currentThread().getName();
 
         @Override
@@ -109,13 +109,13 @@ public class MethodTest {
             return new String[]{ "main_thread" };
         }
 
-        @LuaFunction(mainThread = true)
+        @ScriptFunction(mainThread = true)
         public final int go() {
             assertThat(Thread.currentThread().getName(), is(thread));
             return 123;
         }
 
-        @LuaFunction(mainThread = true)
+        @ScriptFunction(mainThread = true)
         public final Object complex() {
             return this;
         }
@@ -131,23 +131,23 @@ public class MethodTest {
         }
     }
 
-    public static class Dynamic implements IDynamicLuaObject, ILuaAPI, IDynamicPeripheral {
+    public static class Dynamic implements IDynamicObject, IComputerAPI, IDynamicPeripheral {
         @Override
         public String[] getMethodNames() {
             return new String[]{ "foo" };
         }
 
         @Override
-        public MethodResult callMethod(ILuaContext context, int method, IArguments arguments) {
+        public MethodResult callMethod(IContext context, int method, IArguments arguments) {
             return MethodResult.of(123);
         }
 
         @Override
-        public MethodResult callMethod(IComputerAccess computer, ILuaContext context, int method, IArguments arguments) {
+        public MethodResult callMethod(IComputerAccess computer, IContext context, int method, IArguments arguments) {
             return callMethod(context, method, arguments);
         }
 
-        @LuaFunction
+        @ScriptFunction
         public final int bar() {
             return 321;
         }
@@ -168,13 +168,13 @@ public class MethodTest {
         }
     }
 
-    public static class ExtraObject implements ObjectSource, ILuaAPI {
+    public static class ExtraObject implements ObjectSource, IComputerAPI {
         @Override
         public String[] getNames() {
             return new String[]{ "extra" };
         }
 
-        @LuaFunction
+        @ScriptFunction
         public final int go2() {
             return 456;
         }
@@ -186,16 +186,16 @@ public class MethodTest {
     }
 
     public static class PeripheralThrow implements IPeripheral {
-        @LuaFunction
+        @ScriptFunction
         @SuppressWarnings("DoNotCallSuggester")
-        public final void thisThread() throws LuaException {
-            throw new LuaException("!");
+        public final void thisThread() throws ScriptException {
+            throw new ScriptException("!");
         }
 
-        @LuaFunction(mainThread = true)
+        @ScriptFunction(mainThread = true)
         @SuppressWarnings("DoNotCallSuggester")
-        public final void mainThread() throws LuaException {
-            throw new LuaException("!");
+        public final void mainThread() throws ScriptException {
+            throw new ScriptException("!");
         }
 
         @Override
@@ -209,7 +209,7 @@ public class MethodTest {
         }
     }
 
-    public static class ManyMethods implements IDynamicLuaObject, ILuaAPI {
+    public static class ManyMethods implements IDynamicObject, IComputerAPI {
         @Override
         public String[] getMethodNames() {
             var methods = new String[40];
@@ -218,7 +218,7 @@ public class MethodTest {
         }
 
         @Override
-        public MethodResult callMethod(ILuaContext context, int method, IArguments arguments) {
+        public MethodResult callMethod(IContext context, int method, IArguments arguments) {
             return MethodResult.of();
         }
 
@@ -228,9 +228,9 @@ public class MethodTest {
         }
     }
 
-    public static class ReturnFunction implements ILuaAPI {
-        @LuaFunction
-        public final ILuaFunction call() {
+    public static class ReturnFunction implements IComputerAPI {
+        @ScriptFunction
+        public final IFunction call() {
             return args -> MethodResult.of(args.getAll());
         }
 
@@ -240,7 +240,7 @@ public class MethodTest {
         }
     }
 
-    public static class IsModule implements ILuaAPI {
+    public static class IsModule implements IComputerAPI {
         @Override
         public String[] getNames() {
             return new String[0];
@@ -251,7 +251,7 @@ public class MethodTest {
             return "test.module";
         }
 
-        @LuaFunction
+        @ScriptFunction
         public final int func() {
             return 123;
         }

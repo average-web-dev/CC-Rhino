@@ -4,9 +4,9 @@
 
 package dan200.computercraft.shared.turtle.upgrades;
 
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
-import dan200.computercraft.api.lua.MethodResult;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
+import dan200.computercraft.api.scripting.MethodResult;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.api.turtle.ITurtleAccess;
 import dan200.computercraft.shared.turtle.core.TurtleCraftCommand;
@@ -33,10 +33,10 @@ public class CraftingTablePeripheral implements IPeripheral {
         return "workbench";
     }
 
-    @LuaFunction
-    public final MethodResult craft(Optional<Integer> count) throws LuaException {
+    @ScriptFunction
+    public final MethodResult craft(Optional<Integer> count) throws ScriptException {
         int limit = count.orElse(64);
-        if (limit < 0 || limit > 64) throw new LuaException("Crafting count " + limit + " out of range");
+        if (limit < 0 || limit > 64) throw new ScriptException("Crafting count " + limit + " out of range");
         return turtle.executeCommand(new TurtleCraftCommand(limit));
     }
 

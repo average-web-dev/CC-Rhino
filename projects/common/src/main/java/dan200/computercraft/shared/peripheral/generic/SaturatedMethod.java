@@ -4,10 +4,10 @@
 
 package dan200.computercraft.shared.peripheral.generic;
 
-import dan200.computercraft.api.lua.IArguments;
-import dan200.computercraft.api.lua.ILuaContext;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.MethodResult;
+import dan200.computercraft.api.scripting.IArguments;
+import dan200.computercraft.api.scripting.IContext;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.MethodResult;
 import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.core.methods.PeripheralMethod;
 
@@ -25,7 +25,7 @@ final class SaturatedMethod {
         this.method = method;
     }
 
-    MethodResult apply(ILuaContext context, IComputerAccess computer, IArguments args) throws LuaException {
+    MethodResult apply(IContext context, IComputerAccess computer, IArguments args) throws ScriptException {
         return method.apply(target, context, computer, args);
     }
 

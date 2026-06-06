@@ -4,10 +4,10 @@
 
 package dan200.computercraft.core.apis.handles;
 
-import dan200.computercraft.api.lua.Coerced;
-import dan200.computercraft.api.lua.IArguments;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.Coerced;
+import dan200.computercraft.api.scripting.IArguments;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.filesystem.TrackingCloseable;
 import org.jspecify.annotations.Nullable;
 
@@ -33,8 +33,8 @@ public class WriteHandle extends AbstractHandle {
      * {@inheritDoc}
      */
     @Override
-    @LuaFunction
-    public final void write(IArguments arguments) throws LuaException {
+    @ScriptFunction
+    public final void write(IArguments arguments) throws ScriptException {
         super.write(arguments);
     }
 
@@ -42,8 +42,8 @@ public class WriteHandle extends AbstractHandle {
      * {@inheritDoc}
      */
     @Override
-    @LuaFunction
-    public final void writeLine(Coerced<ByteBuffer> text) throws LuaException {
+    @ScriptFunction
+    public final void writeLine(Coerced<ByteBuffer> text) throws ScriptException {
         super.writeLine(text);
     }
 
@@ -51,8 +51,8 @@ public class WriteHandle extends AbstractHandle {
      * {@inheritDoc}
      */
     @Override
-    @LuaFunction
-    public final void flush() throws LuaException {
+    @ScriptFunction
+    public final void flush() throws ScriptException {
         super.flush();
     }
 
@@ -65,8 +65,8 @@ public class WriteHandle extends AbstractHandle {
          * {@inheritDoc}
          */
         @Override
-        @LuaFunction
-        public final Object @Nullable [] seek(Optional<String> whence, Optional<Long> offset) throws LuaException {
+        @ScriptFunction
+        public final Object @Nullable [] seek(Optional<String> whence, Optional<Long> offset) throws ScriptException {
             return super.seek(whence, offset);
         }
     }

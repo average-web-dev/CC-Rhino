@@ -4,9 +4,9 @@
 
 package cc.tweaked.web.peripheral;
 
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
-import dan200.computercraft.api.lua.LuaTable;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
+import dan200.computercraft.api.scripting.ScriptTable;
 import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
@@ -15,7 +15,7 @@ import org.teavm.jso.webaudio.AudioContext;
 
 import java.util.Optional;
 
-import static dan200.computercraft.api.lua.LuaValues.checkFinite;
+import static dan200.computercraft.api.scripting.ScriptValues.checkFinite;
 
 /**
  * A minimal speaker peripheral, which implements {@code playAudio} and nothing else.
@@ -52,25 +52,25 @@ public class SpeakerPeripheral implements TickablePeripheral {
         }
     }
 
-    @LuaFunction
+    @ScriptFunction
     @SuppressWarnings("DoNotCallSuggester")
-    public final boolean playNote(String instrumentA, Optional<Double> volumeA, Optional<Double> pitchA) throws LuaException {
-        throw new LuaException("Cannot play notes outside of Minecraft");
+    public final boolean playNote(String instrumentA, Optional<Double> volumeA, Optional<Double> pitchA) throws ScriptException {
+        throw new ScriptException("Cannot play notes outside of Minecraft");
     }
 
-    @LuaFunction
+    @ScriptFunction
     @SuppressWarnings("DoNotCallSuggester")
-    public final boolean playSound(String name, Optional<Double> volumeA, Optional<Double> pitchA) throws LuaException {
-        throw new LuaException("Cannot play sounds outside of Minecraft");
+    public final boolean playSound(String name, Optional<Double> volumeA, Optional<Double> pitchA) throws ScriptException {
+        throw new ScriptException("Cannot play sounds outside of Minecraft");
     }
 
-    @LuaFunction(unsafe = true)
-    public final boolean playAudio(LuaTable<?, ?> audio, Optional<Double> volume) throws LuaException {
+    @ScriptFunction(unsafe = true)
+    public final boolean playAudio(ScriptTable<?, ?> audio, Optional<Double> volume) throws ScriptException {
         checkFinite(1, volume.orElse(0.0));
 
         var length = audio.length();
-        if (length <= 0) throw new LuaException("Cannot play empty audio");
-        if (length > 128 * 1024) throw new LuaException("Audio data is too large");
+        if (length <= 0) throw new ScriptException("Cannot play empty audio");
+        if (length > 128 * 1024) throw new ScriptException("Audio data is too large");
 
         if (audioContext == null) audioContext = new AudioContext();
         if (state == null || !state.isPlaying()) state = new AudioState(audioContext);
@@ -78,7 +78,7 @@ public class SpeakerPeripheral implements TickablePeripheral {
         return state.pushBuffer(audio, length, volume);
     }
 
-    @LuaFunction
+    @ScriptFunction
     public final void stop() {
         // TODO: Not sure how to do this.
     }

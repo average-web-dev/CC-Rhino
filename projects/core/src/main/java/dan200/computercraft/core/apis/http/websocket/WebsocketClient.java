@@ -4,7 +4,7 @@
 
 package dan200.computercraft.core.apis.http.websocket;
 
-import dan200.computercraft.api.lua.LuaException;
+import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.core.apis.http.HTTPRequestException;
 
 import java.io.Closeable;
@@ -40,17 +40,17 @@ public interface WebsocketClient extends Closeable {
      * Send a text websocket frame.
      *
      * @param message The message to send.
-     * @throws LuaException If the message could not be sent.
+     * @throws ScriptException If the message could not be sent.
      */
-    void sendText(String message) throws LuaException;
+    void sendText(String message) throws ScriptException;
 
     /**
      * Send a binary websocket frame.
      *
      * @param message The message to send.
-     * @throws LuaException If the message could not be sent.
+     * @throws ScriptException If the message could not be sent.
      */
-    void sendBinary(ByteBuffer message) throws LuaException;
+    void sendBinary(ByteBuffer message) throws ScriptException;
 
     /**
      * Parse an address, ensuring it is a valid websocket URI.

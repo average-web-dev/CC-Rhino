@@ -5,10 +5,10 @@
 package dan200.computercraft.core.computer;
 
 import dan200.computercraft.api.filesystem.WritableMount;
-import dan200.computercraft.api.lua.IArguments;
-import dan200.computercraft.api.lua.ILuaAPI;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.IArguments;
+import dan200.computercraft.api.scripting.IComputerAPI;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.ComputerContext;
 import dan200.computercraft.core.computer.mainthread.MainThread;
 import dan200.computercraft.core.computer.mainthread.MainThreadConfig;
@@ -106,7 +106,7 @@ public class ComputerBootstrap {
         }
     }
 
-    public static class AssertApi implements ILuaAPI {
+    public static class AssertApi implements IComputerAPI {
         boolean didAssert;
         String message;
 
@@ -115,19 +115,19 @@ public class ComputerBootstrap {
             return new String[]{ "assertion" };
         }
 
-        @LuaFunction
-        public final void log(IArguments arguments) throws LuaException {
+        @ScriptFunction
+        public final void log(IArguments arguments) throws ScriptException {
             LOG.info("[Computer] {}", Arrays.toString(arguments.getAll()));
         }
 
-        @LuaFunction("assert")
-        public final Object[] doAssert(IArguments arguments) throws LuaException {
+        @ScriptFunction("assert")
+        public final Object[] doAssert(IArguments arguments) throws ScriptException {
             didAssert = true;
 
             var arg = arguments.get(0);
             if (arg == null || arg == Boolean.FALSE) {
                 message = arguments.optString(1, "Assertion failed");
-                throw new LuaException(message);
+                throw new ScriptException(message);
             }
 
             return arguments.getAll();

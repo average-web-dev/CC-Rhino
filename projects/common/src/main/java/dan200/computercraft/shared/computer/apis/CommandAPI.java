@@ -11,7 +11,7 @@ import com.mojang.brigadier.tree.LiteralCommandNode;
 import dan200.computercraft.api.component.AdminComputer;
 import dan200.computercraft.api.detail.BlockReference;
 import dan200.computercraft.api.detail.VanillaDetailRegistries;
-import dan200.computercraft.api.lua.*;
+import dan200.computercraft.api.scripting.*;
 import dan200.computercraft.core.Logging;
 import dan200.computercraft.shared.util.NBTUtil;
 import net.minecraft.commands.CommandSource;
@@ -35,7 +35,7 @@ import java.util.*;
  * @cc.module commands
  * @cc.since 1.7
  */
-public class CommandAPI implements ILuaAPI {
+public class CommandAPI implements IComputerAPI {
     private static final Logger LOG = LoggerFactory.getLogger(CommandAPI.class);
 
     private final IComputerSystem computer;
@@ -108,7 +108,7 @@ public class CommandAPI implements ILuaAPI {
      * commands.exec("setblock ~ ~1 ~ minecraft:stone")
      * }</pre>
      */
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public final Object[] exec(String command) {
         return doCommand(command);
     }
@@ -127,15 +127,15 @@ public class CommandAPI implements ILuaAPI {
      * @param context The context this command executes under.
      * @param command The command to execute.
      * @return The "task id". When this command has been executed, it will queue a `task_complete` event with a matching id.
-     * @throws LuaException (hidden) If the task cannot be created.
+     * @throws ScriptException (hidden) If the task cannot be created.
      * @cc.usage Asynchronously sets the block above the computer to stone.
      * <pre>{@code
      * commands.execAsync("setblock ~ ~1 ~ minecraft:stone")
      * }</pre>
      * @cc.see parallel One may also use the parallel API to run multiple commands at once.
      */
-    @LuaFunction
-    public final long execAsync(ILuaContext context, String command) throws LuaException {
+    @ScriptFunction
+    public final long execAsync(IContext context, String command) throws ScriptException {
         return context.issueMainThreadTask(() -> doCommand(command));
     }
 
@@ -144,11 +144,11 @@ public class CommandAPI implements ILuaAPI {
      *
      * @param args Arguments to this function.
      * @return A list of all available commands
-     * @throws LuaException (hidden) On non-string arguments.
+     * @throws ScriptException (hidden) On non-string arguments.
      * @cc.tparam string ... The sub-command to complete.
      */
-    @LuaFunction(mainThread = true)
-    public final List<String> list(IArguments args) throws LuaException {
+    @ScriptFunction(mainThread = true)
+    public final List<String> list(IArguments args) throws ScriptException {
         var server = computer.getLevel().getServer();
 
         CommandNode<CommandSourceStack> node = server.getCommands().getDispatcher().getRoot();
@@ -172,7 +172,7 @@ public class CommandAPI implements ILuaAPI {
      * @see #getBlockPosition()
      * @since 1.119.0
      */
-    @LuaFunction
+    @ScriptFunction
     public final String getDimension() {
         return computer.getLevel().dimension().location().toString();
     }
@@ -187,7 +187,7 @@ public class CommandAPI implements ILuaAPI {
      * @cc.see gps.locate To get the position of a non-command computer.
      * @see #getDimension()
      */
-    @LuaFunction
+    @ScriptFunction
     public final Object[] getBlockPosition() {
         var pos = computer.getPosition();
         return new Object[]{ pos.getX(), pos.getY(), pos.getZ() };
@@ -210,8 +210,8 @@ public class CommandAPI implements ILuaAPI {
      * @param maxZ      The end z coordinate of the range to query.
      * @param dimension The dimension to query (e.g. "minecraft:overworld"). Defaults to the current dimension.
      * @return A list of information about each block.
-     * @throws LuaException If the coordinates are not within the world.
-     * @throws LuaException If trying to get information about more than 4096 blocks.
+     * @throws ScriptException If the coordinates are not within the world.
+     * @throws ScriptException If trying to get information about more than 4096 blocks.
      * @cc.since 1.76
      * @cc.changed 1.99 Added {@code dimension} argument.
      * @cc.usage Print out all blocks in a cube around the computer.
@@ -233,8 +233,8 @@ public class CommandAPI implements ILuaAPI {
      * end
      * }</pre>
      */
-    @LuaFunction(mainThread = true)
-    public final List<Map<?, ?>> getBlockInfos(int minX, int minY, int minZ, int maxX, int maxY, int maxZ, Optional<String> dimension) throws LuaException {
+    @ScriptFunction(mainThread = true)
+    public final List<Map<?, ?>> getBlockInfos(int minX, int minY, int minZ, int maxX, int maxY, int maxZ, Optional<String> dimension) throws ScriptException {
         // Get the details of the block
         var world = getLevel(dimension);
         var min = new BlockPos(
@@ -248,11 +248,11 @@ public class CommandAPI implements ILuaAPI {
             Math.max(minZ, maxZ)
         );
         if (!world.isInWorldBounds(min) || !world.isInWorldBounds(max)) {
-            throw new LuaException("Co-ordinates out of range");
+            throw new ScriptException("Co-ordinates out of range");
         }
 
         var blocks = (max.getX() - min.getX() + 1) * (max.getY() - min.getY() + 1) * (max.getZ() - min.getZ() + 1);
-        if (blocks > 4096) throw new LuaException("Too many blocks");
+        if (blocks > 4096) throw new ScriptException("Too many blocks");
 
         List<Map<?, ?>> results = new ArrayList<>(blocks);
         for (var y = min.getY(); y <= max.getY(); y++) {
@@ -278,15 +278,15 @@ public class CommandAPI implements ILuaAPI {
      * @param z         The z position of the block to query.
      * @param dimension The dimension to query (e.g. "minecraft:overworld"). Defaults to the current dimension.
      * @return The given block's information.
-     * @throws LuaException If the coordinates are not within the world, or are not currently loaded.
+     * @throws ScriptException If the coordinates are not within the world, or are not currently loaded.
      * @cc.changed 1.76 Added block state info to return value
      * @cc.changed 1.99 Added {@code dimension} argument.
      */
-    @LuaFunction(mainThread = true)
-    public final Map<?, ?> getBlockInfo(int x, int y, int z, Optional<String> dimension) throws LuaException {
+    @ScriptFunction(mainThread = true)
+    public final Map<?, ?> getBlockInfo(int x, int y, int z, Optional<String> dimension) throws ScriptException {
         var level = getLevel(dimension);
         var position = new BlockPos(x, y, z);
-        if (!level.isInWorldBounds(position)) throw new LuaException("Co-ordinates out of range");
+        if (!level.isInWorldBounds(position)) throw new ScriptException("Co-ordinates out of range");
         return getBlockInfo(level, position);
     }
 
@@ -296,7 +296,7 @@ public class CommandAPI implements ILuaAPI {
      * @param selector An <a href="https://minecraft.wiki/w/Target_selectors">entity selector</a>, such as
      *                 <code>@p</code> or <code>@a</code>.
      * @return A list of information about all matching entities.
-     * @throws LuaException If the entity selector canont be parsed.
+     * @throws ScriptException If the entity selector canont be parsed.
      * @cc.since 1.118.0
      * @cc.usage Print the name of all entities within 10 blocks of the command computer.
      * <pre>{@code
@@ -306,31 +306,31 @@ public class CommandAPI implements ILuaAPI {
      * }</pre>
      * @cc.see entity_details
      */
-    @LuaFunction(mainThread = true)
-    public final List<Map<?, ?>> getEntities(String selector) throws LuaException {
+    @ScriptFunction(mainThread = true)
+    public final List<Map<?, ?>> getEntities(String selector) throws ScriptException {
         try {
             var reader = new StringReader(selector);
             var entitySelector = new EntitySelectorParser(reader, true).parse();
-            if (reader.canRead()) throw new LuaException("Invalid entity selector");
+            if (reader.canRead()) throw new ScriptException("Invalid entity selector");
 
             return entitySelector.findEntities(getSource()).stream()
                 .<Map<?, ?>>map(VanillaDetailRegistries.ENTITY::getDetails)
                 .toList();
         } catch (CommandSyntaxException e) {
-            throw new LuaException("Invalid entity selector: " + e.getRawMessage().getString());
+            throw new ScriptException("Invalid entity selector: " + e.getRawMessage().getString());
         }
     }
 
-    private Level getLevel(Optional<String> id) throws LuaException {
+    private Level getLevel(Optional<String> id) throws ScriptException {
         var currentLevel = computer.getLevel();
 
         if (id.isEmpty()) return currentLevel;
 
         var dimensionId = ResourceLocation.tryParse(id.get());
-        if (dimensionId == null) throw new LuaException("Invalid dimension name");
+        if (dimensionId == null) throw new ScriptException("Invalid dimension name");
 
         Level level = currentLevel.getServer().getLevel(ResourceKey.create(Registries.DIMENSION, dimensionId));
-        if (level == null) throw new LuaException("Unknown dimension");
+        if (level == null) throw new ScriptException("Unknown dimension");
 
         return level;
     }

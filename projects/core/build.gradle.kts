@@ -46,7 +46,6 @@ val transpileTypeScript by tasks.registering(cc.tweaked.gradle.NpxExecToDir::cla
 
 dependencies {
     api(project(":core-api"))
-    implementation(libs.cobalt)
     implementation(libs.rhino)
     implementation(libs.fastutil)
     implementation(libs.guava)

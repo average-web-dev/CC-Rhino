@@ -169,7 +169,6 @@ dependencies {
     "localImplementation"(commonClasses(project(":forge-api")))
     clientImplementation(clientClasses(project(":forge-api")))
 
-    jarJar(libs.cobalt)
     jarJar(libs.jzlib)
     // We don't jar-in-jar our additional netty dependencies (see the tasks.jarJar configuration), but still want them
     // on the legacy classpath.

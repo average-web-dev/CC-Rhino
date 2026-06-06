@@ -5,7 +5,7 @@
 package dan200.computercraft.gametest
 
 import dan200.computercraft.api.ComputerCraftAPI
-import dan200.computercraft.api.lua.Coerced
+import dan200.computercraft.api.scripting.Coerced
 import dan200.computercraft.api.pocket.IPocketUpgrade
 import dan200.computercraft.api.upgrades.UpgradeData
 import dan200.computercraft.client.pocket.ClientPocketComputers

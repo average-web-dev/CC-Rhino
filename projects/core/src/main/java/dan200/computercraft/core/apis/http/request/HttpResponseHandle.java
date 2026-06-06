@@ -4,8 +4,8 @@
 
 package dan200.computercraft.core.apis.http.request;
 
-import dan200.computercraft.api.lua.IArguments;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.IArguments;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.apis.HTTPAPI;
 import dan200.computercraft.core.apis.handles.AbstractHandle;
 import dan200.computercraft.core.apis.handles.ReadHandle;
@@ -42,7 +42,7 @@ public class HttpResponseHandle implements ObjectSource {
      * @cc.treturn string The response message (i.e. "OK")
      * @cc.changed 1.80pr1.13 Added response message return value.
      */
-    @LuaFunction
+    @ScriptFunction
     public final Object[] getResponseCode() {
         return new Object[]{ responseCode, responseStatus };
     }
@@ -65,7 +65,7 @@ public class HttpResponseHandle implements ObjectSource {
      * request.close()
      * }</pre>
      */
-    @LuaFunction
+    @ScriptFunction
     public final Map<String, String> getResponseHeaders() {
         return responseHeaders;
     }

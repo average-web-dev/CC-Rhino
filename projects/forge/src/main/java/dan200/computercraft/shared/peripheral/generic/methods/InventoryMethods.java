@@ -5,8 +5,8 @@
 package dan200.computercraft.shared.peripheral.generic.methods;
 
 import dan200.computercraft.api.detail.VanillaDetailRegistries;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.shared.platform.ForgeContainerTransfer;
@@ -30,13 +30,13 @@ import static dan200.computercraft.core.util.ArgumentHelpers.assertBetween;
  */
 public final class InventoryMethods extends AbstractInventoryMethods<IItemHandler> {
     @Override
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public int size(IItemHandler inventory) {
         return inventory.getSlots();
     }
 
     @Override
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public Map<Integer, Map<String, ?>> list(IItemHandler inventory) {
         Map<Integer, Map<String, ?>> result = new HashMap<>();
         var size = inventory.getSlots();
@@ -50,8 +50,8 @@ public final class InventoryMethods extends AbstractInventoryMethods<IItemHandle
 
     @Override
     @Nullable
-    @LuaFunction(mainThread = true)
-    public Map<String, ?> getItemDetail(IItemHandler inventory, int slot) throws LuaException {
+    @ScriptFunction(mainThread = true)
+    public Map<String, ?> getItemDetail(IItemHandler inventory, int slot) throws ScriptException {
         assertBetween(slot, 1, inventory.getSlots(), "Slot out of range (%s)");
 
         var stack = inventory.getStackInSlot(slot - 1);
@@ -59,24 +59,24 @@ public final class InventoryMethods extends AbstractInventoryMethods<IItemHandle
     }
 
     @Override
-    @LuaFunction(mainThread = true)
-    public long getItemLimit(IItemHandler inventory, int slot) throws LuaException {
+    @ScriptFunction(mainThread = true)
+    public long getItemLimit(IItemHandler inventory, int slot) throws ScriptException {
         assertBetween(slot, 1, inventory.getSlots(), "Slot out of range (%s)");
         return inventory.getSlotLimit(slot - 1);
     }
 
     @Override
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public int pushItems(
         IItemHandler from, IComputerAccess computer,
         String toName, int fromSlot, Optional<Integer> limit, Optional<Integer> toSlot
-    ) throws LuaException {
+    ) throws ScriptException {
         // Find location to transfer to
         var location = computer.getAvailablePeripheral(toName);
-        if (location == null) throw new LuaException("Target '" + toName + "' does not exist");
+        if (location == null) throw new ScriptException("Target '" + toName + "' does not exist");
 
         var to = extractHandler(location);
-        if (to == null) throw new LuaException("Target '" + toName + "' is not an inventory");
+        if (to == null) throw new ScriptException("Target '" + toName + "' is not an inventory");
 
         // Validate slots
         int actualLimit = limit.orElse(Integer.MAX_VALUE);
@@ -88,17 +88,17 @@ public final class InventoryMethods extends AbstractInventoryMethods<IItemHandle
     }
 
     @Override
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public int pullItems(
         IItemHandler to, IComputerAccess computer,
         String fromName, int fromSlot, Optional<Integer> limit, Optional<Integer> toSlot
-    ) throws LuaException {
+    ) throws ScriptException {
         // Find location to transfer to
         var location = computer.getAvailablePeripheral(fromName);
-        if (location == null) throw new LuaException("Source '" + fromName + "' does not exist");
+        if (location == null) throw new ScriptException("Source '" + fromName + "' does not exist");
 
         var from = extractHandler(location);
-        if (from == null) throw new LuaException("Source '" + fromName + "' is not an inventory");
+        if (from == null) throw new ScriptException("Source '" + fromName + "' is not an inventory");
 
         // Validate slots
         int actualLimit = limit.orElse(Integer.MAX_VALUE);

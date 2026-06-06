@@ -7,10 +7,10 @@ package dan200.computercraft.api;
 import dan200.computercraft.api.component.ComputerComponent;
 import dan200.computercraft.api.filesystem.Mount;
 import dan200.computercraft.api.filesystem.WritableMount;
-import dan200.computercraft.api.lua.GenericSource;
-import dan200.computercraft.api.lua.IComputerSystem;
-import dan200.computercraft.api.lua.ILuaAPI;
-import dan200.computercraft.api.lua.ILuaAPIFactory;
+import dan200.computercraft.api.scripting.GenericSource;
+import dan200.computercraft.api.scripting.IComputerSystem;
+import dan200.computercraft.api.scripting.IComputerAPI;
+import dan200.computercraft.api.scripting.IComputerAPIFactory;
 import dan200.computercraft.api.media.IMedia;
 import dan200.computercraft.api.media.MediaProvider;
 import dan200.computercraft.api.network.PacketNetwork;
@@ -166,11 +166,11 @@ public final class ComputerCraftAPI {
     }
 
     /**
-     * Register a custom {@link ILuaAPI}, which may be added onto all computers without requiring a peripheral.
+     * Register a custom {@link IComputerAPI}, which may be added onto all computers without requiring a peripheral.
      * <p>
      * Before implementing this interface, consider alternative methods of providing methods. It is generally preferred
      * to use peripherals to provide functionality to users. If an API is <em>required</em>, you may want to consider
-     * using {@link ILuaAPI#getModuleName()} to expose this library as a module instead of as a global.
+     * using {@link IComputerAPI#getModuleName()} to expose this library as a module instead of as a global.
      * <p>
      * This may be used with {@link IComputerSystem#getComponent(ComputerComponent)} to only attach APIs to specific
      * computers. For example, one can add a new API just to turtles with the following code:
@@ -178,9 +178,9 @@ public final class ComputerCraftAPI {
      * {@snippet class=com.example.examplemod.ExampleAPI region=register}
      *
      * @param factory The factory for your API subclass.
-     * @see ILuaAPIFactory
+     * @see IComputerAPIFactory
      */
-    public static void registerAPIFactory(ILuaAPIFactory factory) {
+    public static void registerAPIFactory(IComputerAPIFactory factory) {
         getInstance().registerAPIFactory(factory);
     }
 

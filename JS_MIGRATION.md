@@ -277,16 +277,16 @@ after `JS_ROM_FEATURES.md` defines the feature contracts.
 
 ## Phase 9 — Cleanup & rename
 
-- [ ] **9.1** Remove Cobalt from `gradle/libs.versions.toml` and `projects/core/build.gradle.kts`
-- [ ] **9.2** Delete `CobaltLuaMachine.java`
-- [ ] **9.3** Delete `ResultInterpreterFunction.java`
-- [ ] **9.4** Delete `VarargArguments.java`
-- [ ] **9.5** Delete `TableImpl.java`
-- [ ] **9.6** Delete `errorinfo/ErrorInfoLib.java` and `errorinfo/DebugHelpers.java`
-- [ ] **9.7** Delete `projects/web/src/builder/java/cc/tweaked/web/builder/PatchCobalt.java`
-- [ ] **9.8** Rename `ILuaMachine` → `IMachine` and `ILuaMachine.Factory` → `IMachine.Factory` everywhere
-- [ ] **9.9** Rename `MachineEnvironment`, `MachineResult`, `MachineException` Javadocs to drop Lua-specific language
-- [ ] **9.10** Add SPDX headers (MPL-2.0) to all new source files
+- [x] **9.1** Remove Cobalt from `gradle/libs.versions.toml`, `projects/core/build.gradle.kts`, `projects/fabric/build.gradle.kts`, `projects/forge/build.gradle.kts`
+- [x] **9.2** Delete `CobaltLuaMachine.java`
+- [x] **9.3** Delete `ResultInterpreterFunction.java`
+- [x] **9.4** Delete `VarargArguments.java`
+- [x] **9.5** Delete `TableImpl.java`
+- [x] **9.6** Delete `errorinfo/ErrorInfoLib.java` and `errorinfo/DebugHelpers.java`
+- [x] **9.7** Delete `projects/web/src/builder/java/cc/tweaked/web/builder/PatchCobalt.java`; remove `PatchCobalt::patch` transformer from `Builder.java`; update `TComputerThread.java` comment
+- [x] **9.8** Rename `ILuaMachine` → `IMachine` and `ILuaMachine.Factory` → `IMachine.Factory` everywhere (including `KotlinLuaMachine.kt`)
+- [x] **9.9** Rename `MachineEnvironment`, `MachineResult`, `MachineException`, `TimeoutState` Javadocs to drop Lua-specific language
+- [x] **9.10** All new JS-engine source files already carry MPL-2.0 SPDX headers
 - [ ] **Commit** — stage Phase 9 files; propose commit message; wait for user approval
 
 ---

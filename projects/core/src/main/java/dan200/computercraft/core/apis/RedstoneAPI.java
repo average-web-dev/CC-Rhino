@@ -4,8 +4,8 @@
 
 package dan200.computercraft.core.apis;
 
-import dan200.computercraft.api.lua.ILuaAPI;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.IComputerAPI;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.computer.ComputerSide;
 import dan200.computercraft.core.redstone.RedstoneAccess;
 
@@ -53,7 +53,7 @@ import java.util.List;
  * the Minecraft wiki."
  * @cc.module redstone
  */
-public class RedstoneAPI extends RedstoneMethods implements ILuaAPI {
+public class RedstoneAPI extends RedstoneMethods implements IComputerAPI {
     public RedstoneAPI(RedstoneAccess environment) {
         super(environment);
     }
@@ -70,7 +70,7 @@ public class RedstoneAPI extends RedstoneMethods implements ILuaAPI {
      * @return A table of valid sides.
      * @cc.since 1.2
      */
-    @LuaFunction
+    @ScriptFunction
     public final List<String> getSides() {
         return ComputerSide.NAMES;
     }

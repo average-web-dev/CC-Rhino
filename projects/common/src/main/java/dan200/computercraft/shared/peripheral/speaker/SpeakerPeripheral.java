@@ -4,10 +4,10 @@
 
 package dan200.computercraft.shared.peripheral.speaker;
 
-import dan200.computercraft.api.lua.ILuaContext;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
-import dan200.computercraft.api.lua.LuaTable;
+import dan200.computercraft.api.scripting.IContext;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
+import dan200.computercraft.api.scripting.ScriptTable;
 import dan200.computercraft.api.peripheral.AttachedComputerSet;
 import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.api.peripheral.IPeripheral;
@@ -37,7 +37,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static dan200.computercraft.api.lua.LuaValues.checkFinite;
+import static dan200.computercraft.api.scripting.ScriptValues.checkFinite;
 
 /**
  * The speaker peripheral allows your computer to play notes and other sounds.
@@ -62,7 +62,7 @@ public abstract class SpeakerPeripheral implements IPeripheral {
     public static final int SAMPLE_RATE = 48000;
 
     /**
-     * The maximum length of a {@link ResourceLocation} played by {@link #playSound(ILuaContext, String, Optional, Optional)}.
+     * The maximum length of a {@link ResourceLocation} played by {@link #playSound(IContext, String, Optional, Optional)}.
      */
     private static final int MAX_SOUND_LENGTH = 512;
 
@@ -207,10 +207,10 @@ public abstract class SpeakerPeripheral implements IPeripheral {
      * @param volumeA     The volume to play the note at, from 0.0 to 3.0. Defaults to 1.0.
      * @param pitchA      The pitch to play the note at in semitones, from 0 to 24. Defaults to 12.
      * @return Whether the note could be played as the limit was reached.
-     * @throws LuaException If the instrument doesn't exist.
+     * @throws ScriptException If the instrument doesn't exist.
      */
-    @LuaFunction
-    public final boolean playNote(ILuaContext context, String instrumentA, Optional<Double> volumeA, Optional<Double> pitchA) throws LuaException {
+    @ScriptFunction
+    public final boolean playNote(IContext context, String instrumentA, Optional<Double> volumeA, Optional<Double> pitchA) throws ScriptException {
         var volume = (float) clampVolume(checkFinite(1, volumeA.orElse(1.0)));
         var pitch = (float) checkFinite(2, pitchA.orElse(1.0));
 
@@ -223,7 +223,7 @@ public abstract class SpeakerPeripheral implements IPeripheral {
         }
 
         // Check if the note exists
-        if (instrument == null) throw new LuaException("Invalid instrument, \"" + instrument + "\"!");
+        if (instrument == null) throw new ScriptException("Invalid instrument, \"" + instrument + "\"!");
 
         synchronized (pendingNotes) {
             if (pendingNotes.size() >= Config.maxNotesPerTick) return false;
@@ -246,7 +246,7 @@ public abstract class SpeakerPeripheral implements IPeripheral {
      * @param volumeA The volume to play the sound at, from 0.0 to 3.0. Defaults to 1.0.
      * @param pitchA  The speed to play the sound at, from 0.5 to 2.0. Defaults to 1.0.
      * @return Whether the sound could be played.
-     * @throws LuaException If the sound name was invalid.
+     * @throws ScriptException If the sound name was invalid.
      * @cc.usage Play a creeper hiss with the speaker.
      *
      * <pre data-peripheral="speaker">{@code
@@ -254,15 +254,15 @@ public abstract class SpeakerPeripheral implements IPeripheral {
      * speaker.playSound("entity.creeper.primed")
      * }</pre>
      */
-    @LuaFunction
-    public final boolean playSound(ILuaContext context, String name, Optional<Double> volumeA, Optional<Double> pitchA) throws LuaException {
+    @ScriptFunction
+    public final boolean playSound(IContext context, String name, Optional<Double> volumeA, Optional<Double> pitchA) throws ScriptException {
         var volume = (float) clampVolume(checkFinite(1, volumeA.orElse(1.0)));
         var pitch = (float) checkFinite(2, pitchA.orElse(1.0));
 
-        if (name.length() > MAX_SOUND_LENGTH) throw new LuaException("bad argument #1 (sound name is too long)");
+        if (name.length() > MAX_SOUND_LENGTH) throw new ScriptException("bad argument #1 (sound name is too long)");
 
         var identifier = ResourceLocation.tryParse(name);
-        if (identifier == null) throw new LuaException("bad argument #1 (malformed sound name)");
+        if (identifier == null) throw new ScriptException("bad argument #1 (malformed sound name)");
 
         // Prevent playing music discs.
         var soundEvent = BuiltInRegistries.SOUND_EVENT.get(identifier);
@@ -301,7 +301,7 @@ public abstract class SpeakerPeripheral implements IPeripheral {
      * @param audio   The audio data to play.
      * @param volume  The volume to play this audio at.
      * @return If there was room to accept this audio data.
-     * @throws LuaException If the audio data is malformed.
+     * @throws ScriptException If the audio data is malformed.
      * @cc.tparam {number...} audio A list of amplitudes.
      * @cc.tparam [opt] number volume The volume to play this audio at. If not given, defaults to the previous volume
      * given to {@link #playAudio}.
@@ -325,14 +325,14 @@ public abstract class SpeakerPeripheral implements IPeripheral {
      * the speaker.
      * @cc.see speaker_audio For a more complete introduction to the {@link #playAudio} function.
      */
-    @LuaFunction(unsafe = true)
-    public final boolean playAudio(ILuaContext context, LuaTable<?, ?> audio, Optional<Double> volume) throws LuaException {
+    @ScriptFunction(unsafe = true)
+    public final boolean playAudio(IContext context, ScriptTable<?, ?> audio, Optional<Double> volume) throws ScriptException {
         checkFinite(1, volume.orElse(0.0));
 
         // TODO: Use ArgumentHelpers instead?
         var length = audio.length();
-        if (length <= 0) throw new LuaException("Cannot play empty audio");
-        if (length > 128 * 1024) throw new LuaException("Audio data is too large");
+        if (length <= 0) throw new ScriptException("Cannot play empty audio");
+        if (length > 128 * 1024) throw new ScriptException("Audio data is too large");
 
         DfpwmState state;
         synchronized (lock) {
@@ -352,7 +352,7 @@ public abstract class SpeakerPeripheral implements IPeripheral {
      *
      * @cc.since 1.100
      */
-    @LuaFunction
+    @ScriptFunction
     public final void stop() {
         shouldStop = true;
     }

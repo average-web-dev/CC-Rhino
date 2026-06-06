@@ -4,8 +4,8 @@
 
 package dan200.computercraft.gametest
 
-import dan200.computercraft.api.lua.Coerced
-import dan200.computercraft.api.lua.LuaException
+import dan200.computercraft.api.scripting.Coerced
+import dan200.computercraft.api.scripting.ScriptException
 import dan200.computercraft.gametest.api.*
 import dan200.computercraft.shared.ModRegistry
 import dan200.computercraft.shared.media.items.PrintoutData
@@ -156,7 +156,7 @@ class Printer_Test {
                 ),
             )
 
-            val error = assertThrows(LuaException::class.java) { peripheral.endPage() }
+            val error = assertThrows(ScriptException::class.java) { peripheral.endPage() }
             assertEquals("Page not started", error.message)
         }
     }

@@ -4,7 +4,7 @@
 
 package dan200.computercraft.core.apis.transfer;
 
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.apis.handles.ReadHandle;
 import dan200.computercraft.core.methods.ObjectSource;
 
@@ -35,7 +35,7 @@ public class TransferredFile implements ObjectSource {
      *
      * @return The file's name.
      */
-    @LuaFunction
+    @ScriptFunction
     public final String getName() {
         return name;
     }

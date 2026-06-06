@@ -5,8 +5,8 @@
 package dan200.computercraft.shared.peripheral.generic.methods;
 
 import dan200.computercraft.api.ComputerCraftAPI;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.peripheral.GenericPeripheral;
 import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.api.peripheral.PeripheralType;
@@ -39,7 +39,7 @@ public abstract class AbstractInventoryMethods<T> implements GenericPeripheral {
      * @param inventory The current inventory.
      * @return The number of slots in this inventory.
      */
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public abstract int size(T inventory);
 
     /**
@@ -66,7 +66,7 @@ public abstract class AbstractInventoryMethods<T> implements GenericPeripheral {
      * }</pre>
      * @cc.see item_details
      */
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public abstract Map<Integer, Map<String, ?>> list(T inventory);
 
     /**
@@ -75,7 +75,7 @@ public abstract class AbstractInventoryMethods<T> implements GenericPeripheral {
      * @param inventory The current inventory.
      * @param slot      The slot to get information about.
      * @return Information about the item in this slot, or {@code nil} if it is empty.
-     * @throws LuaException If the slot is out of range.
+     * @throws ScriptException If the slot is out of range.
      * @cc.usage Print some information about the first in a chest.
      *
      * <pre>{@code
@@ -93,8 +93,8 @@ public abstract class AbstractInventoryMethods<T> implements GenericPeripheral {
      * @cc.see item_details
      */
     @Nullable
-    @LuaFunction(mainThread = true)
-    public abstract Map<?, ?> getItemDetail(T inventory, int slot) throws LuaException;
+    @ScriptFunction(mainThread = true)
+    public abstract Map<?, ?> getItemDetail(T inventory, int slot) throws ScriptException;
 
     /**
      * Get the maximum number of items which can be stored in this slot.
@@ -105,7 +105,7 @@ public abstract class AbstractInventoryMethods<T> implements GenericPeripheral {
      * @param inventory Inventory to probe.
      * @param slot      The slot
      * @return The maximum number of items in this slot.
-     * @throws LuaException If the slot is out of range.
+     * @throws ScriptException If the slot is out of range.
      * @cc.usage Count the maximum number of items an adjacent chest can hold.
      * <pre>{@code
      * local chest = peripheral.find("minecraft:chest")
@@ -117,8 +117,8 @@ public abstract class AbstractInventoryMethods<T> implements GenericPeripheral {
      * }</pre>
      * @cc.since 1.96.0
      */
-    @LuaFunction(mainThread = true)
-    public abstract long getItemLimit(T inventory, int slot) throws LuaException;
+    @ScriptFunction(mainThread = true)
+    public abstract long getItemLimit(T inventory, int slot) throws ScriptException;
 
     /**
      * Push items from one inventory to another connected one.
@@ -134,8 +134,8 @@ public abstract class AbstractInventoryMethods<T> implements GenericPeripheral {
      * @param limit    The maximum number of items to move. Defaults to the current stack limit.
      * @param toSlot   The slot in the target inventory to move to. If not given, the item will be inserted into any slot.
      * @return The number of transferred items.
-     * @throws LuaException If the peripheral to transfer to doesn't exist or isn't an inventory.
-     * @throws LuaException If either source or destination slot is out of range.
+     * @throws ScriptException If the peripheral to transfer to doesn't exist or isn't an inventory.
+     * @throws ScriptException If either source or destination slot is out of range.
      * @cc.see peripheral.getName Allows you to get the name of a [wrapped][`peripheral.wrap`] peripheral.
      * @cc.usage Wrap two chests, and push an item from one to another.
      * <pre>{@code
@@ -145,10 +145,10 @@ public abstract class AbstractInventoryMethods<T> implements GenericPeripheral {
      * chest_a.pushItems(peripheral.getName(chest_b), 1)
      * }</pre>
      */
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public abstract int pushItems(
         T from, IComputerAccess computer, String toName, int fromSlot, Optional<Integer> limit, Optional<Integer> toSlot
-    ) throws LuaException;
+    ) throws ScriptException;
 
     /**
      * Pull items from a connected inventory into this one.
@@ -164,8 +164,8 @@ public abstract class AbstractInventoryMethods<T> implements GenericPeripheral {
      * @param limit    The maximum number of items to move. Defaults to the current stack limit.
      * @param toSlot   The slot in current inventory to move to. If not given, the item will be inserted into any slot.
      * @return The number of transferred items.
-     * @throws LuaException If the peripheral to transfer to doesn't exist or isn't an inventory.
-     * @throws LuaException If either source or destination slot is out of range.
+     * @throws ScriptException If the peripheral to transfer to doesn't exist or isn't an inventory.
+     * @throws ScriptException If either source or destination slot is out of range.
      * @cc.see peripheral.getName Allows you to get the name of a [wrapped][`peripheral.wrap`] peripheral.
      * @cc.usage Wrap two chests, and push an item from one to another.
      * <pre>{@code
@@ -175,8 +175,8 @@ public abstract class AbstractInventoryMethods<T> implements GenericPeripheral {
      * chest_a.pullItems(peripheral.getName(chest_b), 1)
      * }</pre>
      */
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public abstract int pullItems(
         T to, IComputerAccess computer, String fromName, int fromSlot, Optional<Integer> limit, Optional<Integer> toSlot
-    ) throws LuaException;
+    ) throws ScriptException;
 }

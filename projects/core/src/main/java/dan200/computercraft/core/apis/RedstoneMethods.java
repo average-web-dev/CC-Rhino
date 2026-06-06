@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: LicenseRef-CCPL
 package dan200.computercraft.core.apis;
 
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.computer.ComputerSide;
 import dan200.computercraft.core.redstone.RedstoneAccess;
 
@@ -24,7 +24,7 @@ public class RedstoneMethods {
      * @param side The side to set.
      * @param on   Whether the redstone signal should be on or off. When on, a signal strength of 15 is emitted.
      */
-    @LuaFunction
+    @ScriptFunction
     public final void setOutput(ComputerSide side, boolean on) {
         redstone.setOutput(side, on ? 15 : 0);
     }
@@ -36,7 +36,7 @@ public class RedstoneMethods {
      * @return Whether the redstone output is on or off.
      * @see #setOutput
      */
-    @LuaFunction
+    @ScriptFunction
     public final boolean getOutput(ComputerSide side) {
         return redstone.getOutput(side) > 0;
     }
@@ -47,7 +47,7 @@ public class RedstoneMethods {
      * @param side The side to get.
      * @return Whether the redstone input is on or off.
      */
-    @LuaFunction
+    @ScriptFunction
     public final boolean getInput(ComputerSide side) {
         return redstone.getInput(side) > 0;
     }
@@ -57,12 +57,12 @@ public class RedstoneMethods {
      *
      * @param side  The side to set.
      * @param value The signal strength between 0 and 15.
-     * @throws LuaException If {@code value} is not between 0 and 15.
+     * @throws ScriptException If {@code value} is not between 0 and 15.
      * @cc.since 1.51
      */
-    @LuaFunction({ "setAnalogOutput", "setAnalogueOutput" })
-    public final void setAnalogOutput(ComputerSide side, int value) throws LuaException {
-        if (value < 0 || value > 15) throw new LuaException("Expected number in range 0-15");
+    @ScriptFunction({ "setAnalogOutput", "setAnalogueOutput" })
+    public final void setAnalogOutput(ComputerSide side, int value) throws ScriptException {
+        if (value < 0 || value > 15) throw new ScriptException("Expected number in range 0-15");
         redstone.setOutput(side, value);
     }
 
@@ -74,7 +74,7 @@ public class RedstoneMethods {
      * @cc.since 1.51
      * @see #setAnalogOutput
      */
-    @LuaFunction({ "getAnalogOutput", "getAnalogueOutput" })
+    @ScriptFunction({ "getAnalogOutput", "getAnalogueOutput" })
     public final int getAnalogOutput(ComputerSide side) {
         return redstone.getOutput(side);
     }
@@ -86,7 +86,7 @@ public class RedstoneMethods {
      * @return The input signal strength, between 0 and 15.
      * @cc.since 1.51
      */
-    @LuaFunction({ "getAnalogInput", "getAnalogueInput" })
+    @ScriptFunction({ "getAnalogInput", "getAnalogueInput" })
     public final int getAnalogInput(ComputerSide side) {
         return redstone.getInput(side);
     }
@@ -99,7 +99,7 @@ public class RedstoneMethods {
      * @cc.see colors.subtract For removing a colour from the bitmask.
      * @cc.see colors.combine For adding a color to the bitmask.
      */
-    @LuaFunction
+    @ScriptFunction
     public final void setBundledOutput(ComputerSide side, int output) {
         redstone.setBundledOutput(side, output);
     }
@@ -110,7 +110,7 @@ public class RedstoneMethods {
      * @param side The side to get.
      * @return The bundle cable's output.
      */
-    @LuaFunction
+    @ScriptFunction
     public final int getBundledOutput(ComputerSide side) {
         return redstone.getBundledOutput(side);
     }
@@ -122,7 +122,7 @@ public class RedstoneMethods {
      * @return The bundle cable's input.
      * @see #testBundledInput To determine if a specific colour is set.
      */
-    @LuaFunction
+    @ScriptFunction
     public final int getBundledInput(ComputerSide side) {
         return redstone.getBundledInput(side);
     }
@@ -139,7 +139,7 @@ public class RedstoneMethods {
      * }</pre>
      * @see #getBundledInput
      */
-    @LuaFunction
+    @ScriptFunction
     public final boolean testBundledInput(ComputerSide side, int mask) {
         var input = redstone.getBundledInput(side);
         return (input & mask) == mask;

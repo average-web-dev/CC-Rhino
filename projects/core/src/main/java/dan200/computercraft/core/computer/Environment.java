@@ -4,7 +4,7 @@
 
 package dan200.computercraft.core.computer;
 
-import dan200.computercraft.api.lua.ILuaAPI;
+import dan200.computercraft.api.scripting.IComputerAPI;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.api.peripheral.WorkMonitor;
 import dan200.computercraft.core.apis.IAPIEnvironment;
@@ -91,8 +91,8 @@ public final class Environment implements IAPIEnvironment {
     /**
      * Called when the computer starts up or shuts down, to reset any internal state.
      *
-     * @see ILuaAPI#startup()
-     * @see ILuaAPI#shutdown()
+     * @see IComputerAPI#startup()
+     * @see IComputerAPI#shutdown()
      */
     void reset() {
         synchronized (timers) {

@@ -4,7 +4,7 @@
 
 package dan200.computercraft.core.apis.transfer;
 
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -37,7 +37,7 @@ public class TransferredFiles {
      *
      * @return The list of files.
      */
-    @LuaFunction
+    @ScriptFunction
     public final List<TransferredFile> getFiles() {
         consumed();
         return files;

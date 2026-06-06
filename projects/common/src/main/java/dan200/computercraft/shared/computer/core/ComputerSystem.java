@@ -5,8 +5,8 @@
 package dan200.computercraft.shared.computer.core;
 
 import dan200.computercraft.api.component.ComputerComponent;
-import dan200.computercraft.api.lua.IComputerSystem;
-import dan200.computercraft.api.lua.ILuaAPIFactory;
+import dan200.computercraft.api.scripting.IComputerSystem;
+import dan200.computercraft.api.scripting.IComputerAPIFactory;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.core.apis.ComputerAccess;
 import dan200.computercraft.core.apis.IAPIEnvironment;
@@ -20,7 +20,7 @@ import java.util.Map;
 /**
  * Implementation of {@link IComputerSystem} for usage by externally registered APIs.
  *
- * @see ILuaAPIFactory
+ * @see IComputerAPIFactory
  */
 final class ComputerSystem extends ComputerAccess implements IComputerSystem, ApiLifecycle {
     private final ServerComputer computer;

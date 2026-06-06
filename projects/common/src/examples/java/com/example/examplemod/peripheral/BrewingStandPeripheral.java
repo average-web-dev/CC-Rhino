@@ -1,6 +1,6 @@
 package com.example.examplemod.peripheral;
 
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import net.minecraft.world.level.block.entity.BrewingStandBlockEntity;
 import org.jspecify.annotations.Nullable;
@@ -25,7 +25,7 @@ public class BrewingStandPeripheral implements IPeripheral {
         return "brewing_stand";
     }
 
-    @LuaFunction
+    @ScriptFunction
     public final int getFuel() {
         // Don't do it this way! Use an access widener/transformer to access the "fuel" field instead.
         return brewingStand.saveWithoutMetadata(brewingStand.getLevel().registryAccess()).getInt("Fuel");

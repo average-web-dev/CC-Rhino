@@ -4,7 +4,7 @@
 
 package dan200.computercraft.core.apis.http.websocket;
 
-import dan200.computercraft.api.lua.*;
+import dan200.computercraft.api.scripting.*;
 import dan200.computercraft.core.apis.HTTPAPI;
 import dan200.computercraft.core.apis.IAPIEnvironment;
 import dan200.computercraft.core.apis.http.options.Options;
@@ -20,7 +20,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-import static dan200.computercraft.api.lua.LuaValues.checkFinite;
+import static dan200.computercraft.api.scripting.ScriptValues.checkFinite;
 import static dan200.computercraft.core.apis.IAPIEnvironment.TIMER_EVENT;
 import static dan200.computercraft.core.apis.http.websocket.WebsocketClient.CLOSE_EVENT;
 import static dan200.computercraft.core.apis.http.websocket.WebsocketClient.MESSAGE_EVENT;
@@ -53,7 +53,7 @@ public class WebsocketHandle {
      *
      * @param timeout The number of seconds to wait if no message is received.
      * @return The result of receiving.
-     * @throws LuaException If the websocket has been closed.
+     * @throws ScriptException If the websocket has been closed.
      * @cc.treturn [1] string The received message.
      * @cc.treturn boolean If this was a binary message.
      * @cc.treturn [2] nil If the websocket was closed while waiting, or if we timed out.
@@ -63,8 +63,8 @@ public class WebsocketHandle {
      * @cc.changed 1.87.0 Added timeout argument.
      * @cc.changed 1.117.0 Added return value indicating why receiving the message failed.
      */
-    @LuaFunction
-    public final MethodResult receive(Optional<Double> timeout) throws LuaException {
+    @ScriptFunction
+    public final MethodResult receive(Optional<Double> timeout) throws ScriptException {
         checkOpen();
         var timeoutId = timeout.isPresent()
             ? environment.startTimer(Math.round(checkFinite(0, timeout.get()) / 0.05))
@@ -78,17 +78,17 @@ public class WebsocketHandle {
      *
      * @param message The message to send.
      * @param binary  Whether this message should be treated as a binary message.
-     * @throws LuaException If the message is too large.
-     * @throws LuaException If the websocket has been closed.
+     * @throws ScriptException If the message is too large.
+     * @throws ScriptException If the websocket has been closed.
      * @cc.changed 1.81.0 Added argument for binary mode.
      */
-    @LuaFunction
-    public final void send(Coerced<ByteBuffer> message, Optional<Boolean> binary) throws LuaException {
+    @ScriptFunction
+    public final void send(Coerced<ByteBuffer> message, Optional<Boolean> binary) throws ScriptException {
         checkOpen();
 
         var text = message.value();
         if (options.websocketMessage() != 0 && text.remaining() > options.websocketMessage()) {
-            throw new LuaException("Message is too large");
+            throw new ScriptException("Message is too large");
         }
 
         if (binary.orElse(false)) {
@@ -98,7 +98,7 @@ public class WebsocketHandle {
                 websocket.sendText(DECODER.get().decode(text).toString());
             } catch (CharacterCodingException e) {
                 // This shouldn't happen, but worth mentioning.
-                throw new LuaException("Message is not valid UTF8");
+                throw new ScriptException("Message is not valid UTF8");
             }
         }
     }
@@ -107,7 +107,7 @@ public class WebsocketHandle {
      * Close this websocket. This will terminate the connection, meaning messages can no longer be sent or received
      * along it.
      */
-    @LuaFunction
+    @ScriptFunction
     public final void close() {
         websocket.close();
     }
@@ -131,16 +131,16 @@ public class WebsocketHandle {
      * }</pre>
      * @since 1.117.0
      */
-    @LuaFunction
+    @ScriptFunction
     public final Map<String, String> getResponseHeaders() {
         return responseHeaders;
     }
 
-    private void checkOpen() throws LuaException {
-        if (websocket.isClosed()) throw new LuaException("attempt to use a closed file");
+    private void checkOpen() throws ScriptException {
+        if (websocket.isClosed()) throw new ScriptException("attempt to use a closed file");
     }
 
-    private final class ReceiveCallback implements ILuaCallback {
+    private final class ReceiveCallback implements ICallback {
         final MethodResult pull = MethodResult.pullEvent(null, this);
         private final IAPIEnvironment environment;
         private final int timeoutId;

@@ -5,7 +5,7 @@
 package cc.tweaked.standalone;
 
 
-import dan200.computercraft.api.lua.ILuaAPI;
+import dan200.computercraft.api.scripting.IComputerAPI;
 import dan200.computercraft.core.ComputerContext;
 import dan200.computercraft.core.CoreConfig;
 import dan200.computercraft.core.apis.IAPIEnvironment;
@@ -193,9 +193,9 @@ public class Main {
     }
 
     /**
-     * An {@link ILuaAPI} which is used to mount additional files, but does not expose any new globals/methods.
+     * An {@link IComputerAPI} which is used to mount additional files, but does not expose any new globals/methods.
      */
-    private static final class FileMounter implements ILuaAPI {
+    private static final class FileMounter implements IComputerAPI {
         private final IAPIEnvironment environment;
         private final List<MountPaths> readOnlyMounts;
         private final List<MountPaths> mounts;

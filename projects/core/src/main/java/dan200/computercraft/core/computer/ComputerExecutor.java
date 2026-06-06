@@ -8,7 +8,7 @@ package dan200.computercraft.core.computer;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import dan200.computercraft.api.filesystem.Mount;
 import dan200.computercraft.api.filesystem.WritableMount;
-import dan200.computercraft.api.lua.ILuaAPI;
+import dan200.computercraft.api.scripting.IComputerAPI;
 import dan200.computercraft.core.ComputerContext;
 import dan200.computercraft.core.CoreConfig;
 import dan200.computercraft.core.apis.*;
@@ -16,10 +16,10 @@ import dan200.computercraft.core.computer.computerthread.ComputerScheduler;
 import dan200.computercraft.core.computer.computerthread.ComputerThread;
 import dan200.computercraft.core.filesystem.FileSystem;
 import dan200.computercraft.core.filesystem.FileSystemException;
-import dan200.computercraft.core.lua.ILuaMachine;
-import dan200.computercraft.core.lua.MachineEnvironment;
-import dan200.computercraft.core.lua.MachineException;
-import dan200.computercraft.core.methods.LuaMethod;
+import dan200.computercraft.core.engine.IMachine;
+import dan200.computercraft.core.engine.MachineEnvironment;
+import dan200.computercraft.core.engine.MachineException;
+import dan200.computercraft.core.methods.ApiMethod;
 import dan200.computercraft.core.methods.MethodSupplier;
 import dan200.computercraft.core.metrics.MetricsObserver;
 import dan200.computercraft.core.util.Colour;
@@ -53,7 +53,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * Both queues are run from the {@link #work()} method, which tries to execute a command if one exists, or resumes the
  * machine with an event otherwise.
  * <p>
- * One final responsibility for the executor is calling {@link ILuaAPI#update()} every tick, via the {@link #tick()}
+ * One final responsibility for the executor is calling {@link IComputerAPI#update()} every tick, via the {@link #tick()}
  * method. This should only be called when the computer is actually on ({@link #isOn}).
  */
 final class ComputerExecutor implements ComputerScheduler.Worker {
@@ -64,11 +64,11 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
     private final ComputerEnvironment computerEnvironment;
     private final MetricsObserver metrics;
     private final List<ApiWrapper> apis = new ArrayList<>();
-    private final MethodSupplier<LuaMethod> luaMethods;
+    private final MethodSupplier<ApiMethod> luaMethods;
 
     private @Nullable FileSystem fileSystem;
 
-    private @Nullable ILuaMachine machine;
+    private @Nullable IMachine machine;
 
     /**
      * Whether the computer is currently on. This is set to false when a shutdown starts, or when turning on completes
@@ -142,7 +142,7 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
 
     private @Nullable WritableMount rootMount;
 
-    private final ILuaMachine.Factory luaFactory;
+    private final IMachine.Factory luaFactory;
 
     private final ComputerScheduler.Executor executor;
 
@@ -180,11 +180,11 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
         return fileSystem;
     }
 
-    void addApi(ILuaAPI api) {
+    void addApi(IComputerAPI api) {
         apis.add(new ApiWrapper(api, null));
     }
 
-    void addApi(ILuaAPI api, ApiLifecycle lifecycleHooks) {
+    void addApi(IComputerAPI api, ApiLifecycle lifecycleHooks) {
         apis.add(new ApiWrapper(api, lifecycleHooks));
     }
 
@@ -350,7 +350,7 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
     }
 
     @Nullable
-    private ILuaMachine createLuaMachine() {
+    private IMachine createLuaMachine() {
         // Load the bios resource
         InputStream biosStream = null;
         try {

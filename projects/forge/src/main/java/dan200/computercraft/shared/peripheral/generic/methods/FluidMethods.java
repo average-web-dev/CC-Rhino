@@ -5,8 +5,8 @@
 package dan200.computercraft.shared.peripheral.generic.methods;
 
 import dan200.computercraft.api.detail.ForgeDetailRegistries;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.shared.util.CapabilityUtil;
@@ -30,7 +30,7 @@ import static dan200.computercraft.shared.util.ArgumentHelpers.getRegistryEntry;
  */
 public final class FluidMethods extends AbstractFluidMethods<IFluidHandler> {
     @Override
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public Map<Integer, Map<String, ?>> tanks(IFluidHandler fluids) {
         Map<Integer, Map<String, ?>> result = new HashMap<>();
         var size = fluids.getTanks();
@@ -43,24 +43,24 @@ public final class FluidMethods extends AbstractFluidMethods<IFluidHandler> {
     }
 
     @Override
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public int pushFluid(
         IFluidHandler from, IComputerAccess computer,
         String toName, Optional<Integer> limit, Optional<String> fluidName
-    ) throws LuaException {
+    ) throws ScriptException {
         var fluid = fluidName.isPresent()
             ? getRegistryEntry(fluidName.get(), "fluid", BuiltInRegistries.FLUID)
             : null;
 
         // Find location to transfer to
         var location = computer.getAvailablePeripheral(toName);
-        if (location == null) throw new LuaException("Target '" + toName + "' does not exist");
+        if (location == null) throw new ScriptException("Target '" + toName + "' does not exist");
 
         var to = extractHandler(location);
-        if (to == null) throw new LuaException("Target '" + toName + "' is not an tank");
+        if (to == null) throw new ScriptException("Target '" + toName + "' is not an tank");
 
         int actualLimit = limit.orElse(Integer.MAX_VALUE);
-        if (actualLimit <= 0) throw new LuaException("Limit must be > 0");
+        if (actualLimit <= 0) throw new ScriptException("Limit must be > 0");
 
         return fluid == null
             ? moveFluid(from, actualLimit, to)
@@ -68,24 +68,24 @@ public final class FluidMethods extends AbstractFluidMethods<IFluidHandler> {
     }
 
     @Override
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public int pullFluid(
         IFluidHandler to, IComputerAccess computer,
         String fromName, Optional<Integer> limit, Optional<String> fluidName
-    ) throws LuaException {
+    ) throws ScriptException {
         var fluid = fluidName.isPresent()
             ? getRegistryEntry(fluidName.get(), "fluid", BuiltInRegistries.FLUID)
             : null;
 
         // Find location to transfer to
         var location = computer.getAvailablePeripheral(fromName);
-        if (location == null) throw new LuaException("Target '" + fromName + "' does not exist");
+        if (location == null) throw new ScriptException("Target '" + fromName + "' does not exist");
 
         var from = extractHandler(location);
-        if (from == null) throw new LuaException("Target '" + fromName + "' is not an tank");
+        if (from == null) throw new ScriptException("Target '" + fromName + "' is not an tank");
 
         int actualLimit = limit.orElse(Integer.MAX_VALUE);
-        if (actualLimit <= 0) throw new LuaException("Limit must be > 0");
+        if (actualLimit <= 0) throw new ScriptException("Limit must be > 0");
 
         return fluid == null
             ? moveFluid(from, actualLimit, to)

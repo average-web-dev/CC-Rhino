@@ -5,8 +5,8 @@
 package dan200.computercraft.api.turtle;
 
 import com.mojang.authlib.GameProfile;
-import dan200.computercraft.api.lua.ILuaCallback;
-import dan200.computercraft.api.lua.MethodResult;
+import dan200.computercraft.api.scripting.ICallback;
+import dan200.computercraft.api.scripting.MethodResult;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.api.upgrades.UpgradeBase;
 import dan200.computercraft.api.upgrades.UpgradeData;
@@ -208,7 +208,7 @@ public interface ITurtleAccess {
      * unchanged if called from a peripheral method.
      * @throws UnsupportedOperationException When attempting to execute a command on the client side.
      * @see TurtleCommand
-     * @see MethodResult#pullEvent(String, ILuaCallback)
+     * @see MethodResult#pullEvent(String, ICallback)
      */
     MethodResult executeCommand(TurtleCommand command);
 

@@ -4,10 +4,10 @@
 
 package dan200.computercraft.core.apis.handles;
 
-import dan200.computercraft.api.lua.Coerced;
-import dan200.computercraft.api.lua.IArguments;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.Coerced;
+import dan200.computercraft.api.scripting.IArguments;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.filesystem.TrackingCloseable;
 import dan200.computercraft.core.util.IoUtil;
 import org.jspecify.annotations.Nullable;
@@ -39,9 +39,9 @@ public abstract class AbstractHandle {
         this.binary = binary;
     }
 
-    protected void checkOpen() throws LuaException {
+    protected void checkOpen() throws ScriptException {
         var closeable = this.closeable;
-        if (closeable == null || !closeable.isOpen()) throw new LuaException("attempt to use a closed file");
+        if (closeable == null || !closeable.isOpen()) throw new ScriptException("attempt to use a closed file");
     }
 
     /**
@@ -49,10 +49,10 @@ public abstract class AbstractHandle {
      * <p>
      * Once a file is closed it may no longer be read or written to.
      *
-     * @throws LuaException If the file has already been closed.
+     * @throws ScriptException If the file has already been closed.
      */
-    @LuaFunction
-    public final void close() throws LuaException {
+    @ScriptFunction
+    public final void close() throws ScriptException {
         checkOpen();
         IoUtil.closeQuietly(closeable);
         closeable = null;
@@ -71,14 +71,14 @@ public abstract class AbstractHandle {
      * @param whence Where the offset is relative to.
      * @param offset The offset to seek to.
      * @return The new position.
-     * @throws LuaException If the file has been closed.
+     * @throws ScriptException If the file has been closed.
      * @cc.treturn [1] number The new position.
      * @cc.treturn [2] nil If seeking failed.
      * @cc.treturn string The reason seeking failed.
      * @cc.since 1.80pr1.9
      * @cc.changed 1.109.0 Now available on all file handles, not just binary-mode handles.
      */
-    public Object @Nullable [] seek(Optional<String> whence, Optional<Long> offset) throws LuaException {
+    public Object @Nullable [] seek(Optional<String> whence, Optional<Long> offset) throws ScriptException {
         checkOpen();
         long actualOffset = offset.orElse(0L);
         try {
@@ -86,7 +86,7 @@ public abstract class AbstractHandle {
                 case "set" -> channel.position(actualOffset);
                 case "cur" -> channel.position(channel.position() + actualOffset);
                 case "end" -> channel.position(channel.size() + actualOffset);
-                default -> throw new LuaException("bad argument #1 to 'seek' (invalid option '" + whence + "'");
+                default -> throw new ScriptException("bad argument #1 to 'seek' (invalid option '" + whence + "'");
             }
 
             return new Object[]{ channel.position() };
@@ -103,15 +103,15 @@ public abstract class AbstractHandle {
      * @param countArg The number of bytes to read. This may be 0 to determine we are at the end of the file. When
      *                 absent, a single byte will be read.
      * @return The read bytes.
-     * @throws LuaException When trying to read a negative number of bytes.
-     * @throws LuaException If the file has been closed.
+     * @throws ScriptException When trying to read a negative number of bytes.
+     * @throws ScriptException If the file has been closed.
      * @cc.treturn [1] nil If we are at the end of the file.
      * @cc.treturn [2] number The value of the byte read. This is returned if the file is opened in binary mode and
      * {@code count} is absent
      * @cc.treturn [3] string The bytes read as a string. This is returned when the {@code count} is given.
      * @cc.changed 1.80pr1 Now accepts an integer argument to read multiple bytes, returning a string instead of a number.
      */
-    public Object @Nullable [] read(Optional<Integer> countArg) throws LuaException {
+    public Object @Nullable [] read(Optional<Integer> countArg) throws ScriptException {
         checkOpen();
         try {
             if (binary && countArg.isEmpty()) {
@@ -120,7 +120,7 @@ public abstract class AbstractHandle {
                 return b == -1 ? null : new Object[]{ single.get(0) & 0xFF };
             } else {
                 int count = countArg.orElse(1);
-                if (count < 0) throw new LuaException("Cannot read a negative number of bytes");
+                if (count < 0) throw new ScriptException("Cannot read a negative number of bytes");
                 if (count == 0) return channel.position() >= channel.size() ? null : new Object[]{ "" };
 
                 if (count <= BUFFER_SIZE) {
@@ -177,13 +177,13 @@ public abstract class AbstractHandle {
      * Read the remainder of the file.
      *
      * @return The remaining contents of the file, or {@code null} in the event of an error.
-     * @throws LuaException If the file has been closed.
+     * @throws ScriptException If the file has been closed.
      * @cc.treturn string|nil The remaining contents of the file, or {@code nil} in the event of an error.
      * @cc.since 1.80pr1
      * @cc.changed 1.109.0 Binary-mode handles are now consistent with non-binary files, and return an empty string at
      * the end of the file, rather than {@code nil}.
      */
-    public Object @Nullable [] readAll() throws LuaException {
+    public Object @Nullable [] readAll() throws ScriptException {
         checkOpen();
         try {
             var expected = 32;
@@ -209,12 +209,12 @@ public abstract class AbstractHandle {
      *
      * @param withTrailingArg Whether to include the newline characters with the returned string. Defaults to {@code false}.
      * @return The read string.
-     * @throws LuaException If the file has been closed.
+     * @throws ScriptException If the file has been closed.
      * @cc.treturn string|nil The read line or {@code nil} if at the end of the file.
      * @cc.since 1.80pr1.9
      * @cc.changed 1.81.0 `\r` is now stripped.
      */
-    public Object @Nullable [] readLine(Optional<Boolean> withTrailingArg) throws LuaException {
+    public Object @Nullable [] readLine(Optional<Boolean> withTrailingArg) throws ScriptException {
         checkOpen();
         boolean withTrailing = withTrailingArg.orElse(false);
         try {
@@ -259,12 +259,12 @@ public abstract class AbstractHandle {
      * Write a string or byte to the file.
      *
      * @param arguments The value to write.
-     * @throws LuaException If the file has been closed.
+     * @throws ScriptException If the file has been closed.
      * @cc.tparam [1] string contents The string to write.
      * @cc.tparam [2] number charcode The byte to write, if the file was opened in binary mode.
      * @cc.changed 1.80pr1 Now accepts a string to write multiple bytes.
      */
-    public void write(IArguments arguments) throws LuaException {
+    public void write(IArguments arguments) throws ScriptException {
         checkOpen();
         try {
             var arg = arguments.get(0);
@@ -275,7 +275,7 @@ public abstract class AbstractHandle {
                 channel.write(arguments.getBytesCoerced(0));
             }
         } catch (IOException e) {
-            throw new LuaException(e.getMessage());
+            throw new ScriptException(e.getMessage());
         }
     }
 
@@ -283,15 +283,15 @@ public abstract class AbstractHandle {
      * Write a string of characters to the file, following them with a new line character.
      *
      * @param text The text to write to the file.
-     * @throws LuaException If the file has been closed.
+     * @throws ScriptException If the file has been closed.
      */
-    public void writeLine(Coerced<ByteBuffer> text) throws LuaException {
+    public void writeLine(Coerced<ByteBuffer> text) throws ScriptException {
         checkOpen();
         try {
             channel.write(text.value());
             writeSingle((byte) '\n');
         } catch (IOException e) {
-            throw new LuaException(e.getMessage());
+            throw new ScriptException(e.getMessage());
         }
     }
 
@@ -305,15 +305,15 @@ public abstract class AbstractHandle {
     /**
      * Save the current file without closing it.
      *
-     * @throws LuaException If the file has been closed.
+     * @throws ScriptException If the file has been closed.
      */
-    public void flush() throws LuaException {
+    public void flush() throws ScriptException {
         checkOpen();
         try {
             // Technically this is not needed
             if (channel instanceof FileChannel channel) channel.force(false);
         } catch (IOException e) {
-            throw new LuaException(e.getMessage());
+            throw new ScriptException(e.getMessage());
         }
     }
 }

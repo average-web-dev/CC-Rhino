@@ -5,10 +5,10 @@
 package dan200.computercraft.core.apis;
 
 import dan200.computercraft.api.filesystem.MountConstants;
-import dan200.computercraft.api.lua.IArguments;
-import dan200.computercraft.api.lua.ILuaAPI;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.IArguments;
+import dan200.computercraft.api.scripting.IComputerAPI;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.apis.handles.ReadHandle;
 import dan200.computercraft.core.apis.handles.ReadWriteHandle;
 import dan200.computercraft.core.apis.handles.WriteHandle;
@@ -54,7 +54,7 @@ import java.util.*;
  *
  * @cc.module fs
  */
-public class FSAPI implements ILuaAPI {
+public class FSAPI implements IComputerAPI {
     private static final Set<OpenOption> READ_EXTENDED = Set.of(StandardOpenOption.READ, StandardOpenOption.WRITE);
     private static final Set<OpenOption> WRITE_EXTENDED = union(Set.of(StandardOpenOption.READ), MountConstants.WRITE_OPTIONS);
 
@@ -91,7 +91,7 @@ public class FSAPI implements ILuaAPI {
      *
      * @param path The path to list.
      * @return A table with a list of files in the directory.
-     * @throws LuaException If the path doesn't exist.
+     * @throws ScriptException If the path doesn't exist.
      * @cc.usage List all files under {@code /rom/}
      * <pre>{@code
      * local files = fs.list("/rom/")
@@ -100,12 +100,12 @@ public class FSAPI implements ILuaAPI {
      * end
      * }</pre>
      */
-    @LuaFunction
-    public final List<String> list(String path) throws LuaException {
+    @ScriptFunction
+    public final List<String> list(String path) throws ScriptException {
         try (var ignored = environment.time(Metrics.FS_OPS)) {
             return getFileSystem().list(path);
         } catch (FileSystemException e) {
-            throw new LuaException(e.getMessage());
+            throw new ScriptException(e.getMessage());
         }
     }
 
@@ -115,7 +115,7 @@ public class FSAPI implements ILuaAPI {
      *
      * @param arguments The paths to combine.
      * @return The new path, with separators added between parts as needed.
-     * @throws LuaException On argument errors.
+     * @throws ScriptException On argument errors.
      * @cc.tparam string path The first part of the path. For example, a parent directory path.
      * @cc.tparam string ... Additional parts of the path to combine.
      * @cc.changed 1.95.0 Now supports multiple arguments.
@@ -125,8 +125,8 @@ public class FSAPI implements ILuaAPI {
      * -- => rom/apis/parallel.lua
      * }</pre>
      */
-    @LuaFunction
-    public final String combine(IArguments arguments) throws LuaException {
+    @ScriptFunction
+    public final String combine(IArguments arguments) throws ScriptException {
         var result = new StringBuilder();
         result.append(FileSystem.sanitizePath(arguments.getString(0), true));
 
@@ -151,7 +151,7 @@ public class FSAPI implements ILuaAPI {
      * -- => startup.lua
      * }</pre>
      */
-    @LuaFunction
+    @ScriptFunction
     public final String getName(String path) {
         return FileSystem.getName(path);
     }
@@ -168,7 +168,7 @@ public class FSAPI implements ILuaAPI {
      * -- => rom
      * }</pre>
      */
-    @LuaFunction
+    @ScriptFunction
     public final String getDir(String path) {
         return FileSystem.getDirectory(path);
     }
@@ -178,15 +178,15 @@ public class FSAPI implements ILuaAPI {
      *
      * @param path The file to get the file size of.
      * @return The size of the file, in bytes.
-     * @throws LuaException If the path doesn't exist.
+     * @throws ScriptException If the path doesn't exist.
      * @cc.since 1.3
      */
-    @LuaFunction
-    public final long getSize(String path) throws LuaException {
+    @ScriptFunction
+    public final long getSize(String path) throws ScriptException {
         try (var ignored = environment.time(Metrics.FS_OPS)) {
             return getFileSystem().getSize(path);
         } catch (FileSystemException e) {
-            throw new LuaException(e.getMessage());
+            throw new ScriptException(e.getMessage());
         }
     }
 
@@ -196,7 +196,7 @@ public class FSAPI implements ILuaAPI {
      * @param path The path to check the existence of.
      * @return Whether the path exists.
      */
-    @LuaFunction
+    @ScriptFunction
     public final boolean exists(String path) {
         try (var ignored = environment.time(Metrics.FS_OPS)) {
             return getFileSystem().exists(path);
@@ -211,7 +211,7 @@ public class FSAPI implements ILuaAPI {
      * @param path The path to check.
      * @return Whether the path is a directory.
      */
-    @LuaFunction
+    @ScriptFunction
     public final boolean isDir(String path) {
         try (var ignored = environment.time(Metrics.FS_OPS)) {
             return getFileSystem().isDir(path);
@@ -226,7 +226,7 @@ public class FSAPI implements ILuaAPI {
      * @param path The path to check.
      * @return Whether the path cannot be written to.
      */
-    @LuaFunction
+    @ScriptFunction
     public final boolean isReadOnly(String path) {
         try (var ignored = environment.time(Metrics.FS_OPS)) {
             return getFileSystem().isReadOnly(path);
@@ -239,14 +239,14 @@ public class FSAPI implements ILuaAPI {
      * Creates a directory, and any missing parents, at the specified path.
      *
      * @param path The path to the directory to create.
-     * @throws LuaException If the directory couldn't be created.
+     * @throws ScriptException If the directory couldn't be created.
      */
-    @LuaFunction
-    public final void makeDir(String path) throws LuaException {
+    @ScriptFunction
+    public final void makeDir(String path) throws ScriptException {
         try (var ignored = environment.time(Metrics.FS_OPS)) {
             getFileSystem().makeDir(path);
         } catch (FileSystemException e) {
-            throw new LuaException(e.getMessage());
+            throw new ScriptException(e.getMessage());
         }
     }
 
@@ -257,14 +257,14 @@ public class FSAPI implements ILuaAPI {
      *
      * @param path The current file or directory to move from.
      * @param dest The destination path for the file or directory.
-     * @throws LuaException If the file or directory couldn't be moved.
+     * @throws ScriptException If the file or directory couldn't be moved.
      */
-    @LuaFunction
-    public final void move(String path, String dest) throws LuaException {
+    @ScriptFunction
+    public final void move(String path, String dest) throws ScriptException {
         try (var ignored = environment.time(Metrics.FS_OPS)) {
             getFileSystem().move(path, dest);
         } catch (FileSystemException e) {
-            throw new LuaException(e.getMessage());
+            throw new ScriptException(e.getMessage());
         }
     }
 
@@ -275,14 +275,14 @@ public class FSAPI implements ILuaAPI {
      *
      * @param path The file or directory to copy.
      * @param dest The path to the destination file or directory.
-     * @throws LuaException If the file or directory couldn't be copied.
+     * @throws ScriptException If the file or directory couldn't be copied.
      */
-    @LuaFunction
-    public final void copy(String path, String dest) throws LuaException {
+    @ScriptFunction
+    public final void copy(String path, String dest) throws ScriptException {
         try (var ignored = environment.time(Metrics.FS_OPS)) {
             getFileSystem().copy(path, dest);
         } catch (FileSystemException e) {
-            throw new LuaException(e.getMessage());
+            throw new ScriptException(e.getMessage());
         }
     }
 
@@ -293,14 +293,14 @@ public class FSAPI implements ILuaAPI {
      * subdirectories are also deleted.
      *
      * @param path The path to the file or directory to delete.
-     * @throws LuaException If the file or directory couldn't be deleted.
+     * @throws ScriptException If the file or directory couldn't be deleted.
      */
-    @LuaFunction
-    public final void delete(String path) throws LuaException {
+    @ScriptFunction
+    public final void delete(String path) throws ScriptException {
         try (var ignored = environment.time(Metrics.FS_OPS)) {
             getFileSystem().delete(path);
         } catch (FileSystemException e) {
-            throw new LuaException(e.getMessage());
+            throw new ScriptException(e.getMessage());
         }
     }
 
@@ -323,7 +323,7 @@ public class FSAPI implements ILuaAPI {
      * @param path The path to the file to open.
      * @param mode The mode to open the file with.
      * @return A file handle object for the file, or {@code nil} + an error message on error.
-     * @throws LuaException If an invalid mode was specified.
+     * @throws ScriptException If an invalid mode was specified.
      * @cc.treturn [1] table A file handle object for the file.
      * @cc.treturn [2] nil If the file does not exist, or cannot be opened.
      * @cc.treturn string|nil A message explaining why the file cannot be opened.
@@ -362,9 +362,9 @@ public class FSAPI implements ILuaAPI {
      * @cc.changed 1.109.0 Opening a file in non-binary mode now uses the raw bytes of the file rather than encoding to
      * UTF-8.
      */
-    @LuaFunction
-    public final Object[] open(String path, String mode) throws LuaException {
-        if (mode.isEmpty()) throw new LuaException(MountConstants.UNSUPPORTED_MODE);
+    @ScriptFunction
+    public final Object[] open(String path, String mode) throws ScriptException {
+        if (mode.isEmpty()) throw new ScriptException(MountConstants.UNSUPPORTED_MODE);
 
         var binary = mode.indexOf('b') >= 0;
         try (var ignored = environment.time(Metrics.FS_OPS)) {
@@ -389,7 +389,7 @@ public class FSAPI implements ILuaAPI {
                     var writer = getFileSystem().openForWrite(path, WRITE_EXTENDED);
                     return new Object[]{ new ReadWriteHandle(writer.get(), writer, binary) };
                 }
-                default -> throw new LuaException(MountConstants.UNSUPPORTED_MODE);
+                default -> throw new ScriptException(MountConstants.UNSUPPORTED_MODE);
             }
         } catch (FileSystemException e) {
             return new Object[]{ null, e.getMessage() };
@@ -401,7 +401,7 @@ public class FSAPI implements ILuaAPI {
      *
      * @param path The path to get the drive of.
      * @return The name of the drive that the file is on; e.g. {@code hdd} for local files, or {@code rom} for ROM files.
-     * @throws LuaException If the path doesn't exist.
+     * @throws ScriptException If the path doesn't exist.
      * @cc.treturn string|nil The name of the drive that the file is on; e.g. {@code hdd} for local files, or {@code rom} for ROM files.
      * @cc.usage Print the drives of a couple of mounts:
      *
@@ -410,12 +410,12 @@ public class FSAPI implements ILuaAPI {
      * print("/rom/: " .. fs.getDrive("rom"))
      * }</pre>
      */
-    @LuaFunction
-    public final Object @Nullable [] getDrive(String path) throws LuaException {
+    @ScriptFunction
+    public final Object @Nullable [] getDrive(String path) throws ScriptException {
         try {
             return getFileSystem().exists(path) ? new Object[]{ getFileSystem().getMountLabel(path) } : null;
         } catch (FileSystemException e) {
-            throw new LuaException(e.getMessage());
+            throw new ScriptException(e.getMessage());
         }
     }
 
@@ -425,18 +425,18 @@ public class FSAPI implements ILuaAPI {
      *
      * @param path The path to check the free space for.
      * @return The amount of free space available, in bytes.
-     * @throws LuaException If the path doesn't exist.
+     * @throws ScriptException If the path doesn't exist.
      * @cc.treturn number|"unlimited" The amount of free space available, in bytes, or "unlimited".
      * @cc.since 1.4
      * @see #getCapacity To get the capacity of this drive.
      */
-    @LuaFunction
-    public final Object getFreeSpace(String path) throws LuaException {
+    @ScriptFunction
+    public final Object getFreeSpace(String path) throws ScriptException {
         try {
             var freeSpace = getFileSystem().getFreeSpace(path);
             return freeSpace >= 0 ? freeSpace : "unlimited";
         } catch (FileSystemException e) {
-            throw new LuaException(e.getMessage());
+            throw new ScriptException(e.getMessage());
         }
     }
 
@@ -445,20 +445,20 @@ public class FSAPI implements ILuaAPI {
      *
      * @param path The path of the drive to get.
      * @return The drive's capacity.
-     * @throws LuaException If the capacity cannot be determined.
+     * @throws ScriptException If the capacity cannot be determined.
      * @cc.treturn number|nil This drive's capacity. This will be nil for "read-only" drives, such as the ROM or
      * treasure disks.
      * @cc.since 1.87.0
      * @see #getFreeSpace To get the free space available on this drive.
      */
     @Nullable
-    @LuaFunction
-    public final Object getCapacity(String path) throws LuaException {
+    @ScriptFunction
+    public final Object getCapacity(String path) throws ScriptException {
         try {
             var capacity = getFileSystem().getCapacity(path);
             return capacity.isPresent() ? capacity.getAsLong() : null;
         } catch (FileSystemException e) {
-            throw new LuaException(e.getMessage());
+            throw new ScriptException(e.getMessage());
         }
     }
 
@@ -473,7 +473,7 @@ public class FSAPI implements ILuaAPI {
      *
      * @param path The path to get attributes for.
      * @return The resulting attributes.
-     * @throws LuaException If the path does not exist.
+     * @throws ScriptException If the path does not exist.
      * @cc.treturn { size = number, isDir = boolean, isReadOnly = boolean, created = number, modified = number } The resulting attributes.
      * @cc.since 1.87.0
      * @cc.changed 1.91.0 Renamed `modification` field to `modified`.
@@ -481,8 +481,8 @@ public class FSAPI implements ILuaAPI {
      * @see #getSize If you only care about the file's size.
      * @see #isDir If you only care whether a path is a directory or not.
      */
-    @LuaFunction
-    public final Map<String, Object> attributes(String path) throws LuaException {
+    @ScriptFunction
+    public final Map<String, Object> attributes(String path) throws ScriptException {
         try (var ignored = environment.time(Metrics.FS_OPS)) {
             var attributes = getFileSystem().getAttributes(path);
             Map<String, Object> result = new HashMap<>();
@@ -494,7 +494,7 @@ public class FSAPI implements ILuaAPI {
             result.put("isReadOnly", getFileSystem().isReadOnly(path));
             return result;
         } catch (FileSystemException e) {
-            throw new LuaException(e.getMessage());
+            throw new ScriptException(e.getMessage());
         }
     }
 

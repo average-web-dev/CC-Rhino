@@ -5,7 +5,7 @@
 package dan200.computercraft.core.apis.http.websocket;
 
 import com.google.common.base.Strings;
-import dan200.computercraft.api.lua.LuaException;
+import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.core.Logging;
 import dan200.computercraft.core.apis.IAPIEnvironment;
 import dan200.computercraft.core.apis.http.*;
@@ -179,24 +179,24 @@ public class Websocket extends Resource<Websocket> implements WebsocketClient {
     }
 
     @Override
-    public void sendText(String message) throws LuaException {
+    public void sendText(String message) throws ScriptException {
         sendMessage(new TextWebSocketFrame(message), message.length());
     }
 
     @Override
-    public void sendBinary(ByteBuffer message) throws LuaException {
+    public void sendBinary(ByteBuffer message) throws ScriptException {
         long size = message.remaining();
         sendMessage(new BinaryWebSocketFrame(Unpooled.wrappedBuffer(message)), size);
     }
 
-    private void sendMessage(WebSocketFrame frame, long size) throws LuaException {
+    private void sendMessage(WebSocketFrame frame, long size) throws ScriptException {
         var channel = channel();
         if (channel == null) return;
 
         // Grow the number of in-flight requests, aborting if we've hit the limit. This is then decremented when the
         // promise finishes.
         if (!AtomicHelpers.incrementToLimit(inFlight, ResourceQueue.DEFAULT_LIMIT)) {
-            throw new LuaException("Too many ongoing websocket messages");
+            throw new ScriptException("Too many ongoing websocket messages");
         }
 
         environment.observe(Metrics.WEBSOCKET_OUTGOING, size);

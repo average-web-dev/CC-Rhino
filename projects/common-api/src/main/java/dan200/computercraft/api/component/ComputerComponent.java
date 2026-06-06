@@ -4,8 +4,8 @@
 
 package dan200.computercraft.api.component;
 
-import dan200.computercraft.api.lua.IComputerSystem;
-import dan200.computercraft.api.lua.ILuaAPIFactory;
+import dan200.computercraft.api.scripting.IComputerSystem;
+import dan200.computercraft.api.scripting.IComputerAPIFactory;
 
 /**
  * A component attached to a computer.
@@ -13,7 +13,7 @@ import dan200.computercraft.api.lua.ILuaAPIFactory;
  * Components provide a mechanism to attach additional data to a computer, that can then be queried with
  * {@link IComputerSystem#getComponent(ComputerComponent)}.
  * <p>
- * This is largely designed for {@linkplain ILuaAPIFactory custom APIs}, allowing APIs to read additional properties
+ * This is largely designed for {@linkplain IComputerAPIFactory custom APIs}, allowing APIs to read additional properties
  * of the computer, such as its position.
  *
  * @param <T> The type of this component.

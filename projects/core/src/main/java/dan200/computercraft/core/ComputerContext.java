@@ -6,17 +6,17 @@ package dan200.computercraft.core;
 
 import com.google.errorprone.annotations.CheckReturnValue;
 import dan200.computercraft.core.asm.GenericMethod;
-import dan200.computercraft.core.asm.LuaMethodSupplier;
+import dan200.computercraft.core.asm.ApiMethodSupplier;
 import dan200.computercraft.core.asm.PeripheralMethodSupplier;
 import dan200.computercraft.core.computer.GlobalEnvironment;
 import dan200.computercraft.core.computer.computerthread.ComputerScheduler;
 import dan200.computercraft.core.computer.computerthread.ComputerThread;
 import dan200.computercraft.core.computer.mainthread.MainThreadScheduler;
 import dan200.computercraft.core.computer.mainthread.NoWorkMainThreadScheduler;
-import dan200.computercraft.core.lua.JSMachine;
-import dan200.computercraft.core.lua.ILuaMachine;
-import dan200.computercraft.core.lua.MachineEnvironment;
-import dan200.computercraft.core.methods.LuaMethod;
+import dan200.computercraft.core.engine.JSMachine;
+import dan200.computercraft.core.engine.IMachine;
+import dan200.computercraft.core.engine.MachineEnvironment;
+import dan200.computercraft.core.methods.ApiMethod;
 import dan200.computercraft.core.methods.MethodSupplier;
 import dan200.computercraft.core.methods.PeripheralMethod;
 import org.jspecify.annotations.Nullable;
@@ -33,14 +33,14 @@ public final class ComputerContext {
     private final GlobalEnvironment globalEnvironment;
     private final ComputerScheduler computerScheduler;
     private final MainThreadScheduler mainThreadScheduler;
-    private final ILuaMachine.Factory luaFactory;
-    private final MethodSupplier<LuaMethod> luaMethods;
+    private final IMachine.Factory luaFactory;
+    private final MethodSupplier<ApiMethod> luaMethods;
     private final MethodSupplier<PeripheralMethod> peripheralMethods;
 
     private ComputerContext(
         GlobalEnvironment globalEnvironment, ComputerScheduler computerScheduler,
-        MainThreadScheduler mainThreadScheduler, ILuaMachine.Factory luaFactory,
-        MethodSupplier<LuaMethod> luaMethods,
+        MainThreadScheduler mainThreadScheduler, IMachine.Factory luaFactory,
+        MethodSupplier<ApiMethod> luaMethods,
         MethodSupplier<PeripheralMethod> peripheralMethods
     ) {
         this.globalEnvironment = globalEnvironment;
@@ -84,17 +84,17 @@ public final class ComputerContext {
      *
      * @return The current Lua machine factory.
      */
-    public ILuaMachine.Factory luaFactory() {
+    public IMachine.Factory luaFactory() {
         return luaFactory;
     }
 
     /**
      * Get the {@link MethodSupplier} used to find methods on Lua values.
      *
-     * @return The {@link LuaMethod} method supplier.
+     * @return The {@link ApiMethod} method supplier.
      * @see MachineEnvironment#luaMethods()
      */
-    public MethodSupplier<LuaMethod> luaMethods() {
+    public MethodSupplier<ApiMethod> luaMethods() {
         return luaMethods;
     }
 
@@ -153,7 +153,7 @@ public final class ComputerContext {
         private final GlobalEnvironment environment;
         private @Nullable ComputerScheduler computerScheduler = null;
         private @Nullable MainThreadScheduler mainThreadScheduler;
-        private ILuaMachine.@Nullable Factory luaFactory;
+        private IMachine.@Nullable Factory luaFactory;
         private @Nullable List<GenericMethod> genericMethods;
 
         Builder(GlobalEnvironment environment) {
@@ -201,13 +201,13 @@ public final class ComputerContext {
         }
 
         /**
-         * Set the {@link ILuaMachine.Factory} for this context.
+         * Set the {@link IMachine.Factory} for this context.
          *
          * @param factory The Lua machine factory.
          * @return {@code this}, for chaining
          * @see ComputerContext#luaFactory()
          */
-        public Builder luaFactory(ILuaMachine.Factory factory) {
+        public Builder luaFactory(IMachine.Factory factory) {
             Objects.requireNonNull(factory);
             if (luaFactory != null) throw new IllegalStateException("Main-thread scheduler already specified");
             luaFactory = factory;
@@ -240,7 +240,7 @@ public final class ComputerContext {
                 computerScheduler == null ? new ComputerThread(1) : computerScheduler,
                 mainThreadScheduler == null ? new NoWorkMainThreadScheduler() : mainThreadScheduler,
                 luaFactory == null ? JSMachine::new : luaFactory,
-                LuaMethodSupplier.create(genericMethods == null ? List.of() : genericMethods),
+                ApiMethodSupplier.create(genericMethods == null ? List.of() : genericMethods),
                 PeripheralMethodSupplier.create(genericMethods == null ? List.of() : genericMethods)
             );
         }

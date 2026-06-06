@@ -4,7 +4,7 @@
 
 package dan200.computercraft.shared.peripheral.generic;
 
-import dan200.computercraft.api.lua.GenericSource;
+import dan200.computercraft.api.scripting.GenericSource;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.core.methods.MethodSupplier;
 import dan200.computercraft.core.methods.PeripheralMethod;

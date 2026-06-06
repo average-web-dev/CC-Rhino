@@ -4,16 +4,16 @@
 
 package dan200.computercraft.core.computer;
 
-import dan200.computercraft.api.lua.ILuaAPI;
+import dan200.computercraft.api.scripting.IComputerAPI;
 import org.jspecify.annotations.Nullable;
 
 /**
- * A wrapper for {@link ILuaAPI}s which provides an optional shutdown hook to clean up resources.
+ * A wrapper for {@link IComputerAPI}s which provides an optional shutdown hook to clean up resources.
  *
  * @param api       The original API.
  * @param lifecycle The optional lifecycle hooks for this API.
  */
-record ApiWrapper(ILuaAPI api, @Nullable ApiLifecycle lifecycle) {
+record ApiWrapper(IComputerAPI api, @Nullable ApiLifecycle lifecycle) {
     public void startup() {
         if (lifecycle != null) lifecycle.startup();
         api.startup();

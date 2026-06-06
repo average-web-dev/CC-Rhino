@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit;
  * An implementation of {@link ComputerScheduler} which executes work as soon as possible via
  * {@link Callbacks#setImmediate(TimerHandler)}.
  * <p>
- * Timeouts are instead handled via polling, see {@link cc.tweaked.web.builder.PatchCobalt}.
+ * Timeouts are instead handled via polling on every instruction check.
  *
  * @see ComputerThread
  */

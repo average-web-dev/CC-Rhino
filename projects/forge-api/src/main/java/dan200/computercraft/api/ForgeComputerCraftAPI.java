@@ -4,7 +4,7 @@
 
 package dan200.computercraft.api;
 
-import dan200.computercraft.api.lua.GenericSource;
+import dan200.computercraft.api.scripting.GenericSource;
 import dan200.computercraft.impl.ComputerCraftAPIForgeService;
 import net.minecraft.core.Direction;
 import net.neoforged.neoforge.capabilities.BlockCapability;

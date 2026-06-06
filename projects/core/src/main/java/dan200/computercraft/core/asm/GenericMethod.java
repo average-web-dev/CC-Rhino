@@ -4,8 +4,8 @@
 
 package dan200.computercraft.core.asm;
 
-import dan200.computercraft.api.lua.GenericSource;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.GenericSource;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.peripheral.GenericPeripheral;
 import dan200.computercraft.api.peripheral.PeripheralType;
 import org.jspecify.annotations.Nullable;
@@ -25,11 +25,11 @@ public final class GenericMethod {
 
     final GenericSource source;
     final Method method;
-    final LuaFunction annotation;
+    final ScriptFunction annotation;
     final Class<?> target;
     final @Nullable PeripheralType peripheralType;
 
-    private GenericMethod(GenericSource source, Method method, LuaFunction annotation, Class<?> target, @Nullable PeripheralType peripheralType) {
+    private GenericMethod(GenericSource source, Method method, ScriptFunction annotation, Class<?> target, @Nullable PeripheralType peripheralType) {
         this.source = source;
         this.method = method;
         this.annotation = annotation;
@@ -46,7 +46,7 @@ public final class GenericMethod {
     }
 
     /**
-     * Find all public static methods annotated with {@link LuaFunction} which belong to a {@link GenericSource}.
+     * Find all public static methods annotated with {@link ScriptFunction} which belong to a {@link GenericSource}.
      *
      * @param source The given generic source.
      * @return All available generic methods.
@@ -57,7 +57,7 @@ public final class GenericMethod {
 
         return Arrays.stream(klass.getMethods())
             .map(method -> {
-                var annotation = method.getAnnotation(LuaFunction.class);
+                var annotation = method.getAnnotation(ScriptFunction.class);
                 if (annotation == null) return null;
 
                 var types = method.getGenericParameterTypes();

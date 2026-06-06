@@ -4,7 +4,7 @@
 
 package dan200.computercraft.core.util;
 
-import dan200.computercraft.api.lua.LuaException;
+import dan200.computercraft.api.scripting.ScriptException;
 
 /**
  * A few helpers for working with arguments.
@@ -13,15 +13,15 @@ import dan200.computercraft.api.lua.LuaException;
  * where it is used.
  */
 public class ArgumentHelpers {
-    public static void assertBetween(double value, double min, double max, String message) throws LuaException {
+    public static void assertBetween(double value, double min, double max, String message) throws ScriptException {
         if (value < min || value > max || Double.isNaN(value)) {
-            throw new LuaException(String.format(message, "between " + min + " and " + max));
+            throw new ScriptException(String.format(message, "between " + min + " and " + max));
         }
     }
 
-    public static void assertBetween(int value, int min, int max, String message) throws LuaException {
+    public static void assertBetween(int value, int min, int max, String message) throws ScriptException {
         if (value < min || value > max) {
-            throw new LuaException(String.format(message, "between " + min + " and " + max));
+            throw new ScriptException(String.format(message, "between " + min + " and " + max));
         }
     }
 }

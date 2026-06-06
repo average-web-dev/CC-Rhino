@@ -4,10 +4,10 @@
 
 package dan200.computercraft.core.apis;
 
-import dan200.computercraft.api.lua.IArguments;
-import dan200.computercraft.api.lua.ILuaAPI;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.IArguments;
+import dan200.computercraft.api.scripting.IComputerAPI;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.util.StringUtil;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
@@ -20,14 +20,14 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatterBuilder;
 import java.util.*;
 
-import static dan200.computercraft.api.lua.LuaValues.checkFinite;
+import static dan200.computercraft.api.scripting.ScriptValues.checkFinite;
 
 /**
  * The {@link OSAPI} API allows interacting with the current computer.
  *
  * @cc.module os
  */
-public class OSAPI implements ILuaAPI {
+public class OSAPI implements IComputerAPI {
     private final IAPIEnvironment apiEnvironment;
 
     private final Int2ObjectMap<Alarm> alarms = new Int2ObjectOpenHashMap<>();
@@ -136,8 +136,8 @@ public class OSAPI implements ILuaAPI {
      *               tables. Other types (like functions), as well as metatables, will not be preserved.
      * @cc.see os.pullEvent To pull the event queued
      */
-    @LuaFunction
-    public final void queueEvent(String name, IArguments args) throws LuaException {
+    @ScriptFunction
+    public final void queueEvent(String name, IArguments args) throws ScriptException {
         apiEnvironment.queueEvent(name, args.drop(1).getAll());
     }
 
@@ -153,11 +153,11 @@ public class OSAPI implements ILuaAPI {
      * @param time The number of seconds until the timer fires.
      * @return The ID of the new timer. This can be used to filter the [`timer`]
      * event, or {@linkplain #cancelTimer cancel the timer}.
-     * @throws LuaException If the time is below zero.
+     * @throws ScriptException If the time is below zero.
      * @see #cancelTimer To cancel a timer.
      */
-    @LuaFunction
-    public final int startTimer(double time) throws LuaException {
+    @ScriptFunction
+    public final int startTimer(double time) throws ScriptException {
         return apiEnvironment.startTimer(Math.round(checkFinite(0, time) / 0.05));
     }
 
@@ -169,7 +169,7 @@ public class OSAPI implements ILuaAPI {
      * @cc.since 1.6
      * @see #startTimer To start a timer.
      */
-    @LuaFunction
+    @ScriptFunction
     public final void cancelTimer(int token) {
         apiEnvironment.cancelTimer(token);
     }
@@ -182,14 +182,14 @@ public class OSAPI implements ILuaAPI {
      * @param time The time at which to fire the alarm, in the range [0.0, 24.0).
      * @return The ID of the new alarm. This can be used to filter the
      * {@code alarm} event, or {@link #cancelAlarm cancel the alarm}.
-     * @throws LuaException If the time is out of range.
+     * @throws ScriptException If the time is out of range.
      * @cc.since 1.2
      * @see #cancelAlarm To cancel an alarm.
      */
-    @LuaFunction
-    public final int setAlarm(double time) throws LuaException {
+    @ScriptFunction
+    public final int setAlarm(double time) throws ScriptException {
         checkFinite(0, time);
-        if (time < 0.0 || time >= 24.0) throw new LuaException("Number out of range");
+        if (time < 0.0 || time >= 24.0) throw new ScriptException("Number out of range");
         synchronized (alarms) {
             var day = time > this.time ? this.day : this.day + 1;
             alarms.put(nextAlarmToken, new Alarm(time, day));
@@ -205,7 +205,7 @@ public class OSAPI implements ILuaAPI {
      * @cc.since 1.6
      * @see #setAlarm To set an alarm.
      */
-    @LuaFunction
+    @ScriptFunction
     public final void cancelAlarm(int token) {
         synchronized (alarms) {
             alarms.remove(token);
@@ -215,7 +215,7 @@ public class OSAPI implements ILuaAPI {
     /**
      * Shuts down the computer immediately.
      */
-    @LuaFunction("shutdown")
+    @ScriptFunction("shutdown")
     public final void doShutdown() {
         apiEnvironment.shutdown();
     }
@@ -223,7 +223,7 @@ public class OSAPI implements ILuaAPI {
     /**
      * Reboots the computer immediately.
      */
-    @LuaFunction("reboot")
+    @ScriptFunction("reboot")
     public final void doReboot() {
         apiEnvironment.reboot();
     }
@@ -233,7 +233,7 @@ public class OSAPI implements ILuaAPI {
      *
      * @return The ID of the computer.
      */
-    @LuaFunction({ "getComputerID", "computerID" })
+    @ScriptFunction({ "getComputerID", "computerID" })
     public final int getComputerID() {
         return apiEnvironment.getComputerID();
     }
@@ -245,7 +245,7 @@ public class OSAPI implements ILuaAPI {
      * @cc.treturn string|nil The label of the computer.
      * @cc.since 1.3
      */
-    @LuaFunction({ "getComputerLabel", "computerLabel" })
+    @ScriptFunction({ "getComputerLabel", "computerLabel" })
     public final Object @Nullable [] getComputerLabel() {
         var label = apiEnvironment.getLabel();
         return label == null ? null : new Object[]{ label };
@@ -257,7 +257,7 @@ public class OSAPI implements ILuaAPI {
      * @param label The new label. May be {@code nil} in order to clear it.
      * @cc.since 1.3
      */
-    @LuaFunction
+    @ScriptFunction
     public final void setComputerLabel(Optional<String> label) {
         apiEnvironment.setLabel(label.map(StringUtil::normaliseLabel).orElse(null));
     }
@@ -268,7 +268,7 @@ public class OSAPI implements ILuaAPI {
      * @return The computer's uptime.
      * @cc.since 1.2
      */
-    @LuaFunction
+    @ScriptFunction
     public final double clock() {
         return clock * 0.05;
     }
@@ -289,7 +289,7 @@ public class OSAPI implements ILuaAPI {
      *
      * @param args The locale of the time, or a table filled by {@code os.date("*t")} to decode. Defaults to {@code ingame} locale if not specified.
      * @return The hour of the selected locale, or a UNIX timestamp from the table, depending on the argument passed in.
-     * @throws LuaException If an invalid locale is passed.
+     * @throws ScriptException If an invalid locale is passed.
      * @cc.tparam [opt] string|table locale The locale of the time, or a table filled by {@code os.date("*t")} to decode. Defaults to {@code ingame} locale if not specified.
      * @cc.see textutils.formatTime To convert times into a user-readable string.
      * @cc.usage Print the current in-game time.
@@ -302,17 +302,17 @@ public class OSAPI implements ILuaAPI {
      * @cc.changed 1.83.0 {@link #time(IArguments)} now accepts table arguments and converts them to UNIX timestamps.
      * @see #date To get a date table that can be converted with this function.
      */
-    @LuaFunction
-    public final Object time(IArguments args) throws LuaException {
+    @ScriptFunction
+    public final Object time(IArguments args) throws ScriptException {
         var value = args.get(0);
-        if (value instanceof Map) return LuaDateTime.fromTable((Map<?, ?>) value);
+        if (value instanceof Map) return DateTime.fromTable((Map<?, ?>) value);
 
         var param = args.optString(0, "ingame");
         return switch (param.toLowerCase(Locale.ROOT)) {
             case "utc" -> getTimeForCalendar(Calendar.getInstance(TimeZone.getTimeZone("UTC")));
             case "local" -> getTimeForCalendar(Calendar.getInstance());
             case "ingame" -> time;
-            default -> throw new LuaException("Unsupported operation");
+            default -> throw new ScriptException("Unsupported operation");
         };
     }
 
@@ -328,17 +328,17 @@ public class OSAPI implements ILuaAPI {
      *
      * @param locale The locale to get the day for. Defaults to {@code ingame} if not set.
      * @return The day depending on the selected locale.
-     * @throws LuaException If an invalid locale is passed.
+     * @throws ScriptException If an invalid locale is passed.
      * @cc.since 1.48
      * @cc.changed 1.82.0 Arguments are now case insensitive.
      */
-    @LuaFunction
-    public final int day(Optional<String> locale) throws LuaException {
+    @ScriptFunction
+    public final int day(Optional<String> locale) throws ScriptException {
         return switch (locale.orElse("ingame").toLowerCase(Locale.ROOT)) {
             case "utc" -> getDayForCalendar(Calendar.getInstance(TimeZone.getTimeZone("UTC")));
             case "local" -> getDayForCalendar(Calendar.getInstance());
             case "ingame" -> day;
-            default -> throw new LuaException("Unsupported operation");
+            default -> throw new ScriptException("Unsupported operation");
         };
     }
 
@@ -361,7 +361,7 @@ public class OSAPI implements ILuaAPI {
      *
      * @param locale The locale to get the milliseconds for. Defaults to {@code ingame} if not set.
      * @return The milliseconds since the epoch depending on the selected locale.
-     * @throws LuaException If an invalid locale is passed.
+     * @throws ScriptException If an invalid locale is passed.
      * @cc.since 1.80pr1
      * @cc.usage Get the current time and use {@link #date} to convert it to a table.
      * <pre>{@code
@@ -371,13 +371,13 @@ public class OSAPI implements ILuaAPI {
      * print(textutils.serialize(time_table))
      * }</pre>
      */
-    @LuaFunction
-    public final long epoch(Optional<String> locale) throws LuaException {
+    @ScriptFunction
+    public final long epoch(Optional<String> locale) throws ScriptException {
         return switch (locale.orElse("ingame").toLowerCase(Locale.ROOT)) {
             case "utc" -> getEpochForCalendar(Calendar.getInstance(TimeZone.getTimeZone("UTC"))); // Get utc epoch
             case "local" -> getEpochForCalendar(Calendar.getInstance());  // Get local epoch
             case "ingame" -> day * 86400000L + (long) (time * 3600000.0); // Get in-game epoch
-            default -> throw new LuaException("Unsupported operation");
+            default -> throw new ScriptException("Unsupported operation");
         };
     }
 
@@ -398,7 +398,7 @@ public class OSAPI implements ILuaAPI {
      * @param formatA The format of the string to return. This defaults to {@code %c}, which expands to a string similar to "Sat Dec 24 16:58:00 2011".
      * @param timeA   The timestamp to convert to a string. This defaults to the current time.
      * @return The resulting formated string, or table.
-     * @throws LuaException If an invalid format is passed.
+     * @throws ScriptException If an invalid format is passed.
      * @cc.since 1.83.0
      * @cc.usage Print the current date in a user-friendly string.
      * <pre>{@code
@@ -423,8 +423,8 @@ public class OSAPI implements ILuaAPI {
      * } ]=]
      * }</pre>
      */
-    @LuaFunction
-    public final Object date(Optional<String> formatA, Optional<Long> timeA) throws LuaException {
+    @ScriptFunction
+    public final Object date(Optional<String> formatA, Optional<Long> timeA) throws ScriptException {
         var format = formatA.orElse("%c");
         long time = timeA.orElseGet(() -> Instant.now().getEpochSecond());
 
@@ -441,10 +441,10 @@ public class OSAPI implements ILuaAPI {
             date = ZonedDateTime.ofInstant(instant, id);
         }
 
-        if (format.equals("*t")) return LuaDateTime.toTable(date, offset, instant);
+        if (format.equals("*t")) return DateTime.toTable(date, offset, instant);
 
         var formatter = new DateTimeFormatterBuilder();
-        LuaDateTime.format(formatter, format);
+        DateTime.format(formatter, format);
         // ROOT would be more sensible, but US appears more consistent with the default C locale
         // on Linux.
         return formatter.toFormatter(Locale.US).format(date);

@@ -4,7 +4,7 @@
 
 package dan200.computercraft.core.apis.handles;
 
-import dan200.computercraft.api.lua.LuaException;
+import dan200.computercraft.api.scripting.ScriptException;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
@@ -17,43 +17,43 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class BinaryReadableHandleTest {
     @Test
-    public void testReadChar() throws LuaException {
+    public void testReadChar() throws ScriptException {
         var handle = fromLength(5);
         assertEquals('A', cast(Integer.class, handle.read(Optional.empty())));
     }
 
     @Test
-    public void testReadShortComplete() throws LuaException {
+    public void testReadShortComplete() throws ScriptException {
         var handle = fromLength(10);
         assertEquals(5, cast(ByteBuffer.class, handle.read(Optional.of(5))).remaining());
     }
 
     @Test
-    public void testReadShortPartial() throws LuaException {
+    public void testReadShortPartial() throws ScriptException {
         var handle = fromLength(5);
         assertEquals(5, cast(ByteBuffer.class, handle.read(Optional.of(10))).remaining());
     }
 
     @Test
-    public void testReadLongComplete() throws LuaException {
+    public void testReadLongComplete() throws ScriptException {
         var handle = fromLength(10000);
         assertEquals(9000, cast(byte[].class, handle.read(Optional.of(9000))).length);
     }
 
     @Test
-    public void testReadLongPartial() throws LuaException {
+    public void testReadLongPartial() throws ScriptException {
         var handle = fromLength(10000);
         assertEquals(10000, cast(byte[].class, handle.read(Optional.of(11000))).length);
     }
 
     @Test
-    public void testReadLongPartialSmaller() throws LuaException {
+    public void testReadLongPartialSmaller() throws ScriptException {
         var handle = fromLength(1000);
         assertEquals(1000, cast(ByteBuffer.class, handle.read(Optional.of(11000))).remaining());
     }
 
     @Test
-    public void testReadLine() throws LuaException {
+    public void testReadLine() throws ScriptException {
         var handle = new ReadHandle(new ArrayByteChannel("hello\r\nworld\r!".getBytes(StandardCharsets.UTF_8)), false);
         assertArrayEquals("hello".getBytes(StandardCharsets.UTF_8), cast(byte[].class, handle.readLine(Optional.empty())));
         assertArrayEquals("world\r!".getBytes(StandardCharsets.UTF_8), cast(byte[].class, handle.readLine(Optional.empty())));
@@ -61,7 +61,7 @@ public class BinaryReadableHandleTest {
     }
 
     @Test
-    public void testReadLineTrailing() throws LuaException {
+    public void testReadLineTrailing() throws ScriptException {
         var handle = new ReadHandle(new ArrayByteChannel("hello\r\nworld\r!".getBytes(StandardCharsets.UTF_8)), false);
         assertArrayEquals("hello\r\n".getBytes(StandardCharsets.UTF_8), cast(byte[].class, handle.readLine(Optional.of(true))));
         assertArrayEquals("world\r!".getBytes(StandardCharsets.UTF_8), cast(byte[].class, handle.readLine(Optional.of(true))));

@@ -4,7 +4,7 @@
 
 package dan200.computercraft.core.util;
 
-import dan200.computercraft.api.lua.LuaValues;
+import dan200.computercraft.api.scripting.ScriptValues;
 import dan200.computercraft.test.core.ReplaceUnderscoresDisplayNameGenerator;
 import org.junit.jupiter.api.DisplayNameGeneration;
 import org.junit.jupiter.api.Test;
@@ -19,7 +19,7 @@ class StringUtilTest {
     @ValueSource(strings = { "hello\nworld", "hello\n\rworld", "hello\rworld" })
     public void getClipboardString_returns_a_single_line(String input) {
         var result = StringUtil.getClipboardString(input);
-        assertEquals(LuaValues.encode("hello"), result);
+        assertEquals(ScriptValues.encode("hello"), result);
     }
 
     @Test
@@ -29,7 +29,7 @@ class StringUtilTest {
         assertEquals(StringUtil.MAX_PASTE_LENGTH, result.limit());
 
         assertEquals(
-            LuaValues.encode(input.substring(0, StringUtil.MAX_PASTE_LENGTH)),
+            ScriptValues.encode(input.substring(0, StringUtil.MAX_PASTE_LENGTH)),
             result
         );
     }

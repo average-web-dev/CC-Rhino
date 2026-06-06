@@ -4,7 +4,7 @@
 
 package dan200.computercraft.gametest
 
-import dan200.computercraft.api.lua.Coerced
+import dan200.computercraft.api.scripting.Coerced
 import dan200.computercraft.client.gui.AbstractComputerScreen
 import dan200.computercraft.core.apis.RedstoneAPI
 import dan200.computercraft.core.apis.TermAPI

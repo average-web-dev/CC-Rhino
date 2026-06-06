@@ -6,7 +6,7 @@ package dan200.computercraft.shared.peripheral.modem.wired;
 
 import dan200.computercraft.api.filesystem.Mount;
 import dan200.computercraft.api.filesystem.WritableMount;
-import dan200.computercraft.api.lua.*;
+import dan200.computercraft.api.scripting.*;
 import dan200.computercraft.api.network.PacketNetwork;
 import dan200.computercraft.api.network.wired.WiredNode;
 import dan200.computercraft.api.network.wired.WiredSender;
@@ -15,9 +15,9 @@ import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.api.peripheral.NotAttachedException;
 import dan200.computercraft.api.peripheral.WorkMonitor;
 import dan200.computercraft.core.apis.PeripheralAPI;
-import dan200.computercraft.core.computer.GuardedLuaContext;
+import dan200.computercraft.core.computer.GuardedContext;
 import dan200.computercraft.core.methods.PeripheralMethod;
-import dan200.computercraft.core.util.LuaUtil;
+import dan200.computercraft.core.util.ScriptUtil;
 import dan200.computercraft.shared.computer.core.ServerContext;
 import dan200.computercraft.shared.peripheral.modem.ModemPeripheral;
 import dan200.computercraft.shared.peripheral.modem.ModemState;
@@ -94,7 +94,7 @@ public abstract class WiredModemPeripheral extends ModemPeripheral implements Wi
      * @param computer The calling computer.
      * @return Remote peripheral names on the network.
      */
-    @LuaFunction
+    @ScriptFunction
     public final Collection<String> getNamesRemote(IComputerAccess computer) {
         var wrappers = getWrappers(computer);
         return wrappers == null ? Set.of() : wrappers.keySet();
@@ -111,7 +111,7 @@ public abstract class WiredModemPeripheral extends ModemPeripheral implements Wi
      * @return boolean If a peripheral is present with the given name.
      * @see PeripheralAPI#isPresent
      */
-    @LuaFunction
+    @ScriptFunction
     public final boolean isPresentRemote(IComputerAccess computer, String name) {
         return getWrapper(computer, name) != null;
     }
@@ -129,10 +129,10 @@ public abstract class WiredModemPeripheral extends ModemPeripheral implements Wi
      * @cc.changed 1.99 Peripherals can have multiple types - this function returns multiple values.
      * @see PeripheralAPI#getType
      */
-    @LuaFunction
+    @ScriptFunction
     public final Object @Nullable [] getTypeRemote(IComputerAccess computer, String name) {
         var wrapper = getWrapper(computer, name);
-        return wrapper == null ? null : LuaUtil.consArray(wrapper.getType(), wrapper.getAdditionalTypes());
+        return wrapper == null ? null : ScriptUtil.consArray(wrapper.getType(), wrapper.getAdditionalTypes());
     }
 
     /**
@@ -149,7 +149,7 @@ public abstract class WiredModemPeripheral extends ModemPeripheral implements Wi
      * @cc.since 1.99
      * @see PeripheralAPI#getType
      */
-    @LuaFunction
+    @ScriptFunction
     public final Object @Nullable [] hasTypeRemote(IComputerAccess computer, String name, String type) {
         var wrapper = getWrapper(computer, name);
         return wrapper == null ? null : new Object[]{ wrapper.getType().equals(type) || wrapper.getAdditionalTypes().contains(type) };
@@ -167,7 +167,7 @@ public abstract class WiredModemPeripheral extends ModemPeripheral implements Wi
      * @cc.treturn { string... }|nil A list of methods provided by this peripheral, or {@code nil} if it is not present.
      * @see PeripheralAPI#getMethods
      */
-    @LuaFunction
+    @ScriptFunction
     public final Object @Nullable [] getMethodsRemote(IComputerAccess computer, String name) {
         var wrapper = getWrapper(computer, name);
         if (wrapper == null) return null;
@@ -185,19 +185,19 @@ public abstract class WiredModemPeripheral extends ModemPeripheral implements Wi
      * @param context   The Lua context we're executing in.
      * @param arguments Arguments to this computer.
      * @return The peripheral's result.
-     * @throws LuaException (hidden) If the method throws an error.
+     * @throws ScriptException (hidden) If the method throws an error.
      * @cc.tparam string remoteName The name of the peripheral to invoke the method on.
      * @cc.tparam string method The name of the method
      * @cc.param ...      Additional arguments to pass to the method
      * @cc.treturn string The return values of the peripheral method.
      * @see PeripheralAPI#call
      */
-    @LuaFunction
-    public final MethodResult callRemote(IComputerAccess computer, ILuaContext context, IArguments arguments) throws LuaException {
+    @ScriptFunction
+    public final MethodResult callRemote(IComputerAccess computer, IContext context, IArguments arguments) throws ScriptException {
         var remoteName = arguments.getString(0);
         var methodName = arguments.getString(1);
         var wrapper = getWrapper(computer, remoteName);
-        if (wrapper == null) throw new LuaException("No peripheral: " + remoteName);
+        if (wrapper == null) throw new ScriptException("No peripheral: " + remoteName);
 
         return wrapper.callMethod(context, methodName, arguments.drop(2));
     }
@@ -214,7 +214,7 @@ public abstract class WiredModemPeripheral extends ModemPeripheral implements Wi
      * @cc.treturn string|nil The current computer's name on the wired network.
      * @cc.since 1.80pr1.7
      */
-    @LuaFunction
+    @ScriptFunction
     public final Object @Nullable [] getNameLocal() {
         var local = localPeripheral.getConnectedName();
         return local == null ? null : new Object[]{ local };
@@ -305,7 +305,7 @@ public abstract class WiredModemPeripheral extends ModemPeripheral implements Wi
         return wrappers == null ? null : wrappers.get(remoteName);
     }
 
-    private static final class RemotePeripheralWrapper implements IComputerAccess, GuardedLuaContext.Guard {
+    private static final class RemotePeripheralWrapper implements IComputerAccess, GuardedContext.Guard {
         private final WiredModemElement element;
         private final IPeripheral peripheral;
         private final IComputerAccess computer;
@@ -318,7 +318,7 @@ public abstract class WiredModemPeripheral extends ModemPeripheral implements Wi
         private volatile boolean attached;
         private final Set<String> mounts = new HashSet<>();
 
-        private @Nullable GuardedLuaContext contextWrapper;
+        private @Nullable GuardedContext contextWrapper;
 
         RemotePeripheralWrapper(WiredModemElement element, IPeripheral peripheral, IComputerAccess computer, String name, Map<String, PeripheralMethod> methods) {
             this.element = element;
@@ -364,14 +364,14 @@ public abstract class WiredModemPeripheral extends ModemPeripheral implements Wi
             return methodMap.keySet();
         }
 
-        private MethodResult callMethod(ILuaContext context, String methodName, IArguments arguments) throws LuaException {
+        private MethodResult callMethod(IContext context, String methodName, IArguments arguments) throws ScriptException {
             var method = methodMap.get(methodName);
-            if (method == null) throw new LuaException("No such method " + methodName);
+            if (method == null) throw new ScriptException("No such method " + methodName);
 
-            // Wrap the ILuaContext. We try to reuse the previous context where possible to avoid allocations.
+            // Wrap the IContext. We try to reuse the previous context where possible to avoid allocations.
             var contextWrapper = this.contextWrapper;
             if (contextWrapper == null || !contextWrapper.wraps(context)) {
-                contextWrapper = this.contextWrapper = new GuardedLuaContext(context, this);
+                contextWrapper = this.contextWrapper = new GuardedContext(context, this);
             }
 
             return method.apply(peripheral, contextWrapper, this, arguments);

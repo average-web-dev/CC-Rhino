@@ -4,10 +4,10 @@
 
 package dan200.computercraft.core.apis;
 
-import dan200.computercraft.api.lua.IArguments;
-import dan200.computercraft.api.lua.ILuaAPI;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.IArguments;
+import dan200.computercraft.api.scripting.IComputerAPI;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.terminal.Terminal;
 import dan200.computercraft.core.util.Colour;
 
@@ -64,7 +64,7 @@ import dan200.computercraft.core.util.Colour;
  *
  * @cc.module term
  */
-public class TermAPI extends TermMethods implements ILuaAPI {
+public class TermAPI extends TermMethods implements IComputerAPI {
     private final Terminal terminal;
 
     public TermAPI(IAPIEnvironment environment) {
@@ -81,12 +81,12 @@ public class TermAPI extends TermMethods implements ILuaAPI {
      *
      * @param colour The colour whose palette should be fetched.
      * @return The RGB values, as an object with {@code r}, {@code g} and {@code b} fields (each between 0 and 1).
-     * @throws LuaException When given an invalid colour.
+     * @throws ScriptException When given an invalid colour.
      * @cc.since 1.81.0
      * @see TermMethods#setPaletteColour(IArguments) To change the palette colour.
      */
-    @LuaFunction({ "nativePaletteColour", "nativePaletteColor" })
-    public final RGB nativePaletteColour(int colour) throws LuaException {
+    @ScriptFunction({ "nativePaletteColour", "nativePaletteColor" })
+    public final RGB nativePaletteColour(int colour) throws ScriptException {
         var actualColour = 15 - parseColour(colour);
         var c = Colour.fromInt(actualColour);
         return new RGB(c.getR(), c.getG(), c.getB());

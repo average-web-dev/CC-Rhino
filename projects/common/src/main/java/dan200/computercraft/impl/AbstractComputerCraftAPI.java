@@ -10,8 +10,8 @@ import dan200.computercraft.api.detail.BlockReference;
 import dan200.computercraft.api.detail.DetailRegistry;
 import dan200.computercraft.api.filesystem.Mount;
 import dan200.computercraft.api.filesystem.WritableMount;
-import dan200.computercraft.api.lua.GenericSource;
-import dan200.computercraft.api.lua.ILuaAPIFactory;
+import dan200.computercraft.api.scripting.GenericSource;
+import dan200.computercraft.api.scripting.IComputerAPIFactory;
 import dan200.computercraft.api.media.PrintoutContents;
 import dan200.computercraft.api.network.PacketNetwork;
 import dan200.computercraft.api.network.wired.WiredElement;
@@ -104,7 +104,7 @@ public abstract class AbstractComputerCraftAPI implements ComputerCraftAPIServic
     }
 
     @Override
-    public final void registerAPIFactory(ILuaAPIFactory factory) {
+    public final void registerAPIFactory(IComputerAPIFactory factory) {
         ApiFactories.register(factory);
     }
 

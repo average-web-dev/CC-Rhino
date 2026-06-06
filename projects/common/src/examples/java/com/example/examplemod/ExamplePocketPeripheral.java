@@ -2,7 +2,7 @@ package com.example.examplemod;
 
 import dan200.computercraft.api.detail.DetailRegistry;
 import dan200.computercraft.api.detail.VanillaDetailRegistries;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.api.pocket.IPocketAccess;
 import net.minecraft.world.InteractionHand;
@@ -33,7 +33,7 @@ public class ExamplePocketPeripheral implements IPeripheral {
      * @return The item details, or {@code null} if the player is not holding an item.
      */
     // @start region=details
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public final @Nullable Map<String, ?> getHeldItem() {
         if (!(pocket.getEntity() instanceof LivingEntity entity)) return null;
 

@@ -4,14 +4,14 @@
 
 package dan200.computercraft.core.methods;
 
-import dan200.computercraft.api.lua.LuaFunction;
-import dan200.computercraft.api.lua.MethodResult;
+import dan200.computercraft.api.scripting.ScriptFunction;
+import dan200.computercraft.api.scripting.MethodResult;
 import dan200.computercraft.api.peripheral.GenericPeripheral;
 import dan200.computercraft.api.peripheral.PeripheralType;
 import org.jspecify.annotations.Nullable;
 
 /**
- * A method generated from a {@link LuaFunction}.
+ * A method generated from a {@link ScriptFunction}.
  *
  * @param name        The name of this method.
  * @param method      The underlying method implementation.
@@ -19,7 +19,7 @@ import org.jspecify.annotations.Nullable;
  *                    {@linkplain MethodResult#of(Object...) basic result}.
  * @param genericType The peripheral type of this method. This is only set if this is a method on a
  *                    {@link GenericPeripheral}.
- * @param <T>         The type of method, either a {@link LuaMethod} or {@link PeripheralMethod}.
+ * @param <T>         The type of method, either a {@link ApiMethod} or {@link PeripheralMethod}.
  */
 public record NamedMethod<T>(String name, T method, boolean nonYielding, @Nullable PeripheralType genericType) {
 }

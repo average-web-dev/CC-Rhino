@@ -4,9 +4,9 @@
 
 package dan200.computercraft.shared.peripheral.monitor;
 
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
-import dan200.computercraft.api.lua.LuaValues;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
+import dan200.computercraft.api.scripting.ScriptValues;
 import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.core.apis.TermMethods;
@@ -60,13 +60,13 @@ public class MonitorPeripheral extends TermMethods implements IPeripheral {
      * text much larger.
      *
      * @param scaleArg The monitor's scale. This must be a multiple of 0.5 between 0.5 and 5.
-     * @throws LuaException If the scale is out of range.
+     * @throws ScriptException If the scale is out of range.
      * @see #getTextScale()
      */
-    @LuaFunction
-    public final void setTextScale(double scaleArg) throws LuaException {
-        var scale = (int) (LuaValues.checkFinite(0, scaleArg) * 2.0);
-        if (scale < 1 || scale > 10) throw new LuaException("Expected number in range 0.5-5");
+    @ScriptFunction
+    public final void setTextScale(double scaleArg) throws ScriptException {
+        var scale = (int) (ScriptValues.checkFinite(0, scaleArg) * 2.0);
+        if (scale < 1 || scale > 10) throw new ScriptException("Expected number in range 0.5-5");
         getMonitor().setTextScale(scale);
     }
 
@@ -74,11 +74,11 @@ public class MonitorPeripheral extends TermMethods implements IPeripheral {
      * Get the monitor's current text scale.
      *
      * @return The monitor's current scale.
-     * @throws LuaException If the monitor cannot be found.
+     * @throws ScriptException If the monitor cannot be found.
      * @cc.since 1.81.0
      */
-    @LuaFunction
-    public final double getTextScale() throws LuaException {
+    @ScriptFunction
+    public final double getTextScale() throws ScriptException {
         return getMonitor().getTextScale() / 2.0;
     }
 
@@ -97,16 +97,16 @@ public class MonitorPeripheral extends TermMethods implements IPeripheral {
         return other instanceof MonitorPeripheral o && monitor == o.monitor;
     }
 
-    private ServerMonitor getMonitor() throws LuaException {
+    private ServerMonitor getMonitor() throws ScriptException {
         var monitor = this.monitor.getCachedServerMonitor();
-        if (monitor == null) throw new LuaException("Monitor has been detached");
+        if (monitor == null) throw new ScriptException("Monitor has been detached");
         return monitor;
     }
 
     @Override
-    public Terminal getTerminal() throws LuaException {
+    public Terminal getTerminal() throws ScriptException {
         Terminal terminal = getMonitor().getTerminal();
-        if (terminal == null) throw new LuaException("Monitor has been detached");
+        if (terminal == null) throw new ScriptException("Monitor has been detached");
         return terminal;
     }
 

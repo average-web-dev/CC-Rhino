@@ -8,7 +8,7 @@ import dan200.computercraft.api.ComputerCraftAPI
 import dan200.computercraft.api.ComputerCraftTags
 import dan200.computercraft.api.detail.ComponentDetailProvider
 import dan200.computercraft.api.detail.VanillaDetailRegistries
-import dan200.computercraft.api.lua.ObjectArguments
+import dan200.computercraft.api.scripting.ObjectArguments
 import dan200.computercraft.api.turtle.ITurtleUpgrade
 import dan200.computercraft.api.turtle.TurtleSide
 import dan200.computercraft.api.upgrades.UpgradeData
@@ -30,7 +30,7 @@ import dan200.computercraft.shared.turtle.core.TurtleCraftCommand
 import dan200.computercraft.shared.turtle.items.TurtleItem
 import dan200.computercraft.shared.util.WaterloggableHelpers
 import dan200.computercraft.test.core.assertArrayEquals
-import dan200.computercraft.test.core.computer.LuaTaskContext
+import dan200.computercraft.test.core.computer.ScriptTaskContext
 import dan200.computercraft.test.core.computer.getApi
 import dan200.computercraft.test.shared.ItemStackMatcher.isStack
 import net.minecraft.core.BlockPos
@@ -1072,9 +1072,9 @@ class Turtle_Test {
     }
 }
 
-private val LuaTaskContext.turtle get() = getApi<TurtleAPI>()
+private val ScriptTaskContext.turtle get() = getApi<TurtleAPI>()
 
-private suspend fun LuaTaskContext.getTurtleItemDetail(slot: Int = 1, detailed: Boolean = false): Map<String, *> {
+private suspend fun ScriptTaskContext.getTurtleItemDetail(slot: Int = 1, detailed: Boolean = false): Map<String, *> {
     val item = turtle.getItemDetail(context, Optional.of(slot), Optional.of(detailed)).await()
     assertThat("Returns details", item, array(instanceOf(Map::class.java)))
 

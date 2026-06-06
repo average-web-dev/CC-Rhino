@@ -5,8 +5,8 @@
 package dan200.computercraft.shared.peripheral.generic.methods;
 
 import dan200.computercraft.api.detail.VanillaDetailRegistries;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.shared.platform.FabricContainerTransfer;
@@ -75,13 +75,13 @@ public final class InventoryMethods extends AbstractInventoryMethods<InventoryMe
     }
 
     @Override
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public int size(StorageWrapper inventory) {
         return inventory.storage().getSlots().size();
     }
 
     @Override
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public Map<Integer, Map<String, ?>> list(StorageWrapper inventory) {
         Map<Integer, Map<String, ?>> result = new HashMap<>();
         var slots = inventory.storage().getSlots();
@@ -96,8 +96,8 @@ public final class InventoryMethods extends AbstractInventoryMethods<InventoryMe
 
     @Override
     @Nullable
-    @LuaFunction(mainThread = true)
-    public Map<String, ?> getItemDetail(StorageWrapper inventory, int slot) throws LuaException {
+    @ScriptFunction(mainThread = true)
+    public Map<String, ?> getItemDetail(StorageWrapper inventory, int slot) throws ScriptException {
         assertBetween(slot, 1, inventory.storage().getSlotCount(), "Slot out of range (%s)");
 
         var stack = toStack(inventory.storage().getSlot(slot - 1));
@@ -105,24 +105,24 @@ public final class InventoryMethods extends AbstractInventoryMethods<InventoryMe
     }
 
     @Override
-    @LuaFunction(mainThread = true)
-    public long getItemLimit(StorageWrapper inventory, int slot) throws LuaException {
+    @ScriptFunction(mainThread = true)
+    public long getItemLimit(StorageWrapper inventory, int slot) throws ScriptException {
         assertBetween(slot, 1, inventory.storage().getSlotCount(), "Slot out of range (%s)");
         return inventory.storage().getSlot(slot - 1).getCapacity();
     }
 
     @Override
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public int pushItems(
         StorageWrapper from, IComputerAccess computer,
         String toName, int fromSlot, Optional<Integer> limit, Optional<Integer> toSlot
-    ) throws LuaException {
+    ) throws ScriptException {
         // Find location to transfer to
         var location = computer.getAvailablePeripheral(toName);
-        if (location == null) throw new LuaException("Target '" + toName + "' does not exist");
+        if (location == null) throw new ScriptException("Target '" + toName + "' does not exist");
 
         var to = extractHandler(location);
-        if (to == null) throw new LuaException("Target '" + toName + "' is not an inventory");
+        if (to == null) throw new ScriptException("Target '" + toName + "' is not an inventory");
 
         var fromStorage = from.storage();
 
@@ -136,19 +136,19 @@ public final class InventoryMethods extends AbstractInventoryMethods<InventoryMe
     }
 
     @Override
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public int pullItems(
         StorageWrapper to, IComputerAccess computer,
         String fromName, int fromSlot, Optional<Integer> limit, Optional<Integer> toSlot
-    ) throws LuaException {
+    ) throws ScriptException {
         // Find location to transfer to
         var location = computer.getAvailablePeripheral(fromName);
-        if (location == null) throw new LuaException("Source '" + fromName + "' does not exist");
+        if (location == null) throw new ScriptException("Source '" + fromName + "' does not exist");
 
         var toStorage = to.storage();
 
         var from = extractHandler(location);
-        if (from == null) throw new LuaException("Source '" + fromName + "' is not an inventory");
+        if (from == null) throw new ScriptException("Source '" + fromName + "' is not an inventory");
 
         // Validate slots
         int actualLimit = limit.orElse(Integer.MAX_VALUE);

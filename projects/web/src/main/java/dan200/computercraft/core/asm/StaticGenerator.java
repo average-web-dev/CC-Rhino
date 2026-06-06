@@ -9,8 +9,8 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.primitives.Primitives;
 import com.google.common.reflect.TypeToken;
-import dan200.computercraft.api.lua.*;
-import dan200.computercraft.core.methods.LuaMethod;
+import dan200.computercraft.api.scripting.*;
+import dan200.computercraft.core.methods.ApiMethod;
 import org.jspecify.annotations.Nullable;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
@@ -28,11 +28,11 @@ import java.util.function.Function;
 import static org.objectweb.asm.Opcodes.*;
 
 /**
- * The underlying generator for {@link LuaFunction}-annotated methods.
+ * The underlying generator for {@link ScriptFunction}-annotated methods.
  * <p>
  * The constructor {@link StaticGenerator#StaticGenerator(Class, List, Function)} takes in the type of interface to generate (i.e.
- * {@link LuaMethod}) and the context arguments for this function (in the case of {@link LuaMethod}, this will just be
- * {@link ILuaContext}).
+ * {@link ApiMethod}) and the context arguments for this function (in the case of {@link ApiMethod}, this will just be
+ * {@link IContext}).
  * <p>
  * The generated class then implements this interface - the {@code apply} method calls the appropriate methods on
  * {@link IArguments} to extract the arguments, and then calls the original method.
@@ -41,7 +41,7 @@ import static org.objectweb.asm.Opcodes.*;
  */
 public final class StaticGenerator<T> {
     private static final String METHOD_NAME = "apply";
-    private static final String[] EXCEPTIONS = new String[]{ Type.getInternalName(LuaException.class) };
+    private static final String[] EXCEPTIONS = new String[]{ Type.getInternalName(ScriptException.class) };
 
     private static final String INTERNAL_METHOD_RESULT = Type.getInternalName(MethodResult.class);
     private static final String DESC_METHOD_RESULT = Type.getDescriptor(MethodResult.class);
@@ -99,13 +99,13 @@ public final class StaticGenerator<T> {
 
         var exceptions = method.getExceptionTypes();
         for (var exception : exceptions) {
-            if (exception != LuaException.class) {
+            if (exception != ScriptException.class) {
                 System.err.printf("Lua Method %s cannot throw %s.\n", name, exception.getName());
                 return Optional.empty();
             }
         }
 
-        var annotation = method.getAnnotation(LuaFunction.class);
+        var annotation = method.getAnnotation(ScriptFunction.class);
         if (annotation.unsafe() && annotation.mainThread()) {
             System.err.printf("Lua Method %s cannot use unsafe and mainThread.\n", name);
             return Optional.empty();
@@ -296,7 +296,7 @@ public final class StaticGenerator<T> {
             if (klass == Map.class) return "Table";
             if (klass == String.class) return "String";
             if (klass == ByteBuffer.class) return "Bytes";
-            if (klass == LuaTable.class && unsafe) return "TableUnsafe";
+            if (klass == ScriptTable.class && unsafe) return "TableUnsafe";
         }
 
         return null;

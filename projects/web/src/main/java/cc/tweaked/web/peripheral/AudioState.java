@@ -4,8 +4,8 @@
 
 package cc.tweaked.web.peripheral;
 
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaTable;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptTable;
 import org.jspecify.annotations.Nullable;
 import org.teavm.jso.webaudio.AudioBuffer;
 import org.teavm.jso.webaudio.AudioContext;
@@ -30,7 +30,7 @@ final class AudioState {
         nextTime = audioContext.getCurrentTime();
     }
 
-    boolean pushBuffer(LuaTable<?, ?> table, int size, Optional<Double> volume) throws LuaException {
+    boolean pushBuffer(ScriptTable<?, ?> table, int size, Optional<Double> volume) throws ScriptException {
         if (nextBuffer != null) return false;
 
         var buffer = nextBuffer = audioContext.createBuffer(1, size, SAMPLE_RATE);

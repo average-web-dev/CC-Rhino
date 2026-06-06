@@ -5,7 +5,7 @@
 package dan200.computercraft.shared.peripheral.generic.methods;
 
 import dan200.computercraft.api.ComputerCraftAPI;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.peripheral.GenericPeripheral;
 import dan200.computercraft.api.peripheral.PeripheralType;
 
@@ -39,7 +39,7 @@ public abstract class AbstractEnergyMethods<T> implements GenericPeripheral {
      * @param energy The current energy storage.
      * @return The energy stored in this block, in FE.
      */
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public abstract int getEnergy(T energy);
 
     /**
@@ -48,6 +48,6 @@ public abstract class AbstractEnergyMethods<T> implements GenericPeripheral {
      * @param energy The current energy storage.
      * @return The energy capacity of this block.
      */
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public abstract int getEnergyCapacity(T energy);
 }

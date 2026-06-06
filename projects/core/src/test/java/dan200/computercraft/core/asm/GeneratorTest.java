@@ -4,10 +4,10 @@
 
 package dan200.computercraft.core.asm;
 
-import dan200.computercraft.api.lua.*;
+import dan200.computercraft.api.scripting.*;
 import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.core.computer.ComputerSide;
-import dan200.computercraft.core.methods.LuaMethod;
+import dan200.computercraft.core.methods.ApiMethod;
 import dan200.computercraft.core.methods.NamedMethod;
 import org.hamcrest.Matcher;
 import org.jspecify.annotations.Nullable;
@@ -31,7 +31,7 @@ import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class GeneratorTest {
-    private static final MethodSupplierImpl<LuaMethod> GENERATOR = (MethodSupplierImpl<LuaMethod>) LuaMethodSupplier.create(
+    private static final MethodSupplierImpl<ApiMethod> GENERATOR = (MethodSupplierImpl<ApiMethod>) ApiMethodSupplier.create(
         Stream.of(new StaticGeneric(), new InstanceGeneric()).flatMap(GenericMethod::getMethods).toList()
     );
 
@@ -67,7 +67,7 @@ public class GeneratorTest {
     }
 
     @Test
-    public void testNonPublicClass() throws LuaException {
+    public void testNonPublicClass() throws ScriptException {
         var methods = GENERATOR.getMethods(NonPublic.class);
         assertThat(methods, contains(named("go")));
         assertThat(apply(methods, new NonPublic(), "go"), is(MethodResult.of()));
@@ -79,7 +79,7 @@ public class GeneratorTest {
     }
 
     @Test
-    public void testStaticGenericMethod() throws LuaException {
+    public void testStaticGenericMethod() throws ScriptException {
         var methods = GENERATOR.getMethods(GenericMethodTarget.class);
         assertThat(methods, hasItem(named("goStatic")));
         assertThat(apply(methods, new GenericMethodTarget(), "goStatic", "Hello", 123), is(MethodResult.of()));
@@ -87,7 +87,7 @@ public class GeneratorTest {
 
 
     @Test
-    public void testInstanceGenericrMethod() throws LuaException {
+    public void testInstanceGenericrMethod() throws ScriptException {
         var methods = GENERATOR.getMethods(GenericMethodTarget.class);
         assertThat(methods, hasItem(named("goInstance")));
         assertThat(apply(methods, new GenericMethodTarget(), "goInstance", "Hello", 123), is(MethodResult.of()));
@@ -114,29 +114,29 @@ public class GeneratorTest {
     }
 
     @Test
-    public void testEnum() throws LuaException {
+    public void testEnum() throws ScriptException {
         var methods = GENERATOR.getMethods(EnumMethods.class);
         assertThat(methods, containsInAnyOrder(named("getEnum"), named("optEnum")));
 
         assertThat(apply(methods, new EnumMethods(), "getEnum", "front"), one(is("FRONT")));
         assertThat(apply(methods, new EnumMethods(), "optEnum", "front"), one(is("FRONT")));
         assertThat(apply(methods, new EnumMethods(), "optEnum"), one(is("?")));
-        assertThrows(LuaException.class, () -> apply(methods, new EnumMethods(), "getEnum", "not as side"));
+        assertThrows(ScriptException.class, () -> apply(methods, new EnumMethods(), "getEnum", "not as side"));
     }
 
     @Test
-    public void testLuaTable() throws LuaException {
+    public void testLuaTable() throws ScriptException {
         var methods = GENERATOR.getMethods(TableMethods.class);
         assertThat(methods, containsInAnyOrder(named("getTable"), named("optTable")));
 
         assertThat(apply(methods, new TableMethods(), "getTable", Map.of("x", "y")), one(is(Map.of("x", "y"))));
         assertThat(apply(methods, new TableMethods(), "optTable", Map.of("x", "y")), one(is(Map.of("x", "y"))));
         assertThat(apply(methods, new TableMethods(), "optTable"), one(nullValue()));
-        assertThrows(LuaException.class, () -> apply(methods, new TableMethods(), "getTable", "not a table"));
+        assertThrows(ScriptException.class, () -> apply(methods, new TableMethods(), "getTable", "not a table"));
     }
 
     @Test
-    public void testMainThread() throws LuaException {
+    public void testMainThread() throws ScriptException {
         var methods = GENERATOR.getMethods(MainThread.class);
         assertThat(methods, contains(allOf(
             named("go"),
@@ -154,7 +154,7 @@ public class GeneratorTest {
     }
 
     @Test
-    public void testClassNotAccessible() throws IOException, ReflectiveOperationException, LuaException {
+    public void testClassNotAccessible() throws IOException, ReflectiveOperationException, ScriptException {
         var basicName = Basic.class.getName().replace('.', '/');
 
         // Load our Basic class, rewriting it to be a separate (hidden) class which is not part of the same nest as
@@ -181,7 +181,7 @@ public class GeneratorTest {
     }
 
     public static class Basic {
-        @LuaFunction
+        @ScriptFunction
         public final void go() {
         }
     }
@@ -193,13 +193,13 @@ public class GeneratorTest {
     }
 
     static class NonPublic {
-        @LuaFunction
+        @ScriptFunction
         public final void go() {
         }
     }
 
     public static class NonInstance {
-        @LuaFunction
+        @ScriptFunction
         public static void go() {
         }
     }
@@ -213,8 +213,8 @@ public class GeneratorTest {
             return "static";
         }
 
-        @LuaFunction
-        public static void goStatic(GenericMethodTarget target, String arg1, int arg2, ILuaContext context) {
+        @ScriptFunction
+        public static void goStatic(GenericMethodTarget target, String arg1, int arg2, IContext context) {
         }
     }
 
@@ -224,13 +224,13 @@ public class GeneratorTest {
             return "instance";
         }
 
-        @LuaFunction
-        public void goInstance(GenericMethodTarget target, String arg1, int arg2, ILuaContext context) {
+        @ScriptFunction
+        public void goInstance(GenericMethodTarget target, String arg1, int arg2, IContext context) {
         }
     }
 
     public static class IllegalThrows {
-        @LuaFunction
+        @ScriptFunction
         @SuppressWarnings("DoNotCallSuggester")
         public final void go() throws IOException {
             throw new IOException();
@@ -238,82 +238,82 @@ public class GeneratorTest {
     }
 
     public static class CustomNames {
-        @LuaFunction({ "go1", "go2" })
+        @ScriptFunction({ "go1", "go2" })
         public final void go() {
         }
     }
 
     public static class ArgKinds {
-        @LuaFunction
+        @ScriptFunction
         public final void objectArg(Object arg) {
         }
 
-        @LuaFunction
+        @ScriptFunction
         public final void intArg(int arg) {
         }
 
-        @LuaFunction
+        @ScriptFunction
         public final void optIntArg(Optional<Integer> arg) {
         }
 
-        @LuaFunction
-        public final void context(ILuaContext arg) {
+        @ScriptFunction
+        public final void context(IContext arg) {
         }
 
-        @LuaFunction
+        @ScriptFunction
         public final void arguments(IArguments arg) {
         }
 
-        @LuaFunction
+        @ScriptFunction
         public final void unknown(IComputerAccess arg) {
         }
 
-        @LuaFunction
+        @ScriptFunction
         public final void illegalMap(Map<String, Integer> arg) {
         }
 
-        @LuaFunction
+        @ScriptFunction
         public final void optIllegalMap(Optional<Map<String, Integer>> arg) {
         }
     }
 
     public static class EnumMethods {
-        @LuaFunction
+        @ScriptFunction
         public final String getEnum(ComputerSide side) {
             return side.name();
         }
 
-        @LuaFunction
+        @ScriptFunction
         public final String optEnum(Optional<ComputerSide> side) {
             return side.map(ComputerSide::name).orElse("?");
         }
     }
 
     public static class TableMethods {
-        @LuaFunction
-        public final LuaTable<?, ?> getTable(LuaTable<?, ?> table) {
+        @ScriptFunction
+        public final ScriptTable<?, ?> getTable(ScriptTable<?, ?> table) {
             return table;
         }
 
-        @LuaFunction
-        public final @Nullable LuaTable<?, ?> optTable(Optional<LuaTable<?, ?>> table) {
+        @ScriptFunction
+        public final @Nullable ScriptTable<?, ?> optTable(Optional<ScriptTable<?, ?>> table) {
             return table.orElse(null);
         }
     }
 
     public static class MainThread {
-        @LuaFunction(mainThread = true)
+        @ScriptFunction(mainThread = true)
         public final void go() {
         }
     }
 
     public static class Unsafe {
-        @LuaFunction(unsafe = true)
-        public final void withUnsafe(LuaTable<?, ?> table) {
+        @ScriptFunction(unsafe = true)
+        public final void withUnsafe(ScriptTable<?, ?> table) {
         }
 
-        @LuaFunction(unsafe = true, mainThread = true)
-        public final void invalid(LuaTable<?, ?> table) {
+        @ScriptFunction(unsafe = true, mainThread = true)
+        public final void invalid(ScriptTable<?, ?> table) {
         }
     }
 
@@ -325,7 +325,7 @@ public class GeneratorTest {
             .orElseThrow(NullPointerException::new);
     }
 
-    public static MethodResult apply(Collection<NamedMethod<LuaMethod>> methods, Object instance, String name, Object... args) throws LuaException {
+    public static MethodResult apply(Collection<NamedMethod<ApiMethod>> methods, Object instance, String name, Object... args) throws ScriptException {
         return find(methods, name).apply(instance, CONTEXT, new ObjectArguments(args));
     }
 
@@ -340,9 +340,9 @@ public class GeneratorTest {
         return contramap(is(method), "name", NamedMethod::name);
     }
 
-    private static final ILuaContext CONTEXT = new ILuaContext() {
+    private static final IContext CONTEXT = new IContext() {
         @Override
-        public long issueMainThreadTask(LuaTask task) {
+        public long issueMainThreadTask(ScriptTask task) {
             return 0;
         }
     };

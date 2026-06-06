@@ -12,8 +12,8 @@ import dan200.computercraft.core.ComputerContext;
 import dan200.computercraft.core.computer.GlobalEnvironment;
 import dan200.computercraft.core.computer.mainthread.MainThread;
 import dan200.computercraft.core.computer.mainthread.MainThreadConfig;
-import dan200.computercraft.core.lua.ILuaMachine;
-import dan200.computercraft.core.lua.JSMachine;
+import dan200.computercraft.core.engine.IMachine;
+import dan200.computercraft.core.engine.JSMachine;
 import dan200.computercraft.core.methods.MethodSupplier;
 import dan200.computercraft.core.methods.PeripheralMethod;
 import dan200.computercraft.impl.AbstractComputerCraftAPI;
@@ -51,7 +51,7 @@ public final class ServerContext {
     private static final LevelResource FOLDER = new LevelResource(ComputerCraftAPI.MOD_ID);
 
     @VisibleForTesting
-    public static ILuaMachine.Factory luaMachine = JSMachine::new;
+    public static IMachine.Factory luaMachine = JSMachine::new;
 
     private static @Nullable ServerContext instance;
 

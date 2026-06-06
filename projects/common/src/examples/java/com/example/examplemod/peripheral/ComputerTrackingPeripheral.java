@@ -1,6 +1,6 @@
 package com.example.examplemod.peripheral;
 
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.peripheral.AttachedComputerSet;
 import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.api.peripheral.IPeripheral;
@@ -25,7 +25,7 @@ public class ComputerTrackingPeripheral implements IPeripheral {
         computers.remove(computer);
     }
 
-    @LuaFunction
+    @ScriptFunction
     public final void sayHello() {
         // Queue a "hello" event on each computer.
         computers.forEach(x -> x.queueEvent("hello", x.getAttachmentName()));

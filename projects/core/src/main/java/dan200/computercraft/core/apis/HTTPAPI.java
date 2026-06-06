@@ -4,7 +4,7 @@
 
 package dan200.computercraft.core.apis;
 
-import dan200.computercraft.api.lua.*;
+import dan200.computercraft.api.scripting.*;
 import dan200.computercraft.core.CoreConfig;
 import dan200.computercraft.core.apis.http.*;
 import dan200.computercraft.core.apis.http.request.HttpRequest;
@@ -28,7 +28,7 @@ import static dan200.computercraft.core.util.ArgumentHelpers.assertBetween;
  * @cc.module http
  * @hidden
  */
-public class HTTPAPI implements ILuaAPI {
+public class HTTPAPI implements IComputerAPI {
     private static final double DEFAULT_TIMEOUT = 30;
     private static final double MAX_TIMEOUT = 60;
 
@@ -68,8 +68,8 @@ public class HTTPAPI implements ILuaAPI {
         Resource.cleanup();
     }
 
-    @LuaFunction
-    public final Object[] request(IArguments args) throws LuaException {
+    @ScriptFunction
+    public final Object[] request(IArguments args) throws ScriptException {
         String address, requestMethod;
         ByteBuffer postBody;
         Map<?, ?> headerTable;
@@ -77,9 +77,9 @@ public class HTTPAPI implements ILuaAPI {
         Optional<Double> timeoutArg;
 
         if (args.get(0) instanceof Map) {
-            var options = new ObjectLuaTable(args.getTable(0));
+            var options = new ObjectTable(args.getTable(0));
             address = options.getString("url");
-            postBody = options.optString("body").map(LuaValues::encode).orElse(null);
+            postBody = options.optString("body").map(ScriptValues::encode).orElse(null);
             headerTable = options.optTable("headers").orElse(Map.of());
             binary = options.optBoolean("binary").orElse(false);
             requestMethod = options.optString("method").orElse(null);
@@ -105,7 +105,7 @@ public class HTTPAPI implements ILuaAPI {
         } else {
             httpMethod = HttpMethod.valueOf(requestMethod.toUpperCase(Locale.ROOT));
             if (httpMethod == null || requestMethod.equalsIgnoreCase("CONNECT")) {
-                throw new LuaException("Unsupported HTTP method");
+                throw new ScriptException("Unsupported HTTP method");
             }
         }
 
@@ -115,7 +115,7 @@ public class HTTPAPI implements ILuaAPI {
 
             // Make the request
             if (!request.queue(r -> r.request(uri, httpMethod))) {
-                throw new LuaException("Too many ongoing HTTP requests");
+                throw new ScriptException("Too many ongoing HTTP requests");
             }
 
             return new Object[]{ true };
@@ -124,12 +124,12 @@ public class HTTPAPI implements ILuaAPI {
         }
     }
 
-    @LuaFunction
-    public final Object[] checkURL(String address) throws LuaException {
+    @ScriptFunction
+    public final Object[] checkURL(String address) throws ScriptException {
         try {
             var uri = HttpRequest.checkUri(address);
             if (!new CheckUrl(checkUrls, apiEnvironment, address, uri).queue(CheckUrl::run)) {
-                throw new LuaException("Too many ongoing checkUrl calls");
+                throw new ScriptException("Too many ongoing checkUrl calls");
             }
 
             return new Object[]{ true };
@@ -138,10 +138,10 @@ public class HTTPAPI implements ILuaAPI {
         }
     }
 
-    @LuaFunction
-    public final Object[] websocket(IArguments args) throws LuaException {
+    @ScriptFunction
+    public final Object[] websocket(IArguments args) throws ScriptException {
         if (!CoreConfig.httpWebsocketEnabled) {
-            throw new LuaException("Websocket connections are disabled");
+            throw new ScriptException("Websocket connections are disabled");
         }
 
         String address;
@@ -149,7 +149,7 @@ public class HTTPAPI implements ILuaAPI {
         Optional<Double> timeoutArg;
 
         if (args.get(0) instanceof Map) {
-            var options = new ObjectLuaTable(args.getTableUnsafe(0));
+            var options = new ObjectTable(args.getTableUnsafe(0));
             address = options.getString("url");
             headerTable = options.optTable("headers").orElse(Map.of());
             timeoutArg = options.optFiniteDouble("timeout");
@@ -165,7 +165,7 @@ public class HTTPAPI implements ILuaAPI {
         try {
             var uri = WebsocketClient.parseUri(address);
             if (!new Websocket(websockets, apiEnvironment, uri, address, headers, timeout).queue(Websocket::connect)) {
-                throw new LuaException("Too many websockets already open");
+                throw new ScriptException("Too many websockets already open");
             }
 
             return new Object[]{ true };
@@ -174,7 +174,7 @@ public class HTTPAPI implements ILuaAPI {
         }
     }
 
-    private HttpHeaders getHeaders(Map<?, ?> headerTable) throws LuaException {
+    private HttpHeaders getHeaders(Map<?, ?> headerTable) throws ScriptException {
         HttpHeaders headers = new DefaultHttpHeaders();
         for (Map.Entry<?, ?> entry : headerTable.entrySet()) {
             var value = entry.getValue();
@@ -182,7 +182,7 @@ public class HTTPAPI implements ILuaAPI {
                 try {
                     headers.add((String) entry.getKey(), value);
                 } catch (IllegalArgumentException e) {
-                    throw new LuaException(e.getMessage());
+                    throw new ScriptException(e.getMessage());
                 }
             }
         }
@@ -198,9 +198,9 @@ public class HTTPAPI implements ILuaAPI {
      *
      * @param timeoutArg The (optional) timeout, in seconds.
      * @return The parsed timeout value, in milliseconds.
-     * @throws LuaException If the timeout is in-range.
+     * @throws ScriptException If the timeout is in-range.
      */
-    private static int getTimeout(Optional<Double> timeoutArg) throws LuaException {
+    private static int getTimeout(Optional<Double> timeoutArg) throws ScriptException {
         double timeout = timeoutArg.orElse(DEFAULT_TIMEOUT);
         assertBetween(timeout, 0, MAX_TIMEOUT, "timeout out of range (%s)");
         return (int) (timeout * 1000);

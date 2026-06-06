@@ -5,14 +5,14 @@
 package dan200.computercraft.gametest.core
 
 import dan200.computercraft.core.apis.OSAPI
-import dan200.computercraft.core.lua.CobaltLuaMachine
-import dan200.computercraft.core.lua.ILuaMachine
-import dan200.computercraft.core.lua.MachineEnvironment
+import dan200.computercraft.core.engine.CobaltLuaMachine
+import dan200.computercraft.core.engine.ILuaMachine
+import dan200.computercraft.core.engine.MachineEnvironment
 import dan200.computercraft.gametest.api.thenOnComputer
 import dan200.computercraft.mixin.gametest.GameTestInfoAccessor
 import dan200.computercraft.shared.computer.core.ServerContext
-import dan200.computercraft.test.core.computer.KotlinLuaMachine
-import dan200.computercraft.test.core.computer.LuaTaskContext
+import dan200.computercraft.test.core.computer.KotlinMachine
+import dan200.computercraft.test.core.computer.ScriptTaskContext
 import net.minecraft.gametest.framework.GameTestAssertException
 import net.minecraft.gametest.framework.GameTestAssertPosException
 import net.minecraft.gametest.framework.GameTestInfo
@@ -34,13 +34,13 @@ import java.util.concurrent.atomic.AtomicReference
  */
 object ManagedComputers : ILuaMachine.Factory {
     private val LOGGER = LoggerFactory.getLogger(ManagedComputers::class.java)
-    private val computers: MutableMap<String, Queue<suspend LuaTaskContext.() -> Unit>> = mutableMapOf()
+    private val computers: MutableMap<String, Queue<suspend ScriptTaskContext.() -> Unit>> = mutableMapOf()
 
     internal fun reset() {
         computers.clear()
     }
 
-    internal fun enqueue(test: GameTestInfo, label: String, task: suspend LuaTaskContext.() -> Unit): Monitor {
+    internal fun enqueue(test: GameTestInfo, label: String, task: suspend ScriptTaskContext.() -> Unit): Monitor {
         val monitor = Monitor(test, label)
         computers.computeIfAbsent(label) { ConcurrentLinkedDeque() }.add {
             try {
@@ -79,8 +79,8 @@ object ManagedComputers : ILuaMachine.Factory {
     }
 
     private class KotlinMachine(environment: MachineEnvironment, private val label: String) :
-        KotlinLuaMachine(environment) {
-        override fun getTask(): (suspend KotlinLuaMachine.() -> Unit)? = computers[label]?.poll()
+        KotlinMachine(environment) {
+        override fun getTask(): (suspend KotlinMachine.() -> Unit)? = computers[label]?.poll()
     }
 
     class Monitor(private val test: GameTestInfo, private val label: String) {

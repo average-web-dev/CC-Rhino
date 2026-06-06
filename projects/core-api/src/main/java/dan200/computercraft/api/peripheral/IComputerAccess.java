@@ -6,10 +6,10 @@ package dan200.computercraft.api.peripheral;
 
 import dan200.computercraft.api.filesystem.Mount;
 import dan200.computercraft.api.filesystem.WritableMount;
-import dan200.computercraft.api.lua.ILuaCallback;
-import dan200.computercraft.api.lua.ILuaContext;
-import dan200.computercraft.api.lua.LuaTask;
-import dan200.computercraft.api.lua.MethodResult;
+import dan200.computercraft.api.scripting.ICallback;
+import dan200.computercraft.api.scripting.IContext;
+import dan200.computercraft.api.scripting.ScriptTask;
+import dan200.computercraft.api.scripting.MethodResult;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
@@ -134,7 +134,7 @@ public interface IComputerAccess {
      *                  <p>
      *                  You may supply {@code null} to indicate that no arguments are to be supplied.
      * @throws NotAttachedException If the peripheral has been detached.
-     * @see MethodResult#pullEvent(String, ILuaCallback)
+     * @see MethodResult#pullEvent(String, ICallback)
      */
     void queueEvent(String event, @Nullable Object... arguments);
 
@@ -178,7 +178,7 @@ public interface IComputerAccess {
      * <p>
      * This should be used to ensure your peripheral integrates with ComputerCraft's monitoring and limiting of how much
      * server time each computer consumes. You should not need to use this if you use
-     * {@link ILuaContext#issueMainThreadTask(LuaTask)} - this is intended for mods with their own system for running
+     * {@link IContext#issueMainThreadTask(ScriptTask)} - this is intended for mods with their own system for running
      * work on the main thread.
      * <p>
      * Please note that the returned implementation is <em>not</em> thread-safe, and should only be used from the main

@@ -4,10 +4,10 @@
 
 package dan200.computercraft.core.apis.handles;
 
-import dan200.computercraft.api.lua.Coerced;
-import dan200.computercraft.api.lua.IArguments;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.Coerced;
+import dan200.computercraft.api.scripting.IArguments;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.filesystem.TrackingCloseable;
 import org.jspecify.annotations.Nullable;
 
@@ -29,8 +29,8 @@ public class ReadWriteHandle extends AbstractHandle {
      * {@inheritDoc}
      */
     @Override
-    @LuaFunction
-    public final Object @Nullable [] read(Optional<Integer> countArg) throws LuaException {
+    @ScriptFunction
+    public final Object @Nullable [] read(Optional<Integer> countArg) throws ScriptException {
         return super.read(countArg);
     }
 
@@ -38,8 +38,8 @@ public class ReadWriteHandle extends AbstractHandle {
      * {@inheritDoc}
      */
     @Override
-    @LuaFunction
-    public final Object @Nullable [] readAll() throws LuaException {
+    @ScriptFunction
+    public final Object @Nullable [] readAll() throws ScriptException {
         return super.readAll();
     }
 
@@ -47,8 +47,8 @@ public class ReadWriteHandle extends AbstractHandle {
      * {@inheritDoc}
      */
     @Override
-    @LuaFunction
-    public final Object @Nullable [] readLine(Optional<Boolean> withTrailingArg) throws LuaException {
+    @ScriptFunction
+    public final Object @Nullable [] readLine(Optional<Boolean> withTrailingArg) throws ScriptException {
         return super.readLine(withTrailingArg);
     }
 
@@ -56,8 +56,8 @@ public class ReadWriteHandle extends AbstractHandle {
      * {@inheritDoc}
      */
     @Override
-    @LuaFunction
-    public final Object @Nullable [] seek(Optional<String> whence, Optional<Long> offset) throws LuaException {
+    @ScriptFunction
+    public final Object @Nullable [] seek(Optional<String> whence, Optional<Long> offset) throws ScriptException {
         return super.seek(whence, offset);
     }
 
@@ -65,8 +65,8 @@ public class ReadWriteHandle extends AbstractHandle {
      * {@inheritDoc}
      */
     @Override
-    @LuaFunction
-    public final void write(IArguments arguments) throws LuaException {
+    @ScriptFunction
+    public final void write(IArguments arguments) throws ScriptException {
         super.write(arguments);
     }
 
@@ -74,8 +74,8 @@ public class ReadWriteHandle extends AbstractHandle {
      * {@inheritDoc}
      */
     @Override
-    @LuaFunction
-    public final void writeLine(Coerced<ByteBuffer> text) throws LuaException {
+    @ScriptFunction
+    public final void writeLine(Coerced<ByteBuffer> text) throws ScriptException {
         super.writeLine(text);
     }
 
@@ -83,8 +83,8 @@ public class ReadWriteHandle extends AbstractHandle {
      * {@inheritDoc}
      */
     @Override
-    @LuaFunction
-    public final void flush() throws LuaException {
+    @ScriptFunction
+    public final void flush() throws ScriptException {
         super.flush();
     }
 

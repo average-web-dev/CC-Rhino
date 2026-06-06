@@ -6,16 +6,16 @@ package dan200.computercraft.core.apis;
 
 import dan200.computercraft.api.filesystem.Mount;
 import dan200.computercraft.api.filesystem.WritableMount;
-import dan200.computercraft.api.lua.*;
+import dan200.computercraft.api.scripting.*;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.api.peripheral.NotAttachedException;
 import dan200.computercraft.api.peripheral.WorkMonitor;
 import dan200.computercraft.core.computer.ComputerSide;
-import dan200.computercraft.core.computer.GuardedLuaContext;
+import dan200.computercraft.core.computer.GuardedContext;
 import dan200.computercraft.core.methods.MethodSupplier;
 import dan200.computercraft.core.methods.PeripheralMethod;
 import dan200.computercraft.core.metrics.Metrics;
-import dan200.computercraft.core.util.LuaUtil;
+import dan200.computercraft.core.util.ScriptUtil;
 import org.jspecify.annotations.Nullable;
 
 import java.util.*;
@@ -26,8 +26,8 @@ import java.util.*;
  * @cc.module peripheral
  * @hidden
  */
-public class PeripheralAPI implements ILuaAPI, IAPIEnvironment.IPeripheralChangeListener {
-    private final class PeripheralWrapper extends ComputerAccess implements GuardedLuaContext.Guard {
+public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralChangeListener {
+    private final class PeripheralWrapper extends ComputerAccess implements GuardedContext.Guard {
         private final String side;
         private final IPeripheral peripheral;
 
@@ -36,7 +36,7 @@ public class PeripheralAPI implements ILuaAPI, IAPIEnvironment.IPeripheralChange
         private final Map<String, PeripheralMethod> methodMap;
         private boolean attached = false;
 
-        private @Nullable GuardedLuaContext contextWrapper;
+        private @Nullable GuardedContext contextWrapper;
 
         PeripheralWrapper(IPeripheral peripheral, String side) {
             super(environment);
@@ -86,19 +86,19 @@ public class PeripheralAPI implements ILuaAPI, IAPIEnvironment.IPeripheralChange
             attached = false;
         }
 
-        private MethodResult call(ILuaContext context, String methodName, IArguments arguments) throws LuaException {
+        private MethodResult call(IContext context, String methodName, IArguments arguments) throws ScriptException {
             PeripheralMethod method;
             synchronized (this) {
                 method = methodMap.get(methodName);
             }
 
-            if (method == null) throw new LuaException("No such method " + methodName);
+            if (method == null) throw new ScriptException("No such method " + methodName);
 
-            // Wrap the ILuaContext. We try to reuse the previous context where possible to avoid allocations - this
-            // should be pretty common as ILuaMachine uses a constant context.
+            // Wrap the IContext. We try to reuse the previous context where possible to avoid allocations - this
+            // should be pretty common as IMachine uses a constant context.
             var contextWrapper = this.contextWrapper;
             if (contextWrapper == null || !contextWrapper.wraps(context)) {
-                contextWrapper = this.contextWrapper = new GuardedLuaContext(context, this);
+                contextWrapper = this.contextWrapper = new GuardedContext(context, this);
             }
 
             try (var ignored = environment.time(Metrics.PERIPHERAL_OPS)) {
@@ -256,7 +256,7 @@ public class PeripheralAPI implements ILuaAPI, IAPIEnvironment.IPeripheralChange
         }
     }
 
-    @LuaFunction
+    @ScriptFunction
     public final boolean isPresent(String sideName) {
         var side = ComputerSide.valueOfInsensitive(sideName);
         if (side != null) {
@@ -268,18 +268,18 @@ public class PeripheralAPI implements ILuaAPI, IAPIEnvironment.IPeripheralChange
         return false;
     }
 
-    @LuaFunction
+    @ScriptFunction
     public final Object @Nullable [] getType(String sideName) {
         var side = ComputerSide.valueOfInsensitive(sideName);
         if (side == null) return null;
 
         synchronized (peripherals) {
             var p = peripherals[side.ordinal()];
-            return p == null ? null : LuaUtil.consArray(p.getType(), p.getAdditionalTypes());
+            return p == null ? null : ScriptUtil.consArray(p.getType(), p.getAdditionalTypes());
         }
     }
 
-    @LuaFunction
+    @ScriptFunction
     public final Object @Nullable [] hasType(String sideName, String type) {
         var side = ComputerSide.valueOfInsensitive(sideName);
         if (side == null) return null;
@@ -293,7 +293,7 @@ public class PeripheralAPI implements ILuaAPI, IAPIEnvironment.IPeripheralChange
         return null;
     }
 
-    @LuaFunction
+    @ScriptFunction
     public final Object @Nullable [] getMethods(String sideName) {
         var side = ComputerSide.valueOfInsensitive(sideName);
         if (side == null) return null;
@@ -305,26 +305,26 @@ public class PeripheralAPI implements ILuaAPI, IAPIEnvironment.IPeripheralChange
         return null;
     }
 
-    @LuaFunction
-    public final MethodResult call(ILuaContext context, IArguments args) throws LuaException {
+    @ScriptFunction
+    public final MethodResult call(IContext context, IArguments args) throws ScriptException {
         var side = ComputerSide.valueOfInsensitive(args.getString(0));
         var methodName = args.getString(1);
         var methodArgs = args.drop(2);
 
-        if (side == null) throw new LuaException("No peripheral attached");
+        if (side == null) throw new ScriptException("No peripheral attached");
 
         PeripheralWrapper p;
         synchronized (peripherals) {
             p = peripherals[side.ordinal()];
         }
-        if (p == null) throw new LuaException("No peripheral attached");
+        if (p == null) throw new ScriptException("No peripheral attached");
 
         try {
             return p.call(context, methodName, methodArgs).adjustError(1);
-        } catch (LuaException e) {
+        } catch (ScriptException e) {
             // We increase the error level by one in order to shift the error level to where peripheral.call was
             // invoked. It would be possible to do it in Lua code, but would add significantly more overhead.
-            if (e.getLevel() > 0) throw new FastLuaException(e.getMessage(), e.getLevel() + 1);
+            if (e.getLevel() > 0) throw new FastScriptException(e.getMessage(), e.getLevel() + 1);
             throw e;
         }
     }

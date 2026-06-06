@@ -4,14 +4,14 @@
 
 package dan200.computercraft.shared.peripheral.generic;
 
-import dan200.computercraft.api.lua.IArguments;
-import dan200.computercraft.api.lua.ILuaContext;
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.MethodResult;
+import dan200.computercraft.api.scripting.IArguments;
+import dan200.computercraft.api.scripting.IContext;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.MethodResult;
 import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.api.peripheral.IDynamicPeripheral;
 import dan200.computercraft.api.peripheral.IPeripheral;
-import dan200.computercraft.core.computer.GuardedLuaContext;
+import dan200.computercraft.core.computer.GuardedContext;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import org.jspecify.annotations.Nullable;
@@ -27,8 +27,8 @@ public final class GenericPeripheral implements IDynamicPeripheral {
     private final Set<String> additionalTypes;
     private final List<SaturatedMethod> methods;
 
-    private @Nullable GuardedLuaContext contextWrapper;
-    private final GuardedLuaContext.Guard guard;
+    private @Nullable GuardedContext contextWrapper;
+    private final GuardedContext.Guard guard;
 
     GenericPeripheral(BlockEntity tile, Direction side, String type, Set<String> additionalTypes, List<SaturatedMethod> methods) {
         this.side = side;
@@ -51,10 +51,10 @@ public final class GenericPeripheral implements IDynamicPeripheral {
     }
 
     @Override
-    public MethodResult callMethod(IComputerAccess computer, ILuaContext context, int method, IArguments arguments) throws LuaException {
+    public MethodResult callMethod(IComputerAccess computer, IContext context, int method, IArguments arguments) throws ScriptException {
         var contextWrapper = this.contextWrapper;
         if (contextWrapper == null || !contextWrapper.wraps(context)) {
-            contextWrapper = this.contextWrapper = new GuardedLuaContext(context, guard);
+            contextWrapper = this.contextWrapper = new GuardedContext(context, guard);
         }
 
         return methods.get(method).apply(contextWrapper, computer, arguments);

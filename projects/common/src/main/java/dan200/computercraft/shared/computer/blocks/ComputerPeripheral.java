@@ -4,7 +4,7 @@
 
 package dan200.computercraft.shared.computer.blocks;
 
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.core.apis.OSAPI;
 import org.jspecify.annotations.Nullable;
@@ -34,7 +34,7 @@ public class ComputerPeripheral implements IPeripheral {
     /**
      * Turn the other computer on.
      */
-    @LuaFunction
+    @ScriptFunction
     public final void turnOn() {
         var computer = owner.getServerComputer();
         if (computer == null) {
@@ -47,7 +47,7 @@ public class ComputerPeripheral implements IPeripheral {
     /**
      * Shutdown the other computer.
      */
-    @LuaFunction
+    @ScriptFunction
     public final void shutdown() {
         var computer = owner.getServerComputer();
         if (computer == null) {
@@ -60,7 +60,7 @@ public class ComputerPeripheral implements IPeripheral {
     /**
      * Reboot or turn on the other computer.
      */
-    @LuaFunction
+    @ScriptFunction
     public final void reboot() {
         var computer = owner.getServerComputer();
         if (computer == null) {
@@ -76,7 +76,7 @@ public class ComputerPeripheral implements IPeripheral {
      * @return The computer's ID.
      * @see OSAPI#getComputerID() To get your computer's ID.
      */
-    @LuaFunction
+    @ScriptFunction
     public final int getID() {
         var computer = owner.getServerComputer();
         return computer == null ? owner.getComputerID() : computer.getID();
@@ -87,7 +87,7 @@ public class ComputerPeripheral implements IPeripheral {
      *
      * @return If the computer is on.
      */
-    @LuaFunction
+    @ScriptFunction
     public final boolean isOn() {
         var computer = owner.getServerComputer();
         return computer != null && computer.isOn();
@@ -100,7 +100,7 @@ public class ComputerPeripheral implements IPeripheral {
      * @see OSAPI#getComputerLabel() To get your label.
      */
     @Nullable
-    @LuaFunction
+    @ScriptFunction
     public final String getLabel() {
         var computer = owner.getServerComputer();
         return computer == null ? owner.getLabel() : computer.getLabel();

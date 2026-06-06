@@ -4,7 +4,7 @@
 
 package dan200.computercraft.core.terminal;
 
-import dan200.computercraft.api.lua.LuaValues;
+import dan200.computercraft.api.scripting.ScriptValues;
 import dan200.computercraft.core.util.Colour;
 import dan200.computercraft.test.core.CallCounter;
 import org.hamcrest.Matcher;
@@ -330,10 +330,10 @@ class TerminalTest {
     public void testBlitPartialBuffer() {
         var terminal = new Terminal(4, 3, true);
 
-        var text = LuaValues.encode("123456");
+        var text = ScriptValues.encode("123456");
         text.position(1);
 
-        terminal.blit(text, LuaValues.encode("aaaaaa"), LuaValues.encode("aaaaaa"));
+        terminal.blit(text, ScriptValues.encode("aaaaaa"), ScriptValues.encode("aaaaaa"));
 
         assertThat(terminal.getLine(0).toString(), equalTo("2345"));
     }
@@ -565,7 +565,7 @@ class TerminalTest {
     }
 
     private static void blit(Terminal terminal, String text, String fg, String bg) {
-        terminal.blit(LuaValues.encode(text), LuaValues.encode(fg), LuaValues.encode(bg));
+        terminal.blit(ScriptValues.encode(text), ScriptValues.encode(fg), ScriptValues.encode(bg));
     }
 
     private static final class TerminalBufferSnapshot {

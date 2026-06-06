@@ -10,7 +10,7 @@ import dan200.computercraft.mixin.gametest.GameTestInfoAccessor
 import dan200.computercraft.mixin.gametest.GameTestSequenceAccessor
 import dan200.computercraft.shared.platform.PlatformHelper
 import dan200.computercraft.shared.util.RegistryHelper
-import dan200.computercraft.test.core.computer.LuaTaskContext
+import dan200.computercraft.test.core.computer.ScriptTaskContext
 import dan200.computercraft.test.shared.ItemStackMatcher.isStack
 import net.minecraft.commands.arguments.blocks.BlockInput
 import net.minecraft.core.BlockPos
@@ -96,7 +96,7 @@ fun GameTestSequence.thenComputerOk(name: String? = null, marker: String = Compu
 /**
  * Run a task on a computer but don't wait for it to finish.
  */
-fun GameTestSequence.thenStartComputer(name: String? = null, action: suspend LuaTaskContext.() -> Unit): GameTestSequence {
+fun GameTestSequence.thenStartComputer(name: String? = null, action: suspend ScriptTaskContext.() -> Unit): GameTestSequence {
     val test = (this as GameTestSequenceAccessor).parent
     val label = test.testName + (if (name == null) "" else ".$name")
     return thenExecuteFailFast { ManagedComputers.enqueue(test, label, action) }
@@ -105,7 +105,7 @@ fun GameTestSequence.thenStartComputer(name: String? = null, action: suspend Lua
 /**
  * Run a task on a computer and wait for it to finish.
  */
-fun GameTestSequence.thenOnComputer(name: String? = null, action: suspend LuaTaskContext.() -> Unit): GameTestSequence {
+fun GameTestSequence.thenOnComputer(name: String? = null, action: suspend ScriptTaskContext.() -> Unit): GameTestSequence {
     val self = (this as GameTestSequenceAccessor)
     val test = self.parent
 

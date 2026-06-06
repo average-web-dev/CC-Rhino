@@ -4,9 +4,9 @@
 
 package dan200.computercraft.core.computer;
 
-import dan200.computercraft.api.lua.ILuaAPI;
-import dan200.computercraft.api.lua.ILuaContext;
-import dan200.computercraft.api.lua.LuaTask;
+import dan200.computercraft.api.scripting.IComputerAPI;
+import dan200.computercraft.api.scripting.IContext;
+import dan200.computercraft.api.scripting.ScriptTask;
 import dan200.computercraft.api.peripheral.WorkMonitor;
 import dan200.computercraft.core.ComputerContext;
 import dan200.computercraft.core.apis.IAPIEnvironment;
@@ -45,9 +45,9 @@ public class Computer {
     private final MainThreadScheduler.Executor serverExecutor;
 
     /**
-     * An internal counter for {@link LuaTask} ids.
+     * An internal counter for {@link ScriptTask} ids.
      *
-     * @see ILuaContext#issueMainThreadTask(LuaTask)
+     * @see IContext#issueMainThreadTask(ScriptTask)
      * @see #getUniqueTaskId()
      */
     private final AtomicLong lastTaskId = new AtomicLong();
@@ -187,11 +187,11 @@ public class Computer {
         return cursorX >= 0 && cursorX < terminal.getWidth() && cursorY >= 0 && cursorY < terminal.getHeight();
     }
 
-    public void addApi(ILuaAPI api) {
+    public void addApi(IComputerAPI api) {
         executor.addApi(api);
     }
 
-    public void addApi(ILuaAPI api, ApiLifecycle lifecycleHooks) {
+    public void addApi(IComputerAPI api, ApiLifecycle lifecycleHooks) {
         executor.addApi(api, lifecycleHooks);
     }
 

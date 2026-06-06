@@ -4,8 +4,8 @@
 
 package dan200.computercraft.shared.peripheral.diskdrive;
 
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.core.util.StringUtil;
@@ -49,7 +49,7 @@ public class DiskDrivePeripheral implements IPeripheral {
      *
      * @return Whether a disk is currently inserted in the drive.
      */
-    @LuaFunction
+    @ScriptFunction
     public final boolean isDiskPresent() {
         return !diskDrive.getMedia().stack().isEmpty();
     }
@@ -60,7 +60,7 @@ public class DiskDrivePeripheral implements IPeripheral {
      * @return The label of the disk, or {@code nil} if either no disk is inserted or the disk doesn't have a label.
      * @cc.treturn string|nil The label of the disk, or {@code nil} if either no disk is inserted or the disk doesn't have a label.
      */
-    @LuaFunction
+    @ScriptFunction
     public final @Nullable Object @Nullable [] getDiskLabel() {
         var media = diskDrive.getMedia();
         return media.media() == null ? null : new Object[]{ media.media().getLabel(diskDrive.getLevel().registryAccess(), media.stack()) };
@@ -75,12 +75,12 @@ public class DiskDrivePeripheral implements IPeripheral {
      * an error will be thrown.
      *
      * @param label The new label of the disk, or {@code nil} to clear.
-     * @throws LuaException If the disk's label can't be changed.
+     * @throws ScriptException If the disk's label can't be changed.
      */
-    @LuaFunction(mainThread = true)
-    public final void setDiskLabel(Optional<String> label) throws LuaException {
+    @ScriptFunction(mainThread = true)
+    public final void setDiskLabel(Optional<String> label) throws ScriptException {
         switch (diskDrive.setDiskLabel(label.map(StringUtil::normaliseLabel).orElse(null))) {
-            case NOT_ALLOWED -> throw new LuaException("Disk label cannot be changed");
+            case NOT_ALLOWED -> throw new ScriptException("Disk label cannot be changed");
             case CHANGED, NO_MEDIA -> {
             }
         }
@@ -92,7 +92,7 @@ public class DiskDrivePeripheral implements IPeripheral {
      * @param computer The computer object
      * @return Whether a disk with data is inserted.
      */
-    @LuaFunction
+    @ScriptFunction
     public final boolean hasData(IComputerAccess computer) {
         return diskDrive.getDiskMountPath(computer) != null;
     }
@@ -103,7 +103,7 @@ public class DiskDrivePeripheral implements IPeripheral {
      * @param computer The computer object
      * @return The mount path for the disk, or {@code nil} if no data disk is inserted.
      */
-    @LuaFunction
+    @ScriptFunction
     @Nullable
     public final String getMountPath(IComputerAccess computer) {
         return diskDrive.getDiskMountPath(computer);
@@ -114,7 +114,7 @@ public class DiskDrivePeripheral implements IPeripheral {
      *
      * @return Whether a disk with audio is inserted.
      */
-    @LuaFunction
+    @ScriptFunction
     public final boolean hasAudio() {
         return diskDrive.getMedia().getAudio(diskDrive.getLevel().registryAccess()) != null;
     }
@@ -125,7 +125,7 @@ public class DiskDrivePeripheral implements IPeripheral {
      * @return The title of the audio, or {@code false} if no audio disk is inserted.
      * @cc.treturn string|nil|false The title of the audio, {@code false} if no disk is inserted, or {@code nil} if the disk has no audio.
      */
-    @LuaFunction
+    @ScriptFunction
     @Nullable
     public final Object getAudioTitle() {
         var stack = diskDrive.getMedia();
@@ -138,7 +138,7 @@ public class DiskDrivePeripheral implements IPeripheral {
     /**
      * Plays the audio in the inserted disk, if available.
      */
-    @LuaFunction
+    @ScriptFunction
     public final void playAudio() {
         diskDrive.playDiskAudio();
     }
@@ -148,7 +148,7 @@ public class DiskDrivePeripheral implements IPeripheral {
      *
      * @see #playAudio
      */
-    @LuaFunction
+    @ScriptFunction
     public final void stopAudio() {
         diskDrive.stopDiskAudio();
     }
@@ -156,7 +156,7 @@ public class DiskDrivePeripheral implements IPeripheral {
     /**
      * Ejects any disk that may be in the drive.
      */
-    @LuaFunction
+    @ScriptFunction
     public final void ejectDisk() {
         diskDrive.ejectDisk();
     }
@@ -168,7 +168,7 @@ public class DiskDrivePeripheral implements IPeripheral {
      * @cc.treturn number|nil The ID of the disk in the drive, or {@code nil} if no disk with an ID is inserted.
      * @cc.since 1.4
      */
-    @LuaFunction
+    @ScriptFunction
     public final @Nullable Object @Nullable [] getDiskID() {
         var id = diskDrive.getMedia().stack().get(ModRegistry.DataComponents.DISK_ID.get());
         return id != null ? new Object[]{ id.id() } : null;

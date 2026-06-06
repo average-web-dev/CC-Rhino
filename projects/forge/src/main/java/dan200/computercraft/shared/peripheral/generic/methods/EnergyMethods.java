@@ -4,7 +4,7 @@
 
 package dan200.computercraft.shared.peripheral.generic.methods;
 
-import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import net.neoforged.neoforge.energy.IEnergyStorage;
 
 /**
@@ -12,13 +12,13 @@ import net.neoforged.neoforge.energy.IEnergyStorage;
  */
 public final class EnergyMethods extends AbstractEnergyMethods<IEnergyStorage> {
     @Override
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public int getEnergy(IEnergyStorage energy) {
         return energy.getEnergyStored();
     }
 
     @Override
-    @LuaFunction(mainThread = true)
+    @ScriptFunction(mainThread = true)
     public int getEnergyCapacity(IEnergyStorage energy) {
         return energy.getMaxEnergyStored();
     }

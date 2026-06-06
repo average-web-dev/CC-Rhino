@@ -6,7 +6,7 @@ package dan200.computercraft.test.core.filesystem;
 
 import dan200.computercraft.api.filesystem.MountConstants;
 import dan200.computercraft.api.filesystem.WritableMount;
-import dan200.computercraft.api.lua.LuaValues;
+import dan200.computercraft.api.scripting.ScriptValues;
 import dan200.computercraft.test.core.ReplaceUnderscoresDisplayNameGenerator;
 import org.junit.jupiter.api.DisplayNameGeneration;
 import org.junit.jupiter.api.Test;
@@ -120,13 +120,13 @@ public interface WritableMountContract {
         var mount = access.mount();
 
         var handle = mount.openFile("file.txt", MountConstants.WRITE_OPTIONS);
-        handle.write(LuaValues.encode(LONG_CONTENTS));
+        handle.write(ScriptValues.encode(LONG_CONTENTS));
         assertEquals(CAPACITY - LONG_CONTENTS.length(), mount.getRemainingSpace());
         assertEquals(access.computeRemainingSpace(), access.mount().getRemainingSpace(), "Free space is inconsistent");
 
         var handle2 = mount.openFile("file.txt", MountConstants.WRITE_OPTIONS);
 
-        handle.write(LuaValues.encode("test"));
+        handle.write(ScriptValues.encode("test"));
         assertEquals(CAPACITY - LONG_CONTENTS.length() - 4, mount.getRemainingSpace());
         assertEquals(access.computeRemainingSpace(), access.mount().getRemainingSpace(), "Free space is inconsistent");
 
@@ -147,7 +147,7 @@ public interface WritableMountContract {
 
         try (var handle = mount.openFile("a.txt", MountConstants.APPEND_OPTIONS)) {
             assertEquals(7, handle.position());
-            handle.write(LuaValues.encode(" text"));
+            handle.write(ScriptValues.encode(" text"));
             assertEquals(12, handle.position());
         }
 

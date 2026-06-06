@@ -4,8 +4,8 @@
 
 package dan200.computercraft.shared.peripheral.speaker;
 
-import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.lua.LuaTable;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptTable;
 import dan200.computercraft.shared.util.PauseAwareTimer;
 import org.jspecify.annotations.Nullable;
 
@@ -39,7 +39,7 @@ class DfpwmState {
     private float pendingVolume = 1.0f;
     private @Nullable EncodedAudio pendingAudio;
 
-    synchronized boolean pushBuffer(LuaTable<?, ?> table, int size, Optional<Double> volume) throws LuaException {
+    synchronized boolean pushBuffer(ScriptTable<?, ?> table, int size, Optional<Double> volume) throws ScriptException {
         if (pendingAudio != null) return false;
 
         var outSize = size / 8;
@@ -54,7 +54,7 @@ class DfpwmState {
             for (var j = 1; j <= 8; j++) {
                 var level = table.getInt(i * 8 + j);
                 if (level < -128 || level > 127) {
-                    throw new LuaException("table item #" + (i * 8 + j) + " must be between -128 and 127");
+                    throw new ScriptException("table item #" + (i * 8 + j) + " must be between -128 and 127");
                 }
 
                 var currentBit = level > charge || (level == charge && charge == 127);

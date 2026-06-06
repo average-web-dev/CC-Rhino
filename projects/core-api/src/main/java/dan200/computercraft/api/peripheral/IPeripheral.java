@@ -4,9 +4,9 @@
 
 package dan200.computercraft.api.peripheral;
 
-import dan200.computercraft.api.lua.ILuaContext;
-import dan200.computercraft.api.lua.LuaFunction;
-import dan200.computercraft.api.lua.LuaTask;
+import dan200.computercraft.api.scripting.IContext;
+import dan200.computercraft.api.scripting.ScriptFunction;
+import dan200.computercraft.api.scripting.ScriptTask;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Set;
@@ -22,10 +22,10 @@ import java.util.Set;
  * See the {@linkplain dan200.computercraft.api.peripheral package documentation} for more information on registering peripherals.
  * <p>
  * Peripherals should provide a series of methods to the user, typically by annotating Java methods with
- * {@link LuaFunction}. Alternatively, {@link IDynamicPeripheral} may be used to provide a dynamic set of methods.
+ * {@link ScriptFunction}. Alternatively, {@link IDynamicPeripheral} may be used to provide a dynamic set of methods.
  * Remember that peripheral methods are called on the <em>computer</em> thread, and so it is not safe to interact with
- * the Minecraft world by default. One should use {@link LuaFunction#mainThread()} or
- * {@link ILuaContext#executeMainThreadTask(LuaTask)} to run code on the main server thread.
+ * the Minecraft world by default. One should use {@link ScriptFunction#mainThread()} or
+ * {@link IContext#executeMainThreadTask(ScriptTask)} to run code on the main server thread.
  */
 public interface IPeripheral {
     /**

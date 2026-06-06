@@ -53,9 +53,6 @@ public class Builder {
         // implementations are a bit of a hack.
         remapper.remapClass("java/nio/channels/FileChannel", "cc/tweaked/web/stub/FileChannel");
         remapper.remapClass("java/util/concurrent/locks/ReentrantLock", "cc/tweaked/web/stub/ReentrantLock");
-        // Add some additional transformers.
-        remapper.addTransformer(PatchCobalt::patch);
-
         // Scans the main input folders for classes starting with "T", and uses them as an overlay, replacing the
         // original class with this redefinition.
         for (var file : input) {

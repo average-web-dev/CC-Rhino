@@ -4,7 +4,7 @@
 
 package dan200.computercraft.shared.peripheral.modem;
 
-import dan200.computercraft.api.lua.LuaException;
+import dan200.computercraft.api.scripting.ScriptException;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.ints.IntSet;
 import org.jspecify.annotations.Nullable;
@@ -46,10 +46,10 @@ public class ModemState {
         }
     }
 
-    public void open(int channel) throws LuaException {
+    public void open(int channel) throws ScriptException {
         synchronized (channels) {
             if (!channels.contains(channel)) {
-                if (channels.size() >= 128) throw new LuaException("Too many open channels");
+                if (channels.size() >= 128) throw new ScriptException("Too many open channels");
                 channels.add(channel);
                 setOpen(true);
             }

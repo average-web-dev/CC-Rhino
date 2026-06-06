@@ -4,7 +4,7 @@
 
 package dan200.computercraft.core.methods;
 
-import dan200.computercraft.api.lua.*;
+import dan200.computercraft.api.scripting.*;
 import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.api.peripheral.IDynamicPeripheral;
 import dan200.computercraft.api.peripheral.IPeripheral;
@@ -12,7 +12,7 @@ import dan200.computercraft.api.peripheral.IPeripheral;
 /**
  * A Lua function associated with some peripheral.
  * <p>
- * This interface is not typically implemented yourself, but instead generated from a {@link LuaFunction}-annotated
+ * This interface is not typically implemented yourself, but instead generated from a {@link ScriptFunction}-annotated
  * method.
  *
  * @see NamedMethod
@@ -28,8 +28,8 @@ public interface PeripheralMethod {
      * @param computer The interface to the computer that is making the call.
      * @param args     Arguments to this function.
      * @return The return call of this function.
-     * @throws LuaException Thrown by the underlying method call.
-     * @see IDynamicPeripheral#callMethod(IComputerAccess, ILuaContext, int, IArguments)
+     * @throws ScriptException Thrown by the underlying method call.
+     * @see IDynamicPeripheral#callMethod(IComputerAccess, IContext, int, IArguments)
      */
-    MethodResult apply(Object target, ILuaContext context, IComputerAccess computer, IArguments args) throws LuaException;
+    MethodResult apply(Object target, IContext context, IComputerAccess computer, IArguments args) throws ScriptException;
 }

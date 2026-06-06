@@ -4,7 +4,7 @@
 
 package dan200.computercraft.shared.util;
 
-import dan200.computercraft.api.lua.LuaException;
+import dan200.computercraft.api.scripting.ScriptException;
 import net.minecraft.ResourceLocationException;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
@@ -19,7 +19,7 @@ public final class ArgumentHelpers {
     private ArgumentHelpers() {
     }
 
-    public static <T> T getRegistryEntry(String name, String typeName, Registry<T> registry) throws LuaException {
+    public static <T> T getRegistryEntry(String name, String typeName, Registry<T> registry) throws ScriptException {
         ResourceLocation id;
         try {
             id = ResourceLocation.parse(name);
@@ -29,7 +29,7 @@ public final class ArgumentHelpers {
 
         T value;
         if (id == null || (value = registry.get(id)) == null) {
-            throw new LuaException(String.format("Unknown %s '%s'", typeName, name));
+            throw new ScriptException(String.format("Unknown %s '%s'", typeName, name));
         }
 
         return value;
