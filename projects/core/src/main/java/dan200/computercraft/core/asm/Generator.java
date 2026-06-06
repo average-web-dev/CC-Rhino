@@ -11,6 +11,7 @@ import com.google.common.primitives.Primitives;
 import com.google.common.reflect.TypeToken;
 import dan200.computercraft.api.lua.*;
 import dan200.computercraft.core.methods.LuaMethod;
+import dan200.computercraft.core.util.LuaUtil;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,6 +46,7 @@ final class Generator<T> {
     private static final Map<Class<?>, ArgMethods> argMethods;
     private static final ArgMethods ARG_TABLE_UNSAFE;
     private static final MethodHandle ARG_GET_OBJECT, ARG_GET_ENUM, ARG_OPT_ENUM, ARG_GET_STRING_COERCED, ARG_GET_BYTES_COERCED;
+    private static final MethodHandle ARG_GET_RECORD;
 
     private record ArgMethods(MethodHandle get, MethodHandle opt) {
         private static ArgMethods of(Class<?> type, String name) throws ReflectiveOperationException {
@@ -95,6 +97,7 @@ final class Generator<T> {
             ARG_GET_OBJECT = LOOKUP.findVirtual(IArguments.class, "get", MethodType.methodType(Object.class, int.class));
             ARG_GET_ENUM = LOOKUP.findVirtual(IArguments.class, "getEnum", MethodType.methodType(Enum.class, int.class, Class.class));
             ARG_OPT_ENUM = LOOKUP.findVirtual(IArguments.class, "optEnum", MethodType.methodType(Optional.class, int.class, Class.class));
+            ARG_GET_RECORD = LOOKUP.findStatic(Generator.class, "getRecord", MethodType.methodType(Object.class, IArguments.class, int.class, Class.class));
 
             // Create a new Coerced<>(args.getStringCoerced(_)) function.
             var mkCoerced = LOOKUP.findConstructor(Coerced.class, MethodType.methodType(void.class, Object.class));
@@ -336,6 +339,11 @@ final class Generator<T> {
 
         if (argType == Object.class) return MethodHandles.insertArguments(ARG_GET_OBJECT, 1, argIndex);
 
+        // Coerce a table argument into a record, reading each component by name (see #getRecord).
+        if (argType.isRecord()) {
+            return setReturn(MethodHandles.insertArguments(ARG_GET_RECORD, 1, argIndex, argType), argType);
+        }
+
         // Check we don't have a non-wildcard generic.
         if (Reflect.getRawType(method, genericArg, false) == null) return null;
 
@@ -348,6 +356,14 @@ final class Generator<T> {
 
     private static MethodHandle setReturn(MethodHandle handle, Class<?> retTy) {
         return handle.asType(handle.type().changeReturnType(retTy));
+    }
+
+    /**
+     * Read a record argument from a table, used by {@link #loadArg}. The argument is fetched as a table and each record
+     * component is read from it by name (see {@link LuaUtil#toRecord(Map, Class)}).
+     */
+    private static Object getRecord(IArguments arguments, int index, Class<?> type) throws LuaException {
+        return LuaUtil.toRecord(arguments.getTable(index), type);
     }
 
     private static @Nullable ArgMethods getArgMethods(Class<?> type, boolean unsafe) {

@@ -11,8 +11,6 @@ import dan200.computercraft.api.lua.LuaFunction;
 import dan200.computercraft.core.terminal.Terminal;
 import dan200.computercraft.core.util.Colour;
 
-import java.util.Map;
-
 
 /**
  * Interact with a computer's terminal or monitors, writing text and drawing ASCII graphics.
@@ -88,10 +86,10 @@ public class TermAPI extends TermMethods implements ILuaAPI {
      * @see TermMethods#setPaletteColour(IArguments) To change the palette colour.
      */
     @LuaFunction({ "nativePaletteColour", "nativePaletteColor" })
-    public final Map<String, Float> nativePaletteColour(int colour) throws LuaException {
+    public final RGB nativePaletteColour(int colour) throws LuaException {
         var actualColour = 15 - parseColour(colour);
         var c = Colour.fromInt(actualColour);
-        return Map.of("r", c.getR(), "g", c.getG(), "b", c.getB());
+        return new RGB(c.getR(), c.getG(), c.getB());
     }
 
     @Override

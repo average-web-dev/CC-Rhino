@@ -10,10 +10,8 @@ import dan200.computercraft.api.lua.LuaException;
 import dan200.computercraft.api.lua.LuaFunction;
 import dan200.computercraft.core.terminal.Palette;
 import dan200.computercraft.core.terminal.Terminal;
-import dan200.computercraft.core.util.LuaUtil;
 
 import java.nio.ByteBuffer;
-import java.util.Map;
 
 /**
  * A base class for all objects which interact with a terminal. Namely the {@link TermAPI} and monitors.
@@ -21,6 +19,18 @@ import java.util.Map;
  * @cc.module term.Redirect
  */
 public abstract class TermMethods {
+    /** A cursor position on the terminal. Coordinates are 0-based, so {@code (0, 0)} is the top-left cell. */
+    public record CursorPosition(int x, int y) {
+    }
+
+    /** The size of a terminal, in cells. */
+    public record TermSize(int width, int height) {
+    }
+
+    /** An RGB colour, each channel between 0 and 1. */
+    public record RGB(double r, double g, double b) {
+    }
+
     private static int getHighestBit(int group) {
         // Equivalent to log2(group) - 1.
         return 32 - Integer.numberOfLeadingZeros(group);
@@ -68,9 +78,9 @@ public abstract class TermMethods {
      * @throws LuaException (hidden) If the terminal cannot be found.
      */
     @LuaFunction
-    public final Map<String, Integer> getCursorPos() throws LuaException {
+    public final CursorPosition getCursorPos() throws LuaException {
         var terminal = getTerminal();
-        return Map.of("x", terminal.getCursorX(), "y", terminal.getCursorY());
+        return new CursorPosition(terminal.getCursorX(), terminal.getCursorY());
     }
 
     /**
@@ -83,12 +93,10 @@ public abstract class TermMethods {
      * @throws LuaException (hidden) If the terminal cannot be found.
      */
     @LuaFunction
-    public final void setCursorPos(Map<?, ?> pos) throws LuaException {
-        int x = LuaUtil.getField(pos, "x", Integer.class);
-        int y = LuaUtil.getField(pos, "y", Integer.class);
+    public final void setCursorPos(CursorPosition pos) throws LuaException {
         var terminal = getTerminal();
         synchronized (terminal) {
-            terminal.setCursorPos(x, y);
+            terminal.setCursorPos(pos.x(), pos.y());
         }
     }
 
@@ -125,9 +133,9 @@ public abstract class TermMethods {
      * @throws LuaException (hidden) If the terminal cannot be found.
      */
     @LuaFunction
-    public final Map<String, Integer> getSize() throws LuaException {
+    public final TermSize getSize() throws LuaException {
         var terminal = getTerminal();
-        return Map.of("width", terminal.getWidth(), "height", terminal.getHeight());
+        return new TermSize(terminal.getWidth(), terminal.getHeight());
     }
 
     /**
@@ -322,12 +330,12 @@ public abstract class TermMethods {
      * @cc.since 1.80pr1
      */
     @LuaFunction({ "getPaletteColour", "getPaletteColor" })
-    public final Map<String, Double> getPaletteColour(int colourArg) throws LuaException {
+    public final RGB getPaletteColour(int colourArg) throws LuaException {
         var colour = 15 - parseColour(colourArg);
         var terminal = getTerminal();
         synchronized (terminal) {
             var colourValues = terminal.getPalette().getColour(colour);
-            return Map.of("r", colourValues[0], "g", colourValues[1], "b", colourValues[2]);
+            return new RGB(colourValues[0], colourValues[1], colourValues[2]);
         }
     }
 

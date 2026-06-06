@@ -59,6 +59,19 @@ final class JSValues {
             }
             return obj;
         }
+        if (java.getClass().isRecord()) {
+            var obj = cx.newObject(scope);
+            for (var component : java.getClass().getRecordComponents()) {
+                Object value;
+                try {
+                    value = component.getAccessor().invoke(java);
+                } catch (ReflectiveOperationException e) {
+                    throw new IllegalStateException("Cannot read record component " + component, e);
+                }
+                ScriptableObject.putProperty(obj, component.getName(), toJs(cx, scope, value));
+            }
+            return obj;
+        }
         return null;
     }
 
