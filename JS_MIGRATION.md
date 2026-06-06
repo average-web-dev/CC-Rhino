@@ -515,13 +515,13 @@ Each continuation is bucketed by its phase rather than kept in a single flat lis
 
 ### Tasks
 
-- [ ] **12.1** Introduce `EventLoop` class in `engine/` with the four-phase structure above; keep `JSMachine` as the owner
-- [ ] **12.2** Replace the `pendingContinuations` flat list with bucketed storage (`timerQueue`, `ioPending`, `microtaskQueue`, `checkQueue`)
-- [ ] **12.3** Move timer logic out of `OSAPI.doSleep()` / `waitForTimer()` into `EventLoop.scheduleTimer(ticks, continuation)`; `os.sleep(n)` enqueues directly into `timerQueue`
-- [ ] **12.4** Move `resumePending()` logic into `EventLoop.drainIO(eventName, args)`; called from `handleEvent()` as Phase 2
-- [ ] **12.5** Add `EventLoop.drainMicrotasks()` — called after Phase 1 and Phase 2 before advancing; hooks into Rhino's `Promise` resolution if Rhino exposes one, otherwise a manual queue
-- [ ] **12.6** Expose `queueMicrotask(fn)` as a JS global backed by the microtask queue
-- [ ] **12.7** Expose `setImmediate(fn)` / `clearImmediate(handle)` as JS globals backed by `checkQueue`
+- [x] **12.1** Introduce `EventLoop` class in `engine/` with the four-phase structure above; keep `JSMachine` as the owner
+- [x] **12.2** Replace the `pendingContinuations` flat list with bucketed storage (`timerMap`, `ioMap`, `microtaskQueue`, `checkMap`)
+- [x] **12.3** Move timer logic out of `OSAPI.doSleep()` / `waitForTimer()` into `EventLoop.SleepState` + `timerMap`; `os.sleep(n)` is now a `BaseFunction` in `JSMachine` that captures a continuation with `SleepState(timerId)` and enqueues directly into `timerMap`; `OSAPI.startTimerForSleep(ticks)` is the scheduling helper
+- [x] **12.4** Move `resumePending()` logic into `EventLoop.drainIO(cx, scope, eventName, fullArgs)`; called from `handleEvent()` as Phase 2
+- [x] **12.5** Add `EventLoop.drainMicrotasks()` — called after Phase 1 and Phase 2; drains recursively so microtasks queued by microtasks also run before the next I/O phase
+- [x] **12.6** Expose `queueMicrotask(fn)` as a JS global backed by the microtask queue
+- [x] **12.7** Expose `setImmediate(fn)` / `clearImmediate(handle)` as JS globals backed by `checkMap`
 - [ ] **12.8** Verify: `os.sleep(0.05)` resumes exactly 1 tick later; multiple concurrent sleeps each fire at the right tick; `queueMicrotask` runs before the next I/O phase
 - [ ] **12.9** Update `JS_MIGRATION.md` cross-cutting reference table with event loop model
 

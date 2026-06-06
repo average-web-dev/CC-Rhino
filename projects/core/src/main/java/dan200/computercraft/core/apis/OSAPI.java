@@ -387,32 +387,15 @@ public class OSAPI implements IComputerAPI {
     }
 
     /**
-     * Pauses execution for the specified number of seconds.
-     * Uses an internal timer so other events continue to be processed while sleeping.
+     * Starts a CC timer scheduled {@code ticks} game-ticks from now and returns its ID.
+     * Used by {@code JSMachine} to wire {@code os.sleep()} directly into the Phase 1 timer map
+     * (Phase 12.3 of the JS migration) without going through the {@code MethodResult.pullEvent} chain.
      *
-     * @param seconds The number of seconds to sleep. Rounded up to the nearest tick (0.05 s).
-     * @throws ScriptException If the time is not finite.
-     * @cc.tparam number seconds The number of seconds to sleep.
-     * @cc.since CC:Rhino 1.0
-     * @cc.usage Sleep for one second.
-     * <pre>{@code
-     * os.sleep(1);
-     * }</pre>
+     * @param ticks Number of game ticks to wait (minimum 1).
+     * @return The CC timer ID.
      */
-    @ScriptFunction("sleep")
-    public MethodResult doSleep(double seconds) throws ScriptException {
-        var timerId = apiEnvironment.startTimer(Math.round(checkFinite(0, seconds) / 0.05));
-        return waitForTimer(timerId);
-    }
-
-    private MethodResult waitForTimer(int timerId) {
-        return MethodResult.pullEvent("timer", args -> {
-            // args[0] = "timer", args[1] = fired timer id
-            if (args.length >= 2 && args[1] instanceof Number id && id.intValue() == timerId) {
-                return MethodResult.of();
-            }
-            return waitForTimer(timerId); // different timer fired, keep waiting
-        });
+    public int startTimerForSleep(long ticks) {
+        return apiEnvironment.startTimer(Math.max(1L, ticks));
     }
 
 }

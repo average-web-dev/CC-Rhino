@@ -4,9 +4,10 @@
 
 package dan200.computercraft.core.engine;
 
-import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.scripting.MethodResult;
+import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.core.CoreConfig;
+import dan200.computercraft.core.apis.OSAPI;
 import dan200.computercraft.core.computer.TimeoutState;
 import org.jspecify.annotations.Nullable;
 import org.mozilla.javascript.*;
@@ -14,12 +15,11 @@ import org.mozilla.javascript.*;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.locks.LockSupport;
 
 public class JSMachine implements IMachine {
-    private static final String HARD_ABORT_MESSAGE = "hard abort";
+    // Package-visible so EventLoop.mapEvaluator() can compare against it.
+    static final String HARD_ABORT_MESSAGE = "hard abort";
 
     /**
      * JS bootstrap that installs the global {@code require()} function using the {@code __cc_loader__}
@@ -58,10 +58,10 @@ public class JSMachine implements IMachine {
     private volatile @Nullable Thread executionThread;
     private @Nullable Runnable abortListener;
 
-    // Pending Rhino continuations — one entry per blocked listener (e.g. each os.on() callback
-    // that called a blocking API). Application state on each entry is the MethodResult carrying
-    // the event filter and ICallback. Cleared on close().
-    private final List<ContinuationPending> pendingContinuations = new ArrayList<>();
+    // TODO: Phase 12 event loop — see JS_MIGRATION.md §Phase 12 for the full Node.js-style architecture.
+    //   Currently continuations are bucketed by phase (timerMap / ioMap / microtaskQueue / checkMap)
+    //   rather than kept in a flat list, giving O(1) lookup per event.
+    private final EventLoop eventLoop = new EventLoop();
 
     private boolean started = false;
     private volatile boolean isDisposed = false;
@@ -90,6 +90,12 @@ public class JSMachine implements IMachine {
 
         emitter = new JSEventEmitter();
 
+        // Find OSAPI — needed to schedule sleep timers directly into the event loop (Phase 12.3).
+        OSAPI osApi = null;
+        for (var api : environment.apis()) {
+            if (api instanceof OSAPI osa) { osApi = osa; break; }
+        }
+
         // Build the module loader and register all CC APIs as native modules.
         var loader = new JSRequire(scope, environment.fileSystem());
         var context = environment.context();
@@ -98,11 +104,14 @@ public class JSMachine implements IMachine {
             for (var name : api.getNames()) {
                 var obj = JSAPIBuilder.build(cx, scope, api, context, methods);
                 if ("os".equals(name)) {
-                    addEmitterMethods(obj);
+                    addOsMethods(obj, osApi);
                 }
                 loader.registerNative(name, obj);
             }
         }
+
+        // Register event-loop globals (queueMicrotask, setImmediate, clearImmediate).
+        addEventLoopGlobals();
 
         // Expose loader, run the JS require() setup, then remove the loader from global scope.
         // The setup script captures a reference via closure so require() still works after deletion.
@@ -120,8 +129,8 @@ public class JSMachine implements IMachine {
         timeout.addListener(abortListener);
     }
 
-    /** Attach on/once/off/listenerCount to the given object, backed by this machine's emitter. */
-    private void addEmitterMethods(Scriptable obj) {
+    /** Attach os event-emitter methods + sleep to the {@code os} native module object. */
+    private void addOsMethods(Scriptable obj, @Nullable OSAPI osApi) {
         ScriptableObject.putProperty(obj, "on", new BaseFunction() {
             @Override
             public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
@@ -155,6 +164,52 @@ public class JSMachine implements IMachine {
                 return (double) emitter.listenerCount(Context.toString(args[0]));
             }
         });
+
+        // sleep — Phase 12.3: captures a continuation directly into the timer map so Phase 1
+        // resumes it in O(1) when the matching CC timer fires, without going through ioMap["timer"].
+        if (osApi != null) {
+            var capturedOsApi = osApi;
+            ScriptableObject.putProperty(obj, "sleep", new BaseFunction() {
+                @Override
+                public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                    double seconds = args.length > 0 ? Context.toNumber(args[0]) : 0;
+                    long ticks = Math.max(1L, Math.round(seconds / 0.05));
+                    int timerId = capturedOsApi.startTimerForSleep(ticks);
+                    var pending = cx.captureContinuation();
+                    pending.setApplicationState(new EventLoop.SleepState(timerId));
+                    throw pending;
+                }
+            });
+        }
+    }
+
+    /** Register global event-loop functions: queueMicrotask, setImmediate, clearImmediate. */
+    private void addEventLoopGlobals() {
+        ScriptableObject.putProperty(scope, "queueMicrotask", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length == 0 || !(args[0] instanceof Callable fn))
+                    throw Context.reportRuntimeError("queueMicrotask(fn): fn must be a function");
+                eventLoop.scheduleMicrotask(fn);
+                return Undefined.instance;
+            }
+        });
+        ScriptableObject.putProperty(scope, "setImmediate", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length == 0 || !(args[0] instanceof Callable fn))
+                    throw Context.reportRuntimeError("setImmediate(fn): fn must be a function");
+                return (double) eventLoop.scheduleImmediate(fn);
+            }
+        });
+        ScriptableObject.putProperty(scope, "clearImmediate", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length > 0 && args[0] instanceof Number n)
+                    eventLoop.cancelImmediate(n.intValue());
+                return Undefined.instance;
+            }
+        });
     }
 
     @Override
@@ -168,7 +223,7 @@ public class JSMachine implements IMachine {
                 try {
                     cx.executeScriptWithContinuations(biosScript, scope);
                 } catch (ContinuationPending pending) {
-                    pendingContinuations.add(pending);
+                    eventLoop.schedule(pending);
                 } catch (EvaluatorException e) {
                     return mapException(e);
                 } catch (RhinoException e) {
@@ -185,15 +240,32 @@ public class JSMachine implements IMachine {
             // Null event after startup is a no-op (Phase 5.4).
             if (eventName == null) return MachineResult.OK;
 
-            // Resume any pending blocking continuations whose event filter matches.
-            if (!pendingContinuations.isEmpty()) {
-                var contResult = resumePending(eventName, arguments);
-                if (contResult.isError()) return contResult;
+            var rawArgs = arguments != null ? arguments : new Object[0];
+            var fullArgs = buildFullArgs(eventName, rawArgs);
+
+            // Phase 1 — Timers: wake up os.sleep() continuations whose CC timer just fired.
+            if ("timer".equals(eventName) && rawArgs.length >= 1 && rawArgs[0] instanceof Number n) {
+                var r = eventLoop.drainTimers(cx, scope, n.intValue());
+                if (r.isError()) { close(); return r; }
             }
 
-            // Dispatch to os.on() listeners regardless of whether a continuation is pending.
-            var jsArgs = toJsArgs(arguments);
-            return emitSafe(eventName, jsArgs);
+            // Phase 2 — I/O: resume continuations waiting for this event (+ Phase 3 microtasks).
+            var r2 = eventLoop.drainIO(cx, scope, eventName, fullArgs);
+            if (r2.isError()) { close(); return r2; }
+
+            // Dispatch os.on() listeners for this event (also I/O phase).
+            var emitResult = emitSafe(eventName, toJsArgs(arguments));
+            if (emitResult.isError()) return emitResult; // emitSafe already called close()
+
+            // Phase 3 — drain microtasks queued by os.on() listeners.
+            var r3 = eventLoop.drainMicrotasks(cx, scope);
+            if (r3.isError()) { close(); return r3; }
+
+            // Phase 4 — Check: run setImmediate callbacks (+ Phase 3 microtasks).
+            var r4 = eventLoop.drainCheck(cx, scope);
+            if (r4.isError()) { close(); return r4; }
+
+            return MachineResult.OK;
 
         } finally {
             executionThread = null;
@@ -208,87 +280,19 @@ public class JSMachine implements IMachine {
         return result;
     }
 
-    /** Call emitter.emit(), mapping any Rhino exceptions to MachineResult. */
+    private static Object[] buildFullArgs(String eventName, Object[] args) {
+        var fullArgs = new Object[args.length + 1];
+        fullArgs[0] = eventName;
+        System.arraycopy(args, 0, fullArgs, 1, args.length);
+        return fullArgs;
+    }
+
+    /** Call emitter.emit(), routing any captured continuations into the event loop. */
     private MachineResult emitSafe(String event, Object[] jsArgs) {
         try {
             emitter.emit(cx, scope, event, jsArgs);
         } catch (MultiContinuationPending multi) {
-            // One or more os.on() callbacks made a blocking call — add them all to the pending list.
-            pendingContinuations.addAll(multi.continuations());
-        } catch (EvaluatorException e) {
-            return mapException(e);
-        } catch (RhinoException e) {
-            close();
-            return MachineResult.error(e.getMessage() != null ? e.getMessage() : e.toString());
-        } catch (Exception e) {
-            close();
-            return MachineResult.error(e.getMessage() != null ? e.getMessage() : e.toString());
-        }
-        return MachineResult.OK;
-    }
-
-    /**
-     * Walk every pending continuation. For each one whose event filter matches {@code eventName},
-     * drive its callback chain. If the chain resolves, resume the Rhino continuation with the
-     * result (which may itself yield again, adding a new entry). Continuations whose filter does
-     * not match are left untouched for the next event.
-     */
-    private MachineResult resumePending(@Nullable String eventName, @Nullable Object @Nullable [] arguments) {
-        var args = arguments != null ? arguments : new Object[0];
-        var fullArgs = new Object[args.length + 1];
-        fullArgs[0] = eventName;
-        System.arraycopy(args, 0, fullArgs, 1, args.length);
-
-        // Snapshot and clear so that resumeContinuation() can safely append new entries
-        // without causing a ConcurrentModificationException.
-        var snapshot = new ArrayList<>(pendingContinuations);
-        pendingContinuations.clear();
-
-        for (var pending : snapshot) {
-            var mr = (MethodResult) pending.getApplicationState();
-
-            // Check event filter — null filter accepts any event.
-            var filterResult = mr.getResult();
-            @Nullable String filter = filterResult != null && filterResult.length > 0 && filterResult[0] instanceof String s
-                ? s : null;
-            if (filter != null && !filter.equals(eventName)) {
-                pendingContinuations.add(pending); // keep for a future event
-                continue;
-            }
-
-            var callback = mr.getCallback();
-            if (callback == null) continue; // no callback — discard
-
-            try {
-                var newMr = callback.resume(fullArgs);
-                if (newMr.getCallback() == null) {
-                    // Callback chain complete — resume the stored JS continuation.
-                    var jsResult = JSValues.toJsResult(cx, scope, newMr.getResult());
-                    var contResult = resumeContinuation(pending, jsResult);
-                    if (contResult.isError()) return contResult;
-                } else {
-                    // Still waiting for another event — put back with updated app state.
-                    pending.setApplicationState(newMr);
-                    pendingContinuations.add(pending);
-                }
-            } catch (ScriptException e) {
-                var msg = e.getMessage();
-                close();
-                return MachineResult.error(msg != null ? msg : e.toString());
-            }
-        }
-        return MachineResult.OK;
-    }
-
-    /**
-     * Resume a single Rhino continuation with {@code jsResult}. If the resumed code yields again
-     * (another blocking call), the new continuation is appended to {@link #pendingContinuations}.
-     */
-    private MachineResult resumeContinuation(ContinuationPending pending, Object jsResult) {
-        try {
-            cx.resumeContinuation(pending.getContinuation(), scope, jsResult);
-        } catch (ContinuationPending newPending) {
-            pendingContinuations.add(newPending);
+            for (var p : multi.continuations()) eventLoop.schedule(p);
         } catch (EvaluatorException e) {
             return mapException(e);
         } catch (RhinoException e) {
@@ -323,7 +327,7 @@ public class JSMachine implements IMachine {
     public void close() {
         if (isDisposed) return;
         isDisposed = true;
-        pendingContinuations.clear();
+        eventLoop.clear();
         var listener = abortListener;
         if (listener != null) {
             timeout.removeListener(listener);
