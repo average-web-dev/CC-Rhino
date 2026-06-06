@@ -95,11 +95,15 @@ final class JSValues {
     /** Convert a Rhino JS value to a Java/CC value. */
     static @Nullable Object toJava(@Nullable Object v) {
         if (v == null || v instanceof Undefined) return null;
-        if (v instanceof Boolean || v instanceof String) return v;
+        if (v instanceof Boolean) return v;
+        // Handle CharSequence, not just String: Rhino's `+` operator may yield a lazy ConsString.
+        if (v instanceof CharSequence) return v.toString();
         if (v instanceof Number n) {
             double d = n.doubleValue();
             long l = (long) d;
-            return d == l ? l : d;
+            // Note: avoid `d == l ? l : d` — the ternary promotes both branches to double.
+            if (d == l) return l;
+            return d;
         }
         if (v instanceof NativeArray arr) {
             var len = (int) arr.getLength();

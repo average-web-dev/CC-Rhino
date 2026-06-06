@@ -70,13 +70,13 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 
 ## Phase 1 — Project setup & dependency wiring
 
-- [ ] **1.1** Add Rhino to `gradle/libs.versions.toml`:
+- [x] **1.1** Add Rhino to `gradle/libs.versions.toml`:
   - `[versions]` entry: `rhino = "1.9.1"`
   - `[libraries]` entry: `rhino = { module = "org.mozilla:rhino", version.ref = "rhino" }`
-- [ ] **1.2** Replace GraalJS `implementation` dependency in `projects/core/build.gradle.kts` with `implementation(libs.rhino)`; keep Cobalt for now
-- [ ] **1.3** Add `public static int jsInstructionThreshold = 10_000;` to `CoreConfig.java`
-- [ ] **1.4** Smoke-check: `./gradlew :core:compileJava` passes with no errors
-- [ ] **Commit** — stage Phase 1 files; propose commit message; wait for user approval
+- [x] **1.2** Replace GraalJS `implementation` dependency in `projects/core/build.gradle.kts` with `implementation(libs.rhino)`; keep Cobalt for now
+- [x] **1.3** Add `public static int jsInstructionThreshold = 10_000;` to `CoreConfig.java`
+- [x] **1.4** Smoke-check: `./gradlew :core:compileJava` passes with no errors
+- [x] **Commit** — stage Phase 1 files; propose commit message; wait for user approval
 
 ---
 
@@ -86,18 +86,18 @@ Set up the transpile-on-build pipeline before writing any bios or ROM files.
 All JS authored for the CC runtime lives under `projects/core/src/ts/` and is never
 committed as raw `.js` — Gradle emits the `.js` output into the resource tree.
 
-- [ ] **1.5.1** Add `projects/core/src/ts/tsconfig.json`:
+- [x] **1.5.1** Add `projects/core/src/ts/tsconfig.json`:
   `module: commonjs`, `target: es2017`, `strict`, `noEmitOnError` — emits CommonJS `require()` calls, matching the Rhino runtime
-- [ ] **1.5.2** Wire transpile into the `:core` build reusing `NpxExecToDir` task; `tsc` outputs into `build/generated/js`
-- [ ] **1.5.3** Feed generated dir into `processResources` under `data/computercraft/js/`
-- [ ] **1.5.4** Smoke-check: `./gradlew :core:processResources` succeeds (empty `src/ts/` is fine at this point)
-- [ ] **Commit** — stage Phase 1.5 files; propose commit message; wait for user approval
+- [x] **1.5.2** Wire transpile into the `:core` build reusing `NpxExecToDir` task; `tsc` outputs into `build/generated/js`
+- [x] **1.5.3** Feed generated dir into `processResources` under `data/computercraft/js/`
+- [x] **1.5.4** Smoke-check: `./gradlew :core:processResources` succeeds (empty `src/ts/` is fine at this point)
+- [x] **Commit** — stage Phase 1.5 files; propose commit message; wait for user approval
 
 ---
 
 ## Phase 2 — JSMachine skeleton
 
-- [ ] **2.1** Create `projects/core/src/main/java/dan200/computercraft/core/lua/JSMachine.java` implementing `ILuaMachine`
+- [x] **2.1** Create `projects/core/src/main/java/dan200/computercraft/core/lua/JSMachine.java` implementing `ILuaMachine`
   - Fields: `Context cx`, `Scriptable scope`, `boolean started`, `boolean isDisposed`
   - Constructor:
     - `cx = Context.enter()`
@@ -109,26 +109,26 @@ committed as raw `.js` — Gradle emits the `.js` output into the resource tree.
   - `handleEvent(String name, Object[] args)` → runs bios on first call (startup), returns `MachineResult.OK`
   - `printExecutionState()` → stub
   - `close()` → `isDisposed = true; Context.exit()`
-- [ ] **2.2** Create `projects/core/src/main/java/dan200/computercraft/core/computer/JSContext.java` implementing `ILuaContext`
+- [x] **2.2** Create `projects/core/src/main/java/dan200/computercraft/core/computer/JSContext.java` implementing `ILuaContext`
   - `issueMainThreadTask()` → same as `LuaContext` (queue via `computer.queueMainThread()`, return task ID)
   - `executeMainThreadTask()`: See Phase 5 — this is where continuations are captured instead of blocking
-- [ ] **2.3** In `ComputerContext.Builder.build()` change the default factory from `CobaltLuaMachine::new` to `JSMachine::new`
-- [ ] **2.4** Create `projects/core/src/ts/bios.ts` — minimal stub (transpiles to `data/computercraft/js/bios.js` at build time):
+- [x] **2.3** In `ComputerContext.Builder.build()` change the default factory from `CobaltLuaMachine::new` to `JSMachine::new`
+- [x] **2.4** Create `projects/core/src/ts/bios.ts` — minimal stub (transpiles to `data/computercraft/js/bios.js` at build time):
 
   ```ts
   const term = require('term');
   term.write("JS bios loaded");
   ```
 
-- [ ] **2.5** In `ComputerExecutor.createLuaMachine()` change the resource path from `"lua/bios.lua"` to `"js/bios.js"` (the transpiled output), and pass `JSContext` instead of `LuaContext`
-- [ ] **2.6** Verify: `JSMachineTest` (3 tests) — boot returns OK, `print()` runs without error, subsequent events return OK
-- [ ] **Commit** — stage Phase 2 files; propose commit message; wait for user approval
+- [x] **2.5** In `ComputerExecutor.createLuaMachine()` change the resource path from `"lua/bios.lua"` to `"js/bios.js"` (the transpiled output), and pass `JSContext` instead of `LuaContext`
+- [x] **2.6** Verify: `JSMachineTest` (3 tests) — boot returns OK, `print()` runs without error, subsequent events return OK
+- [x] **Commit** — stage Phase 2 files; propose commit message; wait for user approval
 
 ---
 
 ## Phase 3 — CommonJS `require()` module resolver
 
-- [ ] **3.1** `JSRequire.java` — `BaseFunction` implementing CommonJS `require(id)`:
+- [x] **3.1** `JSRequire.java` — `BaseFunction` implementing CommonJS `require(id)`:
   - Resolution order for `id`:
     1. **Native module registry** — `nativeModules.get(id)` (Java `Map<String, Scriptable>`); return immediately if found (no caching needed, they are singletons)
     2. **Path resolution** for file-based modules:
@@ -142,27 +142,27 @@ committed as raw `.js` — Gradle emits the `.js` output into the resource tree.
   - Eval with `cx.evaluateString(moduleScope, wrapped, path, 1, null)`
   - Call wrapper with fresh `module = { exports: {} }` and `exports = module.exports`
   - Store `require.cache[resolvedPath] = module.exports`; return `module.exports`
-- [ ] **3.2** `JSMachine` creates a `JSRequire` instance, exposes it as the **sole global** (`scope.put("require", scope, jsRequire)`); sets `require.paths = ["/rom/apis"]`; sets `require.cache = {}`; Java APIs are pre-registered via `jsRequire.registerNative(name, obj)` (see Phase 6.6)
-- [ ] **3.3** `bios.ts` `__start__` handler does `require("/startup")` (loads `/startup.js` if present); silently ignores `MODULE_NOT_FOUND` error
-- [ ] **Commit** — stage Phase 3 files; propose commit message; wait for user approval
+- [x] **3.2** `JSMachine` creates a `JSRequire` instance, exposes it as the **sole global** (`scope.put("require", scope, jsRequire)`); sets `require.paths = ["/rom/apis"]`; sets `require.cache = {}`; Java APIs are pre-registered via `jsRequire.registerNative(name, obj)` (see Phase 6.6)
+- [x] **3.3** `bios.ts` `__start__` handler does `require("/startup")` (loads `/startup.js` if present); silently ignores `MODULE_NOT_FOUND` error
+- [x] **Commit** — stage Phase 3 files; propose commit message; wait for user approval
 
 ---
 
 ## Phase 4 — Tight loop safepoint (observeInstructionCount)
 
-- [ ] **4.1** Subclass `ContextFactory` as `CCContextFactory` in `JSMachine`:
+- [x] **4.1** Subclass `ContextFactory` as `CCContextFactory` in `JSMachine`:
   - Override `observeInstructionCount(Context cx, int instructionCount)`:
     - `isDisposed || timeout.isHardAborted()` → `throw new EvaluatorException("hard abort")` (terminates script)
     - `timeout.isSoftAborted()` → `throw new EvaluatorException(ABORT_MESSAGE)`
     - `timeout.isPaused()` → spin-wait with `LockSupport.parkNanos(1ms)` (blocks this call; Rhino will retry)
     - Normal → return (threshold resets automatically, execution continues)
   - Register via `ContextFactory.initGlobal(new CCContextFactory())`
-- [ ] **4.2** In `handleEvent()` / `mapException()`: catch `EvaluatorException` / `RhinoException`:
+- [x] **4.2** In `handleEvent()` / `mapException()`: catch `EvaluatorException` / `RhinoException`:
   - Message equals hard-abort sentinel → `MachineResult.TIMEOUT`
   - Message equals `ABORT_MESSAGE` → `error(ABORT_MESSAGE)`
   - Other → `error(message)` + close
-- [ ] **4.3** `onTimeoutChanged()` listener calls `cx.observeInstructionCount(cx, 0)` on hard abort as a wake signal — the safepoint will then throw the hard abort exception on the next instruction check
-- [ ] **Commit** — stage Phase 4 files; propose commit message; wait for user approval
+- [x] **4.3** `onTimeoutChanged()` listener calls `cx.observeInstructionCount(cx, 0)` on hard abort as a wake signal — the safepoint will then throw the hard abort exception on the next instruction check
+- [x] **Commit** — stage Phase 4 files; propose commit message; wait for user approval
 
 ---
 
@@ -172,7 +172,7 @@ The listener registry is implemented entirely in Java — no JS eval, no embedde
 resource file. This avoids bridging overhead and keeps the event infrastructure as a plain Java
 object with a clear lifecycle tied to `JSMachine`.
 
-- [ ] **5.1** Create `JSEventEmitter.java`:
+- [x] **5.1** Create `JSEventEmitter.java`:
   - Inner record `ListenerEntry(Callable fn, boolean once)`
   - Field: `Map<String, List<ListenerEntry>> listeners = new HashMap<>()`
   - `void on(String event, Callable fn)` — appends `ListenerEntry(fn, false)`
@@ -180,13 +180,13 @@ object with a clear lifecycle tied to `JSMachine`.
   - `void off(String event, Callable fn)` — removes entries whose `fn` matches
   - `void emit(Context cx, Scriptable scope, String event, Object[] jsArgs)` — snapshots the list, removes `once` entries, calls each `fn.call(cx, scope, scope, jsArgs)`
   - `int listenerCount(String event)` — returns list size
-- [ ] **5.2** Do **not** inject anything as a global. Instead, register a native `events` module (see Phase 3) that exposes the emitter. `JSMachine` holds `JSEventEmitter emitter` as a field; `require('events')` returns a `NativeObject` wrapping `emitter.on/once/off/listenerCount` as `BaseFunction` instances, plus `emit`/`queueEvent` and the CC timer/alarm methods (`startTimer`, `cancelTimer`, `setAlarm`, `cancelAlarm`). The remaining CC `os` methods (shutdown, reboot, label, clock, in-game time/day/epoch) are registered as a separate `process` module. See [JS_API_REDESIGN.md](JS_API_REDESIGN.md) for the split.
-- [ ] **5.3** `handleEvent(String name, Object[] args)`:
+- [x] **5.2** Do **not** inject anything as a global. Instead, register a native `events` module (see Phase 3) that exposes the emitter. `JSMachine` holds `JSEventEmitter emitter` as a field; `require('events')` returns a `NativeObject` wrapping `emitter.on/once/off/listenerCount` as `BaseFunction` instances, plus `emit`/`queueEvent` and the CC timer/alarm methods (`startTimer`, `cancelTimer`, `setAlarm`, `cancelAlarm`). The remaining CC `os` methods (shutdown, reboot, label, clock, in-game time/day/epoch) are registered as a separate `process` module. See [JS_API_REDESIGN.md](JS_API_REDESIGN.md) for the split.
+- [x] **5.3** `handleEvent(String name, Object[] args)`:
   - First call (`!started`) → `started = true` → eval bios.js resource → `emitter.emit(cx, scope, "__start__", new Object[0])`
   - Subsequent calls → convert `args` via `toJsValue()` → `emitter.emit(cx, scope, name, jsArgs)`
   - `toJsValue()` handles: null → `null`; Boolean/Number/String → wrap; byte[]/ByteBuffer → JS array; Map/Collection → `NativeObject`/`NativeArray`; recursive, cycle-safe
-- [ ] **5.4** `handleEvent` returns `MachineResult.OK` immediately when `name` is null
-- [ ] **Commit** — stage Phase 5 files; propose commit message; wait for user approval
+- [x] **5.4** `handleEvent` returns `MachineResult.OK` immediately when `name` is null
+- [x] **Commit** — stage Phase 5 files; propose commit message; wait for user approval
 
 ---
 
@@ -196,16 +196,16 @@ This is the heart of the event loop. Instead of blocking the computer thread ins
 `executeMainThreadTask()`, we capture a Rhino continuation and return immediately.
 The CC scheduler remains free to process other events while the main-thread task runs.
 
-- [ ] **6.1** Create `JSValues.java` — bidirectional Java ↔ JS value converter
+- [x] **6.1** Create `JSValues.java` — bidirectional Java ↔ JS value converter
   - `toJS(Scriptable scope, Object java)` → handles null, Number, Boolean, String, byte[], Map, Collection, Object[], ILuaFunction, IDynamicLuaObject (recursive, cycle-safe)
   - `toJava(Object v)` → unwrap NativeObject/NativeArray/primitives back to Java types
-- [ ] **6.2** `JSArguments.java` — `IArguments` backed by `Object[]` (Rhino values); `get()` uses `JSValues.toJava()`; `drop()` via offset
-- [ ] **6.3** `JSMethodBridge.java` — `BaseFunction` wrapping `LuaMethod`:
+- [x] **6.2** `JSArguments.java` — `IArguments` backed by `Object[]` (Rhino values); `get()` uses `JSValues.toJava()`; `drop()` via offset
+- [x] **6.3** `JSMethodBridge.java` — `BaseFunction` wrapping `LuaMethod`:
   - `call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args)`:
     - Wrap args as `JSArguments`
     - If method requires `ILuaContext` (i.e. calls `executeMainThreadTask`): capture continuation via `throw cx.captureContinuation()` after queuing; see **6.4**
     - No-callback methods: call method, convert result with `JSValues.toJS()`, return directly
-- [ ] **6.4** Continuation flow in `JSContext.executeMainThreadTask()`:
+- [x] **6.4** Continuation flow in `JSContext.executeMainThreadTask()`:
   - Queue task via `computer.queueMainThread()` (non-blocking, stores `taskId`)
   - Capture continuation: `throw cx.captureContinuation()` — **this unwinds the Rhino call stack back to `handleEvent()`**
   - `handleEvent()` catches `ContinuationPending`:
@@ -217,19 +217,19 @@ The CC scheduler remains free to process other events while the main-thread task
     - Calls `cx.resumeContinuation(pendingContinuation.getContinuation(), scope, jsResult)` — JS resumes from `turtle.dig()` call site
     - Clears `pendingContinuation` / `pendingTaskId`
   - While task is pending, all other events (`"redstone"`, `"char"`, etc.) are dispatched normally via `__emitter__.emit()` — `events.on()` callbacks fire as usual
-- [ ] **6.5** `JSAPIBuilder.java` — enumerates methods via `forEachMethod`, wraps each as `JSMethodBridge`, returns `NativeObject` (scriptable map)
-- [ ] **6.6** `JSMachine` constructor registers every CC API as a **native module** in `JSRequire` (not as a global):
+- [x] **6.5** `JSAPIBuilder.java` — enumerates methods via `forEachMethod`, wraps each as `JSMethodBridge`, returns `NativeObject` (scriptable map)
+- [x] **6.6** `JSMachine` constructor registers every CC API as a **native module** in `JSRequire` (not as a global):
   - `jsRequire.registerNative(api.getModuleName(), JSAPIBuilder.build(api))` for each API in `env.apis()`
   - Split the CC `os` API: the EventEmitter `on/once/off` + `emit`/timers/alarms become the `events` module; the rest (shutdown, reboot, label, clock, in-game time) become the `process` module
   - The only global set on `scope` is `require` itself (plus the global timer functions `setTimeout`/`setInterval`/`clearTimeout`/`clearInterval` and `sleep`)
-- [ ] **6.7** `bios.ts` updated — loads `term` via `require`; `print` is a plain TS helper defined in `bios.ts`. Terminal coordinates are **0-based** and `getCursorPos()` returns an object:
+- [x] **6.7** `bios.ts` updated — loads `term` via `require`; `print` is a plain TS helper defined in `bios.ts`. Terminal coordinates are **0-based** and `getCursorPos()` returns an object:
 
   ```ts
   const term = require('term');
   function print(text: string): void { term.write(String(text)); const { y } = term.getCursorPos(); term.setCursorPos(0, y + 1); }
   ```
 
-- [ ] **Commit** — stage Phase 6 files; propose commit message; wait for user approval
+- [x] **Commit** — stage Phase 6 files; propose commit message; wait for user approval
 
 ---
 
@@ -242,7 +242,7 @@ The CC scheduler remains free to process other events while the main-thread task
   - `cx.setOptimizationLevel(-1)` already set — no class generation, no reflection bypass via bytecode
 - [x] **7.2** Verify `java.lang.Runtime.getRuntime().exec("ls")` throws from JS — covered by `java_runtime_exec_is_blocked()` and `java_packages_global_is_removed()` / `java_interop_globals_are_removed()` tests
 - [x] **7.3** Verify API objects only expose wrapped `BaseFunction` methods, not arbitrary Java fields — guaranteed by `JSAPIBuilder` which only puts `JSMethodBridge` (BaseFunction) instances on the returned NativeObject; no raw Java references are exposed
-- [ ] **Commit** — stage Phase 7 files; propose commit message; wait for user approval
+- [x] **Commit** — stage Phase 7 files; propose commit message; wait for user approval
 
 ---
 
@@ -252,8 +252,8 @@ Wire the ROM directory into the CC filesystem so Phase 11 programs are accessibl
 Do **not** write any `.ts` files under `src/ts/rom/` here — all ROM content is authored in Phase 11
 after `JS_ROM_FEATURES.md` defines the feature contracts.
 
-- [ ] **7.5.1** Create `projects/core/src/ts/rom/` (empty placeholder; populated in Phase 11)
-- [ ] **7.5.2** Update `ComputerExecutor` to mount `js/rom` at `/rom` in the CC filesystem
+- [x] **7.5.1** Create `projects/core/src/ts/rom/` (empty placeholder; populated in Phase 11)
+- [x] **7.5.2** Update `ComputerExecutor` to mount `js/rom` at `/rom` in the CC filesystem
 - [ ] **7.5.3** Update `bios.ts` to attempt `require("/startup")` (silently ignores `MODULE_NOT_FOUND`) then boot `/rom/programs/shell.js`
 - [ ] **Commit** — stage Phase 7.5 files; propose commit message; wait for user approval
 
@@ -261,12 +261,12 @@ after `JS_ROM_FEATURES.md` defines the feature contracts.
 
 ## Phase 8 — Testing
 
-- [ ] **8.1** `JSMachineTest.java` — create `JSMachine` with a dummy `MachineEnvironment`; call `handleEvent(null, null)`; expect `MachineResult.OK`
-- [ ] **8.2** `JSEventBridgeTest.java` — eval `var events = require('events'); events.on("foo", function(v) { result = v; })` from JS; call `handleEvent("foo", new Object[]{"bar"})` from Java; verify `result` equals `"bar"`
-- [ ] **8.3** `JSBlockingAPITest.java` — mock a `LuaMethod` that calls `executeMainThreadTask`; verify continuation is captured on first `handleEvent`; fire `task_complete`; verify JS resumes with correct result
-- [ ] **8.4** `JSConcurrentEventTest.java` — while a continuation is pending (dig in progress), call `handleEvent("redstone", ...)` and verify the `events.on("redstone", cb)` callback fires without resuming the dig continuation
-- [ ] **8.5** `JSRequireTest.java` — write a virtual `.js` file to a test filesystem; `require()` it from bios.js; verify it executes and `module.exports` is returned
-- [ ] **8.6** `JSSafePointTest.java` — run `while(true){}` in user JS; verify `MachineResult.TIMEOUT` or error is returned within a bounded time
+- [x] **8.1** `JSMachineTest.java` — create `JSMachine` with a dummy `MachineEnvironment`; call `handleEvent(null, null)`; expect `MachineResult.OK`
+- [x] **8.2** `JSEventBridgeTest.java` — eval `var os = require('os'); os.on("foo", cb)` from JS (the emitter is exposed on the `os` module, not a separate `events` module); call `handleEvent("foo", new Object[]{"bar"})` from Java; verify the callback receives `"bar"`. Also covers `once`/`off`.
+- [x] **8.3** `JSBlockingAPITest.java` — mock an `ApiMethod` that calls `executeMainThreadTask`; verify the continuation is captured on the first `handleEvent` (code after the call has not run); fire `task_complete`; verify JS resumes with the task result. Also covers a non-matching task id.
+- [x] **8.4** `JSConcurrentEventTest.java` — while a continuation is pending (dig in progress), call `handleEvent("redstone", ...)` and verify the `os.on("redstone", cb)` callback fires without resuming the dig continuation; then `task_complete` resumes it.
+- [x] **8.5** `JSRequireTest.java` — write a virtual `.js` file to a `MemoryMount` filesystem; `require()` it from bios.js; verify it executes and `module.exports` is returned, is cached across requires, and that a missing module throws `MODULE_NOT_FOUND`.
+- [x] **8.6** `JSSafePointTest.java` — run `while(true){}` in user JS and trigger an abort from another thread; verify `MachineResult.TIMEOUT` (hard) / abort-message error (soft) is returned within a bounded time.
 - [ ] **8.7** Remove/adapt Cobalt-specific tests:
   - Delete `CobaltLuaTableTest.java`, `VarargArgumentsTest.java`, `ErrorInfoLibTest.java`
   - Adapt `ComputerTestDelegate.java` to use `JSMachine` instead of `CobaltLuaMachine`
@@ -287,7 +287,7 @@ after `JS_ROM_FEATURES.md` defines the feature contracts.
 - [x] **9.8** Rename `ILuaMachine` → `IMachine` and `ILuaMachine.Factory` → `IMachine.Factory` everywhere (including `KotlinLuaMachine.kt`)
 - [x] **9.9** Rename `MachineEnvironment`, `MachineResult`, `MachineException`, `TimeoutState` Javadocs to drop Lua-specific language
 - [x] **9.10** All new JS-engine source files already carry MPL-2.0 SPDX headers
-- [ ] **Commit** — stage Phase 9 files; propose commit message; wait for user approval
+- [x] **Commit** — stage Phase 9 files; propose commit message; wait for user approval
 
 ---
 
