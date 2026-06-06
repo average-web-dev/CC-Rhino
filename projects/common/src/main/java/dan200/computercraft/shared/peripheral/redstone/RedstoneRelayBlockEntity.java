@@ -43,7 +43,12 @@ public final class RedstoneRelayBlockEntity extends BlockEntity {
 
         updateAll = false;
 
-        if (redstoneState.pollInputChanged()) peripheral.queueRedstoneEvent();
+        var changedInputs = redstoneState.pollInputChanges();
+        for (var side : ComputerSide.values()) {
+            if ((changedInputs & (1 << side.ordinal())) != 0) {
+                peripheral.queueRedstoneEvent(side.getName(), redstoneState.getInput(side));
+            }
+        }
     }
 
     void neighborChanged(BlockPos neighbour) {

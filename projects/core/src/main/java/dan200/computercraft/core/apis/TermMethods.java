@@ -10,8 +10,10 @@ import dan200.computercraft.api.lua.LuaException;
 import dan200.computercraft.api.lua.LuaFunction;
 import dan200.computercraft.core.terminal.Palette;
 import dan200.computercraft.core.terminal.Terminal;
+import dan200.computercraft.core.util.LuaUtil;
 
 import java.nio.ByteBuffer;
+import java.util.Map;
 
 /**
  * A base class for all objects which interact with a terminal. Namely the {@link TermAPI} and monitors.
@@ -60,31 +62,33 @@ public abstract class TermMethods {
     }
 
     /**
-     * Get the position of the cursor.
+     * Get the position of the cursor. Coordinates are 0-based, so {@code { x: 0, y: 0 }} is the top-left cell.
      *
-     * @return The cursor's position.
+     * @return The cursor's position, as an object with {@code x} and {@code y} fields.
      * @throws LuaException (hidden) If the terminal cannot be found.
-     * @cc.treturn number The x position of the cursor.
-     * @cc.treturn number The y position of the cursor.
      */
     @LuaFunction
-    public final Object[] getCursorPos() throws LuaException {
+    public final Map<String, Integer> getCursorPos() throws LuaException {
         var terminal = getTerminal();
-        return new Object[]{ terminal.getCursorX() + 1, terminal.getCursorY() + 1 };
+        return Map.of("x", terminal.getCursorX(), "y", terminal.getCursorY());
     }
 
     /**
      * Set the position of the cursor. {@link #write(Coerced) terminal writes} will begin from this position.
+     * <p>
+     * The position is given as an object in the same shape {@link #getCursorPos()} returns
+     * ({@code setCursorPos({ x, y })}). Coordinates are 0-based.
      *
-     * @param x The new x position of the cursor.
-     * @param y The new y position of the cursor.
+     * @param pos The new cursor position, as an object with {@code x} and {@code y} fields.
      * @throws LuaException (hidden) If the terminal cannot be found.
      */
     @LuaFunction
-    public final void setCursorPos(int x, int y) throws LuaException {
+    public final void setCursorPos(Map<?, ?> pos) throws LuaException {
+        int x = LuaUtil.getField(pos, "x", Integer.class);
+        int y = LuaUtil.getField(pos, "y", Integer.class);
         var terminal = getTerminal();
         synchronized (terminal) {
-            terminal.setCursorPos(x - 1, y - 1);
+            terminal.setCursorPos(x, y);
         }
     }
 
@@ -117,15 +121,13 @@ public abstract class TermMethods {
     /**
      * Get the size of the terminal.
      *
-     * @return The terminal's size.
+     * @return The terminal's size, as an object with {@code width} and {@code height} fields.
      * @throws LuaException (hidden) If the terminal cannot be found.
-     * @cc.treturn number The terminal's width.
-     * @cc.treturn number The terminal's height.
      */
     @LuaFunction
-    public final Object[] getSize() throws LuaException {
+    public final Map<String, Integer> getSize() throws LuaException {
         var terminal = getTerminal();
-        return new Object[]{ terminal.getWidth(), terminal.getHeight() };
+        return Map.of("width", terminal.getWidth(), "height", terminal.getHeight());
     }
 
     /**
@@ -315,20 +317,17 @@ public abstract class TermMethods {
      * Get the current palette for a specific colour.
      *
      * @param colourArg The colour whose palette should be fetched.
-     * @return The resulting colour.
+     * @return The resulting colour, as an object with {@code r}, {@code g} and {@code b} fields (each between 0 and 1).
      * @throws LuaException (hidden) If the terminal cannot be found.
-     * @cc.treturn number The red channel, will be between 0 and 1.
-     * @cc.treturn number The green channel, will be between 0 and 1.
-     * @cc.treturn number The blue channel, will be between 0 and 1.
      * @cc.since 1.80pr1
      */
     @LuaFunction({ "getPaletteColour", "getPaletteColor" })
-    public final Object[] getPaletteColour(int colourArg) throws LuaException {
+    public final Map<String, Double> getPaletteColour(int colourArg) throws LuaException {
         var colour = 15 - parseColour(colourArg);
         var terminal = getTerminal();
         synchronized (terminal) {
             var colourValues = terminal.getPalette().getColour(colour);
-            return new Object[]{ colourValues[0], colourValues[1], colourValues[2] };
+            return Map.of("r", colourValues[0], "g", colourValues[1], "b", colourValues[2]);
         }
     }
 

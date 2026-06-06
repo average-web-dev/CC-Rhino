@@ -159,8 +159,14 @@ public class Computer {
 
         executor.tick();
 
-        // Update the environment's internal state.
-        if (redstone.pollInputChanged()) queueEvent("redstone", null);
+        // Update the environment's internal state. We fire a separate "redstone" event for each side whose input has
+        // changed, passing the side's name and current input strength along.
+        var changedSides = redstone.pollInputChanges();
+        for (var side : ComputerSide.values()) {
+            if ((changedSides & (1 << side.ordinal())) != 0) {
+                queueEvent("redstone", new Object[]{ side.getName(), redstone.getInput(side) });
+            }
+        }
         internalEnvironment.tick();
     }
 

@@ -8,7 +8,7 @@ function print(...args: unknown[]): void {
     const text = args.map(String).join('\t');
     term.write(text);
     const { y } = term.getCursorPos();
-    term.setCursorPos(0, y + 1);
+    term.setCursorPos({ x: 0, y: y + 1 });
 }
 
 // Bootstrap: try to load the user's startup script.

@@ -32,8 +32,8 @@ interface TermModule {
 
     /** Get the cursor position (0-based). */
     getCursorPos(): CursorPos;
-    /** Set the cursor position (0-based). */
-    setCursorPos(x: number, y: number): void;
+    /** Set the cursor position (0-based), given as a `{ x, y }` object in the same shape {@link getCursorPos} returns. */
+    setCursorPos(pos: CursorPos): void;
 
     getCursorBlink(): boolean;
     setCursorBlink(blink: boolean): void;

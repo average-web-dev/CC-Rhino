@@ -24,7 +24,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * <p>
  * However, we do not want to immediately schedule a {@code "redstone"} event, as otherwise we could schedule many
  * events in a single tick. Instead, the next time the block is ticked, the consumer should call
- * {@link #pollInputChanged()} and queue an event if needed.
+ * {@link #pollInputChanges()} and queue an event if needed.
  *
  * <h2>Output</h2>
  * In order to reduce block updates, we maintain a separate "internal" and "external" output state. Whenever a computer
@@ -45,7 +45,7 @@ public final class RedstoneState implements RedstoneAccess {
     private final int[] externalBundledOutput = new int[ComputerSide.COUNT];
 
     private final ReentrantLock inputLock = new ReentrantLock();
-    private boolean inputChanged = false;
+    private @GuardedBy("inputLock") int changedInputSides = 0;
     private final @GuardedBy("inputLock") int[] input = new int[ComputerSide.COUNT];
     private final @GuardedBy("inputLock") int[] bundledInput = new int[ComputerSide.COUNT];
 
@@ -227,7 +227,7 @@ public final class RedstoneState implements RedstoneAccess {
                 changed = true;
             }
 
-            inputChanged |= changed;
+            if (changed) changedInputSides |= 1 << index;
             return changed;
         } finally {
             inputLock.unlock();
@@ -235,14 +235,20 @@ public final class RedstoneState implements RedstoneAccess {
     }
 
     /**
-     * Check whether any redstone inputs set by {@link #setInput(ComputerSide, int, int)} have changed since the last
-     * call to this function.
+     * Get the set of sides whose redstone inputs have changed since the last call to this function, resetting the
+     * internal state.
      *
-     * @return Whether any redstone inputs has changed.
+     * @return A bitmask indicating which sides have changed (indexed via {@link ComputerSide#ordinal()}). Returns
+     * {@code 0} if no inputs have changed.
      */
-    public boolean pollInputChanged() {
-        var changed = inputChanged;
-        inputChanged = false;
-        return changed;
+    public int pollInputChanges() {
+        inputLock.lock();
+        try {
+            var changed = changedInputSides;
+            changedInputSides = 0;
+            return changed;
+        } finally {
+            inputLock.unlock();
+        }
     }
 }

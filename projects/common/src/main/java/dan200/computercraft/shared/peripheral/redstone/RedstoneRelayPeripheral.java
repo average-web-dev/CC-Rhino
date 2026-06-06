@@ -64,7 +64,7 @@ public final class RedstoneRelayPeripheral extends RedstoneMethods implements IP
         computers.remove(computer);
     }
 
-    void queueRedstoneEvent() {
-        computers.queueEvent("redstone");
+    void queueRedstoneEvent(String side, int strength) {
+        computers.queueEvent("redstone", side, strength);
     }
 }

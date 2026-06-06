@@ -11,6 +11,8 @@ import dan200.computercraft.api.lua.LuaFunction;
 import dan200.computercraft.core.terminal.Terminal;
 import dan200.computercraft.core.util.Colour;
 
+import java.util.Map;
+
 
 /**
  * Interact with a computer's terminal or monitors, writing text and drawing ASCII graphics.
@@ -36,10 +38,10 @@ import dan200.computercraft.core.util.Colour;
  * <pre>{@code
  * term.clear()
  *
- * term.setCursorPos(1, 1) -- The first column of line 1
+ * term.setCursorPos({ x: 0, y: 0 }) -- The first column of line 0
  * term.write("First line")
  *
- * term.setCursorPos(20, 2) -- The 20th column of line 2
+ * term.setCursorPos({ x: 19, y: 1 }) -- The 20th column of line 1
  * term.write("Second line")
  * }</pre>
  * <p>
@@ -80,19 +82,16 @@ public class TermAPI extends TermMethods implements ILuaAPI {
      * Get the default palette value for a colour.
      *
      * @param colour The colour whose palette should be fetched.
-     * @return The RGB values.
+     * @return The RGB values, as an object with {@code r}, {@code g} and {@code b} fields (each between 0 and 1).
      * @throws LuaException When given an invalid colour.
-     * @cc.treturn number The red channel, will be between 0 and 1.
-     * @cc.treturn number The green channel, will be between 0 and 1.
-     * @cc.treturn number The blue channel, will be between 0 and 1.
      * @cc.since 1.81.0
      * @see TermMethods#setPaletteColour(IArguments) To change the palette colour.
      */
     @LuaFunction({ "nativePaletteColour", "nativePaletteColor" })
-    public final Object[] nativePaletteColour(int colour) throws LuaException {
+    public final Map<String, Float> nativePaletteColour(int colour) throws LuaException {
         var actualColour = 15 - parseColour(colour);
         var c = Colour.fromInt(actualColour);
-        return new Object[]{ c.getR(), c.getG(), c.getB() };
+        return Map.of("r", c.getR(), "g", c.getG(), "b", c.getB());
     }
 
     @Override
