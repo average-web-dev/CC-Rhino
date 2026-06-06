@@ -300,6 +300,10 @@ Defer until the API surface has stabilised (after Phase 9).
 - [x] **10.1** Typed module declarations for all CC native modules live in `projects/core/src/ts/types/` — one `.d.ts` per module (`fs`, `path`, `process`, `events`, `http`, `term`, `redstone`, `peripheral`, `turtle`, `commands`, `pocket`), plus `globals.d.ts` (`require` overloads, timers, `sleep`) and `modules.d.ts` (ambient `declare module` for `import` syntax). The `bundleTypeDeclarations` Gradle task collects all `.d.ts` into `build/generated/types/` for publishing as an npm types package. See [JS_API_REDESIGN.md](JS_API_REDESIGN.md).
 - [ ] **10.2** Model blocking calls as plain synchronous return types — "can-fail" actions return `{ ok: boolean, reason?: string }` (not a tuple, not a Promise)
 - [ ] **10.3** Keep `.d.ts` in sync as Phase 11 / Phase 9 reshape the API surface
+- [ ] **10.4** Audit every `@LuaFunction` method across all API classes (`TurtleMethods`, `FsMethods`, `RedstoneMethods`, `PeripheralAPI`, `HttpMethods`, `PocketAPI`, `CommandsMethods`, etc.) and migrate:
+  - **Complex return types** — any method returning `Map<String, ?>`, `Object[]` tuple, or multi-value `MethodResult` that represents a structured value should instead return a typed Java record. The `JSValues.toJs()` record branch and `LuaUtil.toRecord()` infrastructure is already in place.
+  - **Complex parameters** — any method taking a `Map<?, ?>` or manually destructuring an `IArguments` table should instead declare a typed Java record parameter; `Generator.java` already generates the coercion automatically.
+  - Update the corresponding `.d.ts` interfaces to reflect the record shapes (field names must match Java record component names since `JSValues` uses reflection).
 - [ ] **Commit** — stage Phase 10 files; propose commit message; wait for user approval
 
 ---
