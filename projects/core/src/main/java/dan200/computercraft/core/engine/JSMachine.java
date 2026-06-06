@@ -165,8 +165,8 @@ public class JSMachine implements IMachine {
             }
         });
 
-        // sleep — Phase 12.3: captures a continuation directly into the timer map so Phase 1
-        // resumes it in O(1) when the matching CC timer fires, without going through ioMap["timer"].
+        // sleep + yield — Phase 12.3: both capture continuations directly into event-loop buckets
+        // rather than going through MethodResult.pullEvent / ioMap.
         if (osApi != null) {
             var capturedOsApi = osApi;
             ScriptableObject.putProperty(obj, "sleep", new BaseFunction() {
@@ -177,6 +177,18 @@ public class JSMachine implements IMachine {
                     int timerId = capturedOsApi.startTimerForSleep(ticks);
                     var pending = cx.captureContinuation();
                     pending.setApplicationState(new EventLoop.SleepState(timerId));
+                    throw pending;
+                }
+            });
+            // yield — treated as a microtask (Phase 3): resumes in the same handleEvent call,
+            // after I/O is drained. The cc:yield event ensures the computer wakes up next tick
+            // if the yielding code re-yields (snapshot-clear prevents spinning within one tick).
+            ScriptableObject.putProperty(obj, "yield", new BaseFunction() {
+                @Override
+                public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                    capturedOsApi.queueYieldEvent();
+                    var pending = cx.captureContinuation();
+                    pending.setApplicationState(new EventLoop.YieldState());
                     throw pending;
                 }
             });
@@ -261,9 +273,13 @@ public class JSMachine implements IMachine {
             var r3 = eventLoop.drainMicrotasks(cx, scope);
             if (r3.isError()) { close(); return r3; }
 
-            // Phase 4 — Check: run setImmediate callbacks (+ Phase 3 microtasks).
-            var r4 = eventLoop.drainCheck(cx, scope);
+            // Phase 4 — Yields: resume os.yield() continuations (+ Phase 3 microtasks).
+            var r4 = eventLoop.drainYields(cx, scope);
             if (r4.isError()) { close(); return r4; }
+
+            // Phase 5 — Check: run setImmediate callbacks (+ Phase 3 microtasks).
+            var r5 = eventLoop.drainCheck(cx, scope);
+            if (r5.isError()) { close(); return r5; }
 
             return MachineResult.OK;
 

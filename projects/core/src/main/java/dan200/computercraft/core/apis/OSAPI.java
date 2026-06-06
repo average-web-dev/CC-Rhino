@@ -361,29 +361,12 @@ public class OSAPI implements IComputerAPI {
     }
 
     /**
-     * Yield control back to the scheduler, allowing other events to be processed.
-     * Queues a synthetic {@code cc:yield} event immediately so the loop resumes on
-     * the next event cycle even when no real events are pending, rather than blocking
-     * indefinitely. Use this inside tight loops to avoid the soft-abort timeout.
-     *
-     * @return Always returns {@code undefined} after resuming.
-     * @cc.since CC:Rhino 1.0
-     * @cc.usage A while-true loop that runs continuously without locking the computer.
-     * <pre>{@code
-     * const os = require('os');
-     * while (true) {
-     *   os.yield();
-     *   // runs every event cycle
-     * }
-     * }</pre>
+     * Queues the synthetic {@code cc:yield} wakeup event so the computer is scheduled for the next
+     * game tick. Called by {@link dan200.computercraft.core.engine.JSMachine} when JS code calls
+     * {@code os.yield()} — the actual continuation capture and routing happen in the engine layer.
      */
-    @ScriptFunction("yield")
-    public MethodResult doYield() {
-        // Self-queue a synthetic wake-up so this continuation is resumed on the very
-        // next event cycle. Without this, the loop would stall until a real CC event
-        // (key press, redstone change, etc.) arrives.
+    public void queueYieldEvent() {
         apiEnvironment.queueEvent("cc:yield", new Object[0]);
-        return MethodResult.pullEvent(null, args -> MethodResult.of());
     }
 
     /**

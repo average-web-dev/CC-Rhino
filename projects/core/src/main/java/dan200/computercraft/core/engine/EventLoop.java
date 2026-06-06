@@ -19,7 +19,8 @@ import java.util.*;
  *   <li>Phase 1 — Timers: resumes {@code os.sleep()} continuations whose CC timer fires.</li>
  *   <li>Phase 2 — I/O: resumes continuations waiting for a specific CC event (turtle ops, modem, etc.).</li>
  *   <li>Phase 3 — Microtasks: drains {@code queueMicrotask()} callbacks after each phase.</li>
- *   <li>Phase 4 — Check: runs {@code setImmediate()} callbacks.</li>
+ *   <li>Phase 4 — Yields: resumes {@code os.yield()} continuations (snapshot-clear, one pass per tick).</li>
+ *   <li>Phase 5 — Check: runs {@code setImmediate()} callbacks.</li>
  * </ul>
  *
  * <p>Each continuation is stored in the bucket matching its phase rather than a flat list.
@@ -36,6 +37,14 @@ final class EventLoop {
      */
     record SleepState(int timerId) {}
 
+    /**
+     * Application-state marker placed on continuations captured by {@code os.yield()}.
+     * Yields run in Phase 4 ({@link #drainYields}): after I/O and Promises have settled but before
+     * {@code setImmediate} (Phase 5). A snapshot-clear ensures re-yields from the resumed code are
+     * deferred to the next {@code handleEvent} invocation (triggered by the queued {@code cc:yield} event).
+     */
+    record YieldState() {}
+
     private record IOEntry(ContinuationPending pending, MethodResult mr) {}
 
     // Phase 1 — timer ID → sleep continuation
@@ -44,7 +53,10 @@ final class EventLoop {
     // Phase 2 — event filter → pending I/O continuations (null key = wildcard, accepts any event)
     private final Map<@Nullable String, List<IOEntry>> ioMap = new HashMap<>();
 
-    // Phase 3 — microtask queue (queueMicrotask)
+    // Phase 3 — yield continuations (os.yield); drained before JS microtasks, snapshot-clear per pass
+    private final ArrayDeque<ContinuationPending> pendingYields = new ArrayDeque<>();
+
+    // Phase 3 — JS microtask callbacks (queueMicrotask)
     private final ArrayDeque<Callable> microtaskQueue = new ArrayDeque<>();
 
     // Phase 4 — setImmediate callbacks (LinkedHashMap keeps insertion order so clearImmediate by ID works)
@@ -55,12 +67,14 @@ final class EventLoop {
 
     /**
      * Route a freshly-caught {@link ContinuationPending} into the correct phase bucket.
-     * Sleep continuations (marked with {@link SleepState}) go to Phase 1; all others go to Phase 2.
+     * Sleep → Phase 1 timer map; Yield → Phase 3 yield queue; everything else → Phase 2 I/O map.
      */
     void schedule(ContinuationPending pending) {
         var state = pending.getApplicationState();
         if (state instanceof SleepState ss) {
             timerMap.put(ss.timerId(), pending);
+        } else if (state instanceof YieldState) {
+            pendingYields.add(pending);
         } else if (state instanceof MethodResult mr) {
             ioMap.computeIfAbsent(filterOf(mr), k -> new ArrayList<>())
                  .add(new IOEntry(pending, mr));
@@ -137,11 +151,13 @@ final class EventLoop {
     }
 
     /**
-     * Phase 3: drain all queued microtasks synchronously.
-     * New microtasks added during draining are also processed before returning (Node.js behaviour).
-     * Called automatically by Phase 1, Phase 2, and Phase 4.
+     * Phase 3: drain all queued JS microtask callbacks ({@code queueMicrotask}).
+     * New microtasks enqueued during draining are also processed before returning (standard
+     * browser/Node.js behaviour). Called automatically after Phase 1, Phase 2, and Phase 4.
+     * {@code os.yield()} continuations are <em>not</em> drained here — they run in Phase 4.
      */
     MachineResult drainMicrotasks(Context cx, Scriptable scope) {
+        // JS microtask callbacks — drained recursively (new microtasks run this cycle).
         while (!microtaskQueue.isEmpty()) {
             var fn = microtaskQueue.poll();
             try {
@@ -158,9 +174,26 @@ final class EventLoop {
     }
 
     /**
-     * Phase 4: run all {@code setImmediate} callbacks registered before this cycle started.
-     * Callbacks added by a setImmediate callback itself run in the <em>next</em> cycle.
-     * Drains microtasks after all check callbacks complete.
+     * Phase 4: resume all {@code os.yield()} continuations captured this cycle.
+     * Uses a snapshot-clear so re-yields from resumed code land in {@code pendingYields} after the
+     * snapshot and are deferred to the next {@code handleEvent} call — exactly one yield-loop
+     * iteration per game tick. Drains microtasks after resuming.
+     */
+    MachineResult drainYields(Context cx, Scriptable scope) {
+        if (pendingYields.isEmpty()) return MachineResult.OK;
+        var snapshot = new ArrayList<>(pendingYields);
+        pendingYields.clear();
+        for (var pending : snapshot) {
+            var r = resumeContinuation(cx, scope, pending, Undefined.instance);
+            if (r.isError()) return r;
+        }
+        return drainMicrotasks(cx, scope);
+    }
+
+    /**
+     * Phase 5: run all {@code setImmediate} callbacks registered before this cycle started.
+     * Callbacks added during this phase run in the <em>next</em> cycle.
+     * Drains microtasks after all callbacks complete.
      */
     MachineResult drainCheck(Context cx, Scriptable scope) {
         if (checkMap.isEmpty()) return MachineResult.OK;
@@ -214,11 +247,14 @@ final class EventLoop {
         return (r != null && r.length > 0 && r[0] instanceof String s) ? s : null;
     }
 
-    boolean hasPending() { return !timerMap.isEmpty() || !ioMap.isEmpty() || !checkMap.isEmpty(); }
+    boolean hasPending() {
+        return !timerMap.isEmpty() || !ioMap.isEmpty() || !pendingYields.isEmpty() || !checkMap.isEmpty();
+    }
 
     void clear() {
         timerMap.clear();
         ioMap.clear();
+        pendingYields.clear();
         microtaskQueue.clear();
         checkMap.clear();
     }
