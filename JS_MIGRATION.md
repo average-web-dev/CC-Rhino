@@ -466,6 +466,69 @@ Implement in strict dependency order. Each item is a separate file commit.
 
 ---
 
+## Phase 12 — Node.js-style event loop
+
+Decouple `pendingContinuations` from the raw CC event dispatch cycle.
+Currently every continuation is driven by `handleEvent()`, meaning continuations
+only advance when a CC event happens to arrive. The goal is a dedicated per-tick
+event loop that processes all ready work in priority order — exactly like the
+Node.js event loop — so that timers fire on schedule, microtasks flush before the
+next I/O phase, and no continuation starves another.
+
+### Architecture
+
+```text
+ ┌─────────────────────────────────────────────────────────┐
+ │  Per-tick event loop (runs once per CC server tick)     │
+ │                                                         │
+ │  Phase 1 — Timers                                       │
+ │    Resume continuations whose os.sleep / startTimer     │
+ │    deadline has expired (stored in a priority queue      │
+ │    keyed by expiry tick).                               │
+ │                                                         │
+ │  Phase 2 — I/O                                          │
+ │    Resume continuations whose CC event filter matched   │
+ │    (turtle.forward, modem messages, task_complete…).    │
+ │    Replaces the current resumePending() scan.           │
+ │                                                         │
+ │  Phase 3 — Microtasks / nextTick                        │
+ │    Drain a nextTick queue (Promise resolution,          │
+ │    queueMicrotask). Runs after each of the above        │
+ │    phases, before the next phase starts.                │
+ │                                                         │
+ │  Phase 4 — Idle / check                                 │
+ │    Run setImmediate-style deferred callbacks.           │
+ │    Last phase; feeds back into Phase 1 next tick.       │
+ └─────────────────────────────────────────────────────────┘
+```
+
+### Storage model
+
+Each continuation is bucketed by its phase rather than kept in a single flat list:
+
+| Bucket | Key | Contents |
+| --- | --- | --- |
+| `timerQueue` | expiry tick (long) | `PriorityQueue<TimerContinuation>` |
+| `ioPending` | event filter string | `Map<String, List<ContinuationPending>>` |
+| `microtaskQueue` | — | `ArrayDeque<Runnable>` (JS callbacks) |
+| `checkQueue` | — | `ArrayDeque<ContinuationPending>` |
+
+### Tasks
+
+- [ ] **12.1** Introduce `EventLoop` class in `engine/` with the four-phase structure above; keep `JSMachine` as the owner
+- [ ] **12.2** Replace the `pendingContinuations` flat list with bucketed storage (`timerQueue`, `ioPending`, `microtaskQueue`, `checkQueue`)
+- [ ] **12.3** Move timer logic out of `OSAPI.doSleep()` / `waitForTimer()` into `EventLoop.scheduleTimer(ticks, continuation)`; `os.sleep(n)` enqueues directly into `timerQueue`
+- [ ] **12.4** Move `resumePending()` logic into `EventLoop.drainIO(eventName, args)`; called from `handleEvent()` as Phase 2
+- [ ] **12.5** Add `EventLoop.drainMicrotasks()` — called after Phase 1 and Phase 2 before advancing; hooks into Rhino's `Promise` resolution if Rhino exposes one, otherwise a manual queue
+- [ ] **12.6** Expose `queueMicrotask(fn)` as a JS global backed by the microtask queue
+- [ ] **12.7** Expose `setImmediate(fn)` / `clearImmediate(handle)` as JS globals backed by `checkQueue`
+- [ ] **12.8** Verify: `os.sleep(0.05)` resumes exactly 1 tick later; multiple concurrent sleeps each fire at the right tick; `queueMicrotask` runs before the next I/O phase
+- [ ] **12.9** Update `JS_MIGRATION.md` cross-cutting reference table with event loop model
+
+- [ ] **Commit** — stage Phase 12 files; propose commit message; wait for user approval
+
+---
+
 ## Cross-cutting reference
 
 | Concern | Approach |

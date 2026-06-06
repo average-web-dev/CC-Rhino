@@ -6,6 +6,7 @@ package dan200.computercraft.core.apis;
 
 import dan200.computercraft.api.scripting.IArguments;
 import dan200.computercraft.api.scripting.IComputerAPI;
+import dan200.computercraft.api.scripting.MethodResult;
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.util.StringUtil;
@@ -357,6 +358,61 @@ public class OSAPI implements IComputerAPI {
             case "ingame" -> day * 86400000L + (long) (time * 3600000.0); // Get in-game epoch
             default -> throw new ScriptException("Unsupported operation");
         };
+    }
+
+    /**
+     * Yield control back to the scheduler, allowing other events to be processed.
+     * Queues a synthetic {@code cc:yield} event immediately so the loop resumes on
+     * the next event cycle even when no real events are pending, rather than blocking
+     * indefinitely. Use this inside tight loops to avoid the soft-abort timeout.
+     *
+     * @return Always returns {@code undefined} after resuming.
+     * @cc.since CC:Rhino 1.0
+     * @cc.usage A while-true loop that runs continuously without locking the computer.
+     * <pre>{@code
+     * const os = require('os');
+     * while (true) {
+     *   os.yield();
+     *   // runs every event cycle
+     * }
+     * }</pre>
+     */
+    @ScriptFunction("yield")
+    public MethodResult doYield() {
+        // Self-queue a synthetic wake-up so this continuation is resumed on the very
+        // next event cycle. Without this, the loop would stall until a real CC event
+        // (key press, redstone change, etc.) arrives.
+        apiEnvironment.queueEvent("cc:yield", new Object[0]);
+        return MethodResult.pullEvent(null, args -> MethodResult.of());
+    }
+
+    /**
+     * Pauses execution for the specified number of seconds.
+     * Uses an internal timer so other events continue to be processed while sleeping.
+     *
+     * @param seconds The number of seconds to sleep. Rounded up to the nearest tick (0.05 s).
+     * @throws ScriptException If the time is not finite.
+     * @cc.tparam number seconds The number of seconds to sleep.
+     * @cc.since CC:Rhino 1.0
+     * @cc.usage Sleep for one second.
+     * <pre>{@code
+     * os.sleep(1);
+     * }</pre>
+     */
+    @ScriptFunction("sleep")
+    public MethodResult doSleep(double seconds) throws ScriptException {
+        var timerId = apiEnvironment.startTimer(Math.round(checkFinite(0, seconds) / 0.05));
+        return waitForTimer(timerId);
+    }
+
+    private MethodResult waitForTimer(int timerId) {
+        return MethodResult.pullEvent("timer", args -> {
+            // args[0] = "timer", args[1] = fired timer id
+            if (args.length >= 2 && args[1] instanceof Number id && id.intValue() == timerId) {
+                return MethodResult.of();
+            }
+            return waitForTimer(timerId); // different timer fired, keep waiting
+        });
     }
 
 }

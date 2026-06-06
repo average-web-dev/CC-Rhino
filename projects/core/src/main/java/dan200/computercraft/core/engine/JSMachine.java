@@ -239,37 +239,39 @@ public class JSMachine implements IMachine {
         fullArgs[0] = eventName;
         System.arraycopy(args, 0, fullArgs, 1, args.length);
 
-        var it = pendingContinuations.listIterator();
-        while (it.hasNext()) {
-            var pending = it.next();
+        // Snapshot and clear so that resumeContinuation() can safely append new entries
+        // without causing a ConcurrentModificationException.
+        var snapshot = new ArrayList<>(pendingContinuations);
+        pendingContinuations.clear();
+
+        for (var pending : snapshot) {
             var mr = (MethodResult) pending.getApplicationState();
 
             // Check event filter — null filter accepts any event.
             var filterResult = mr.getResult();
             @Nullable String filter = filterResult != null && filterResult.length > 0 && filterResult[0] instanceof String s
                 ? s : null;
-            if (filter != null && !filter.equals(eventName)) continue;
-
-            var callback = mr.getCallback();
-            if (callback == null) {
-                it.remove();
+            if (filter != null && !filter.equals(eventName)) {
+                pendingContinuations.add(pending); // keep for a future event
                 continue;
             }
+
+            var callback = mr.getCallback();
+            if (callback == null) continue; // no callback — discard
 
             try {
                 var newMr = callback.resume(fullArgs);
                 if (newMr.getCallback() == null) {
                     // Callback chain complete — resume the stored JS continuation.
-                    it.remove();
                     var jsResult = JSValues.toJsResult(cx, scope, newMr.getResult());
                     var contResult = resumeContinuation(pending, jsResult);
                     if (contResult.isError()) return contResult;
                 } else {
-                    // Still waiting for another event — update the app state in-place.
+                    // Still waiting for another event — put back with updated app state.
                     pending.setApplicationState(newMr);
+                    pendingContinuations.add(pending);
                 }
             } catch (ScriptException e) {
-                it.remove();
                 var msg = e.getMessage();
                 close();
                 return MachineResult.error(msg != null ? msg : e.toString());
