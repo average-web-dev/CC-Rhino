@@ -74,7 +74,7 @@ tasks.processResources {
     from(transpileTypeScript) { into("data/computercraft/js") }
 
     var props = mapOf("gitContributors" to cct.gitContributors.get().joinToString("\n"))
-    filesMatching("data/computercraft/lua/rom/help/credits.md") { expand(props) }
+    filesMatching("data/computercraft/js/rom/help/credits.md") { expand(props) }
 }
 
 tasks.test {
@@ -83,8 +83,8 @@ tasks.test {
 
 val checkChangelog by tasks.registering(cc.tweaked.gradle.CheckChangelog::class) {
     version = modVersion
-    whatsNew = file("src/main/resources/data/computercraft/lua/rom/help/whatsnew.md")
-    changelog = file("src/main/resources/data/computercraft/lua/rom/help/changelog.md")
+    whatsNew = file("src/main/resources/data/computercraft/js/rom/help/whatsnew.md")
+    changelog = file("src/main/resources/data/computercraft/js/rom/help/changelog.md")
 }
 
 tasks.check { dependsOn(checkChangelog) }

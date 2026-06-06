@@ -14,6 +14,8 @@ import org.mozilla.javascript.*;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.locks.LockSupport;
 
 public class JSMachine implements IMachine {
@@ -56,9 +58,10 @@ public class JSMachine implements IMachine {
     private volatile @Nullable Thread executionThread;
     private @Nullable Runnable abortListener;
 
-    // Pending Rhino continuation — non-null while JS is waiting for an event.
-    // Application state holds the current MethodResult (with its ICallback and event filter).
-    private @Nullable ContinuationPending pendingContinuation;
+    // Pending Rhino continuations — one entry per blocked listener (e.g. each os.on() callback
+    // that called a blocking API). Application state on each entry is the MethodResult carrying
+    // the event filter and ICallback. Cleared on close().
+    private final List<ContinuationPending> pendingContinuations = new ArrayList<>();
 
     private boolean started = false;
     private volatile boolean isDisposed = false;
@@ -165,7 +168,7 @@ public class JSMachine implements IMachine {
                 try {
                     cx.executeScriptWithContinuations(biosScript, scope);
                 } catch (ContinuationPending pending) {
-                    pendingContinuation = pending;
+                    pendingContinuations.add(pending);
                 } catch (EvaluatorException e) {
                     return mapException(e);
                 } catch (RhinoException e) {
@@ -182,8 +185,8 @@ public class JSMachine implements IMachine {
             // Null event after startup is a no-op (Phase 5.4).
             if (eventName == null) return MachineResult.OK;
 
-            // Resume a pending blocking continuation if the event matches its filter.
-            if (pendingContinuation != null) {
+            // Resume any pending blocking continuations whose event filter matches.
+            if (!pendingContinuations.isEmpty()) {
                 var contResult = resumePending(eventName, arguments);
                 if (contResult.isError()) return contResult;
             }
@@ -209,6 +212,9 @@ public class JSMachine implements IMachine {
     private MachineResult emitSafe(String event, Object[] jsArgs) {
         try {
             emitter.emit(cx, scope, event, jsArgs);
+        } catch (MultiContinuationPending multi) {
+            // One or more os.on() callbacks made a blocking call — add them all to the pending list.
+            pendingContinuations.addAll(multi.continuations());
         } catch (EvaluatorException e) {
             return mapException(e);
         } catch (RhinoException e) {
@@ -222,65 +228,71 @@ public class JSMachine implements IMachine {
     }
 
     /**
-     * Drive the pending callback chain with the given event, then resume the Rhino continuation if it resolves.
-     * If the callback chain is still waiting (filter mismatch or intermediate yield), we just update state and return.
+     * Walk every pending continuation. For each one whose event filter matches {@code eventName},
+     * drive its callback chain. If the chain resolves, resume the Rhino continuation with the
+     * result (which may itself yield again, adding a new entry). Continuations whose filter does
+     * not match are left untouched for the next event.
      */
     private MachineResult resumePending(@Nullable String eventName, @Nullable Object @Nullable [] arguments) {
-        var saved = pendingContinuation;
-        if (saved == null) return MachineResult.OK;
-        var mr = (MethodResult) saved.getApplicationState();
-
-        // Check event filter — null filter accepts any event.
-        var filterResult = mr.getResult();
-        @Nullable String filter = filterResult != null && filterResult.length > 0 && filterResult[0] instanceof String s
-            ? s : null;
-        if (filter != null && !filter.equals(eventName)) return MachineResult.OK;
-
-        // Build the argument array to pass to the callback (event name first, then args).
         var args = arguments != null ? arguments : new Object[0];
         var fullArgs = new Object[args.length + 1];
         fullArgs[0] = eventName;
         System.arraycopy(args, 0, fullArgs, 1, args.length);
 
-        var callback = mr.getCallback();
-        if (callback == null) {
-            pendingContinuation = null;
-            return MachineResult.OK;
-        }
-        try {
-            var newMr = callback.resume(fullArgs);
-            var newCallback = newMr.getCallback();
-            if (newCallback == null) {
-                var jsResult = JSValues.toJsResult(cx, scope, newMr.getResult());
-                return resumeContinuation(jsResult);
-            } else {
-                saved.setApplicationState(newMr);
-                return MachineResult.OK;
+        var it = pendingContinuations.listIterator();
+        while (it.hasNext()) {
+            var pending = it.next();
+            var mr = (MethodResult) pending.getApplicationState();
+
+            // Check event filter — null filter accepts any event.
+            var filterResult = mr.getResult();
+            @Nullable String filter = filterResult != null && filterResult.length > 0 && filterResult[0] instanceof String s
+                ? s : null;
+            if (filter != null && !filter.equals(eventName)) continue;
+
+            var callback = mr.getCallback();
+            if (callback == null) {
+                it.remove();
+                continue;
             }
-        } catch (ScriptException e) {
-            var msg = e.getMessage();
-            close();
-            return MachineResult.error(msg != null ? msg : e.toString());
+
+            try {
+                var newMr = callback.resume(fullArgs);
+                if (newMr.getCallback() == null) {
+                    // Callback chain complete — resume the stored JS continuation.
+                    it.remove();
+                    var jsResult = JSValues.toJsResult(cx, scope, newMr.getResult());
+                    var contResult = resumeContinuation(pending, jsResult);
+                    if (contResult.isError()) return contResult;
+                } else {
+                    // Still waiting for another event — update the app state in-place.
+                    pending.setApplicationState(newMr);
+                }
+            } catch (ScriptException e) {
+                it.remove();
+                var msg = e.getMessage();
+                close();
+                return MachineResult.error(msg != null ? msg : e.toString());
+            }
         }
+        return MachineResult.OK;
     }
 
-    private MachineResult resumeContinuation(Object jsResult) {
-        var saved = pendingContinuation;
-        if (saved == null) return MachineResult.OK;
+    /**
+     * Resume a single Rhino continuation with {@code jsResult}. If the resumed code yields again
+     * (another blocking call), the new continuation is appended to {@link #pendingContinuations}.
+     */
+    private MachineResult resumeContinuation(ContinuationPending pending, Object jsResult) {
         try {
-            cx.resumeContinuation(saved.getContinuation(), scope, jsResult);
-            pendingContinuation = null;
+            cx.resumeContinuation(pending.getContinuation(), scope, jsResult);
         } catch (ContinuationPending newPending) {
-            pendingContinuation = newPending;
+            pendingContinuations.add(newPending);
         } catch (EvaluatorException e) {
-            pendingContinuation = null;
             return mapException(e);
         } catch (RhinoException e) {
-            pendingContinuation = null;
             close();
             return MachineResult.error(e.getMessage() != null ? e.getMessage() : e.toString());
         } catch (Exception e) {
-            pendingContinuation = null;
             close();
             return MachineResult.error(e.getMessage() != null ? e.getMessage() : e.toString());
         }
@@ -309,7 +321,7 @@ public class JSMachine implements IMachine {
     public void close() {
         if (isDisposed) return;
         isDisposed = true;
-        pendingContinuation = null;
+        pendingContinuations.clear();
         var listener = abortListener;
         if (listener != null) {
             timeout.removeListener(listener);

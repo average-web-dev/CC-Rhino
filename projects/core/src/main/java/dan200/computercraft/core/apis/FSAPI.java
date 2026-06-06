@@ -121,8 +121,8 @@ public class FSAPI implements IComputerAPI {
      * @cc.changed 1.95.0 Now supports multiple arguments.
      * @cc.usage Combine several file paths together
      * <pre>{@code
-     * fs.combine("/rom/programs", "../apis", "parallel.lua")
-     * -- => rom/apis/parallel.lua
+     * fs.combine("/rom/programs", "../apis", "parallel.js")
+     * -- => rom/apis/parallel.js
      * }</pre>
      */
     @ScriptFunction
@@ -145,10 +145,10 @@ public class FSAPI implements IComputerAPI {
      * @param path The path to get the name from.
      * @return The final part of the path (the file name).
      * @cc.since 1.2
-     * @cc.usage Get the file name of {@code rom/startup.lua}
+     * @cc.usage Get the file name of {@code rom/startup.js}
      * <pre>{@code
-     * fs.getName("rom/startup.lua")
-     * -- => startup.lua
+     * fs.getName("rom/startup.js")
+     * -- => startup.js
      * }</pre>
      */
     @ScriptFunction
@@ -162,9 +162,9 @@ public class FSAPI implements IComputerAPI {
      * @param path The path to get the directory from.
      * @return The path with the final part removed (the parent directory).
      * @cc.since 1.63
-     * @cc.usage Get the directory name of {@code rom/startup.lua}
+     * @cc.usage Get the directory name of {@code rom/startup.js}
      * <pre>{@code
-     * fs.getDir("rom/startup.lua")
+     * fs.getDir("rom/startup.js")
      * -- => rom
      * }</pre>
      */

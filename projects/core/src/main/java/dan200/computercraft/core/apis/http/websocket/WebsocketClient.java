@@ -12,6 +12,8 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 
+// TODO: This can probably be removed, as JavaScript can handle SocketChannels directly.
+
 /**
  * A client-side websocket, which can be used to send messages to a remote server.
  * <p>

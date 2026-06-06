@@ -29,7 +29,7 @@ import java.util.concurrent.TimeUnit;
  * abort ({@link #ABORT_TIMEOUT}), we trigger a hard abort. This will destroy the entire runtime and shut the
  * computer down.
  * <p>
- * The Lua runtime is also allowed to pause execution if there are other computers contesting for work. All computers
+ * The script runtime is also allowed to pause execution if there are other computers contesting for work. All computers
  * are guaranteed to run for some time. After that period, if any computers are waiting to be executed then we'll set
  * the paused flag to true ({@link #isPaused()}.
  *
@@ -46,7 +46,7 @@ public abstract class TimeoutState {
     public static final long BASE_TIMEOUT = TimeUnit.SECONDS.toNanos(30);
 
     /**
-     * The total time the Lua VM is allowed to run before aborting in nanoseconds.
+     * The total time the VM is allowed to run before aborting in nanoseconds.
      */
     public static final long TIMEOUT = TimeUnit.MILLISECONDS.toNanos(7000);
 

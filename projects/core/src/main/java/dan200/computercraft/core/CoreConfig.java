@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.OptionalInt;
 
 /**
- * Config options for ComputerCraft's Lua runtime.
+ * Config options for ComputerCraft's runtime.
  */
 public final class CoreConfig {
     // TODO: Ideally this would be an instance in {@link ComputerContext}, but sharing this everywhere it needs to be is

@@ -10,7 +10,7 @@ import org.jspecify.annotations.Nullable;
 import java.io.Serial;
 
 /**
- * A Lua exception which does not contain its stack trace.
+ * A script exception which does not contain its stack trace.
  */
 public class FastScriptException extends ScriptException {
     @Serial

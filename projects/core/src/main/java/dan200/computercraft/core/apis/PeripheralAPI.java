@@ -323,7 +323,7 @@ public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralC
             return p.call(context, methodName, methodArgs).adjustError(1);
         } catch (ScriptException e) {
             // We increase the error level by one in order to shift the error level to where peripheral.call was
-            // invoked. It would be possible to do it in Lua code, but would add significantly more overhead.
+            // invoked. It would be possible to do it in script code, but would add significantly more overhead.
             if (e.getLevel() > 0) throw new FastScriptException(e.getMessage(), e.getLevel() + 1);
             throw e;
         }

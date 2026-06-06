@@ -517,7 +517,7 @@ public final class ComputerThread implements ComputerScheduler {
                 executor.timeout.refresh();
 
                 // If we're still within normal execution times (TIMEOUT) or soft abort (ABORT_TIMEOUT),
-                // then we can let the Lua machine do its work.
+                // then we can let the machine do its work.
                 var remainingTime = executor.timeout.getRemainingTime();
                 // If remainingTime > 0, then we're executing normally,
                 // If remainingTime > -ABORT_TIMEOUT, then we've soft aborted.

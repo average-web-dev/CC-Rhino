@@ -6,6 +6,7 @@ package dan200.computercraft.core.engine;
 
 import org.mozilla.javascript.Callable;
 import org.mozilla.javascript.Context;
+import org.mozilla.javascript.ContinuationPending;
 import org.mozilla.javascript.Scriptable;
 
 import java.util.ArrayList;
@@ -47,9 +48,18 @@ final class JSEventEmitter {
         if (list == null || list.isEmpty()) return;
         var snapshot = new ArrayList<>(list);
         list.removeIf(ListenerEntry::once);
+        // Run every listener even if an earlier one captures a continuation (blocking call).
+        // Collecting all continuations in a list lets non-blocking listeners always execute.
+        List<ContinuationPending> captured = null;
         for (var entry : snapshot) {
-            entry.fn().call(cx, scope, scope, jsArgs);
+            try {
+                cx.callFunctionWithContinuations(entry.fn(), scope, jsArgs);
+            } catch (ContinuationPending pending) {
+                if (captured == null) captured = new ArrayList<>();
+                captured.add(pending);
+            }
         }
+        if (captured != null) throw new MultiContinuationPending(captured);
     }
 
     int listenerCount(String event) {

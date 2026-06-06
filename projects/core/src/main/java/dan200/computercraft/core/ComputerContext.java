@@ -33,21 +33,21 @@ public final class ComputerContext {
     private final GlobalEnvironment globalEnvironment;
     private final ComputerScheduler computerScheduler;
     private final MainThreadScheduler mainThreadScheduler;
-    private final IMachine.Factory luaFactory;
-    private final MethodSupplier<ApiMethod> luaMethods;
+    private final IMachine.Factory machineFactory;
+    private final MethodSupplier<ApiMethod> scriptMethods;
     private final MethodSupplier<PeripheralMethod> peripheralMethods;
 
     private ComputerContext(
         GlobalEnvironment globalEnvironment, ComputerScheduler computerScheduler,
-        MainThreadScheduler mainThreadScheduler, IMachine.Factory luaFactory,
-        MethodSupplier<ApiMethod> luaMethods,
+        MainThreadScheduler mainThreadScheduler, IMachine.Factory machineFactory,
+        MethodSupplier<ApiMethod> scriptMethods,
         MethodSupplier<PeripheralMethod> peripheralMethods
     ) {
         this.globalEnvironment = globalEnvironment;
         this.computerScheduler = computerScheduler;
         this.mainThreadScheduler = mainThreadScheduler;
-        this.luaFactory = luaFactory;
-        this.luaMethods = luaMethods;
+        this.machineFactory = machineFactory;
+        this.scriptMethods = scriptMethods;
         this.peripheralMethods = peripheralMethods;
     }
 
@@ -80,22 +80,22 @@ public final class ComputerContext {
     }
 
     /**
-     * The factory to create new Lua machines.
+     * The factory to create new machines.
      *
-     * @return The current Lua machine factory.
+     * @return The current machine factory.
      */
-    public IMachine.Factory luaFactory() {
-        return luaFactory;
+    public IMachine.Factory machineFactory() {
+        return machineFactory;
     }
 
     /**
-     * Get the {@link MethodSupplier} used to find methods on Lua values.
+     * Get the {@link MethodSupplier} used to find methods on values.
      *
      * @return The {@link ApiMethod} method supplier.
-     * @see MachineEnvironment#luaMethods()
+     * @see MachineEnvironment#scriptMethods()
      */
-    public MethodSupplier<ApiMethod> luaMethods() {
-        return luaMethods;
+    public MethodSupplier<ApiMethod> scriptMethods() {
+        return scriptMethods;
     }
 
     /**
@@ -153,7 +153,7 @@ public final class ComputerContext {
         private final GlobalEnvironment environment;
         private @Nullable ComputerScheduler computerScheduler = null;
         private @Nullable MainThreadScheduler mainThreadScheduler;
-        private IMachine.@Nullable Factory luaFactory;
+        private IMachine.@Nullable Factory machineFactory;
         private @Nullable List<GenericMethod> genericMethods;
 
         Builder(GlobalEnvironment environment) {
@@ -203,14 +203,14 @@ public final class ComputerContext {
         /**
          * Set the {@link IMachine.Factory} for this context.
          *
-         * @param factory The Lua machine factory.
+         * @param factory The machine factory.
          * @return {@code this}, for chaining
-         * @see ComputerContext#luaFactory()
+         * @see ComputerContext#machineFactory()
          */
-        public Builder luaFactory(IMachine.Factory factory) {
+        public Builder machineFactory(IMachine.Factory factory) {
             Objects.requireNonNull(factory);
-            if (luaFactory != null) throw new IllegalStateException("Main-thread scheduler already specified");
-            luaFactory = factory;
+            if (machineFactory != null) throw new IllegalStateException("Main-thread scheduler already specified");
+            machineFactory = factory;
             return this;
         }
 
@@ -219,7 +219,7 @@ public final class ComputerContext {
          *
          * @param genericMethods A list of API factories.
          * @return {@code this}, for chaining
-         * @see ComputerContext#luaMethods()
+         * @see ComputerContext#scriptMethods()
          * @see ComputerContext#peripheralMethods()
          */
         public Builder genericMethods(Collection<GenericMethod> genericMethods) {
@@ -239,7 +239,7 @@ public final class ComputerContext {
                 environment,
                 computerScheduler == null ? new ComputerThread(1) : computerScheduler,
                 mainThreadScheduler == null ? new NoWorkMainThreadScheduler() : mainThreadScheduler,
-                luaFactory == null ? JSMachine::new : luaFactory,
+                machineFactory == null ? JSMachine::new : machineFactory,
                 ApiMethodSupplier.create(genericMethods == null ? List.of() : genericMethods),
                 PeripheralMethodSupplier.create(genericMethods == null ? List.of() : genericMethods)
             );

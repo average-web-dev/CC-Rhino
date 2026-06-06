@@ -64,7 +64,7 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
     private final ComputerEnvironment computerEnvironment;
     private final MetricsObserver metrics;
     private final List<ApiWrapper> apis = new ArrayList<>();
-    private final MethodSupplier<ApiMethod> luaMethods;
+    private final MethodSupplier<ApiMethod> scriptMethods;
 
     private @Nullable FileSystem fileSystem;
 
@@ -72,7 +72,7 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
 
     /**
      * Whether the computer is currently on. This is set to false when a shutdown starts, or when turning on completes
-     * (but just before the Lua machine is started).
+     * (but just before the machine is started).
      *
      * @see #isOnLock
      */
@@ -142,7 +142,7 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
 
     private @Nullable WritableMount rootMount;
 
-    private final IMachine.Factory luaFactory;
+    private final IMachine.Factory machineFactory;
 
     private final ComputerScheduler.Executor executor;
 
@@ -150,8 +150,8 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
         this.computer = computer;
         this.computerEnvironment = computerEnvironment;
         metrics = computerEnvironment.getMetrics();
-        luaFactory = context.luaFactory();
-        luaMethods = context.luaMethods();
+        machineFactory = context.machineFactory();
+        scriptMethods = context.scriptMethods();
         executor = context.computerScheduler().createExecutor(this, metrics);
 
         var environment = computer.getAPIEnvironment();
@@ -228,7 +228,7 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
     }
 
     /**
-     * Abort this whole computer due to a timeout. This will immediately destroy the Lua machine,
+     * Abort this whole computer due to a timeout. This will immediately destroy the machine,
      * and then schedule a shutdown.
      */
     @Override
@@ -237,7 +237,7 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
     }
 
     /**
-     * Abort this whole computer due to an internal error. This will immediately destroy the Lua machine,
+     * Abort this whole computer due to an internal error. This will immediately destroy the machine,
      * and then schedule a shutdown.
      */
     @Override
@@ -350,7 +350,7 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
     }
 
     @Nullable
-    private IMachine createLuaMachine() {
+    private IMachine createJSMachine() {
         // Load the bios resource
         InputStream biosStream = null;
         try {
@@ -364,12 +364,12 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
             return null;
         }
 
-        // Create the lua machine
+        // Create the JS machine
         try (var bios = biosStream) {
-            return luaFactory.create(new MachineEnvironment(
+            return machineFactory.create(new MachineEnvironment(
                 new JSContext(computer), metrics, executor.timeoutState(),
                 () -> apis.stream().map(ApiWrapper::api).iterator(),
-                luaMethods,
+                scriptMethods,
                 computer.getGlobalEnvironment().getHostString(),
                 computer.getFileSystem()
             ), bios);
@@ -403,8 +403,8 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
             computer.getEnvironment().reset();
             for (var api : apis) api.startup();
 
-            // Init lua
-            if ((machine = createLuaMachine()) == null) {
+            // Init JavaScript
+            if ((machine = createJSMachine()) == null) {
                 shutdown();
                 return;
             }
@@ -415,7 +415,7 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
             isOnLock.unlock();
         }
 
-        // Mark the Lua VM as ready to be executed next time.
+        // Mark the VM as ready to be executed next time.
         wasPaused = true;
         timeRemaining = TimeoutState.TIMEOUT;
     }
@@ -428,7 +428,7 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
                 eventQueue.clear();
             }
 
-            // Shutdown Lua machine
+            // Shutdown machine
             if (machine != null) {
                 machine.close();
                 machine = null;
@@ -543,7 +543,7 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
         terminal.write(message);
 
         if (extra != null) {
-            // Display any additional information. This generally comes from the Lua Machine, such as compilation or
+            // Display any additional information. This generally comes from the Machine, such as compilation or
             // runtime errors.
             terminal.setCursorPos(0, terminal.getCursorY() + 1);
             terminal.write(extra);

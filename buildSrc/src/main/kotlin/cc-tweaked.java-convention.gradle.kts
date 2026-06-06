@@ -103,7 +103,6 @@ sourceSets.all {
             check("NonOverridingEquals", CheckSeverity.OFF) // Peripheral.equals makes this hard to avoid
             check("FutureReturnValueIgnored", CheckSeverity.OFF) // Too many false positives with Netty
             check("InvalidInlineTag", CheckSeverity.OFF) // Triggered by @snippet. Can be removed on Java 21.
-            option("UnusedMethod:ExemptingMethodAnnotations", "dan200.computercraft.api.lua.LuaFunction")
 
             check("NullAway", CheckSeverity.ERROR)
             option(

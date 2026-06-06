@@ -44,7 +44,7 @@ public class Websocket extends Resource<Websocket> implements WebsocketClient {
 
     /**
      * We declare the maximum size to be 2^30 bytes. While messages can be much longer, we set an arbitrary limit as
-     * working with larger messages (especially within a Lua VM) is absurd.
+     * working with larger messages (especially within a script VM) is absurd.
      */
     public static final int MAX_MESSAGE_SIZE = 1 << 30;
 

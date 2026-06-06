@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * ComputerCraft's core Lua runtime and APIs.
+ * ComputerCraft's core JavaScript runtime and APIs.
  * <p>
  * This is not considered part of the stable API, and so should not be consumed by other Minecraft mods. However,
  * emulators or other CC-tooling may find this useful.

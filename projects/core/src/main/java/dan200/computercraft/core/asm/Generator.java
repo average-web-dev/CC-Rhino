@@ -168,7 +168,7 @@ final class Generator<T> {
      */
     private boolean checkMethod(Method method) {
         if (method.isBridge()) {
-            LOG.debug("Skipping bridge Lua Method {}.{}", method.getDeclaringClass().getName(), method.getName());
+            LOG.debug("Skipping bridge script Method {}.{}", method.getDeclaringClass().getName(), method.getName());
             return false;
         }
 
@@ -176,7 +176,7 @@ final class Generator<T> {
         var exceptions = method.getExceptionTypes();
         for (var exception : exceptions) {
             if (exception != ScriptException.class) {
-                LOG.error("Lua Method {}.{} cannot throw {}.", method.getDeclaringClass().getName(), method.getName(), exception.getName());
+                LOG.error("Script Method {}.{} cannot throw {}.", method.getDeclaringClass().getName(), method.getName(), exception.getName());
                 return false;
             }
         }
@@ -184,14 +184,14 @@ final class Generator<T> {
         // unsafe can only be used on the computer thread, so reject it for mainThread functions.
         var annotation = method.getAnnotation(ScriptFunction.class);
         if (annotation.unsafe() && annotation.mainThread()) {
-            LOG.error("Lua Method {}.{} cannot use unsafe and mainThread.", method.getDeclaringClass().getName(), method.getName());
+            LOG.error("Script Method {}.{} cannot use unsafe and mainThread.", method.getDeclaringClass().getName(), method.getName());
             return false;
         }
 
         // Instance methods must be final - this prevents them being overridden and potentially exposed twice.
         var modifiers = method.getModifiers();
         if (!Modifier.isStatic(modifiers) && !Modifier.isFinal(modifiers) && !Modifier.isFinal(method.getDeclaringClass().getModifiers())) {
-            LOG.warn("Lua Method {}.{} should be final.", method.getDeclaringClass().getName(), method.getName());
+            LOG.warn("Script Method {}.{} should be final.", method.getDeclaringClass().getName(), method.getName());
         }
 
         return true;
@@ -383,7 +383,7 @@ final class Generator<T> {
             method.setAccessible(true);
             return LOOKUP.unreflect(method);
         } catch (SecurityException | InaccessibleObjectException | IllegalAccessException e) {
-            LOG.error("Lua Method {}.{} is not accessible.", method.getDeclaringClass().getName(), method.getName());
+            LOG.error("Script Method {}.{} is not accessible.", method.getDeclaringClass().getName(), method.getName());
             return null;
         }
     }
