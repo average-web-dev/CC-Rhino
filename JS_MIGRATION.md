@@ -235,13 +235,13 @@ The CC scheduler remains free to process other events while the main-thread task
 
 ## Phase 7 — Sandboxing & security
 
-- [ ] **7.1** Tighten Rhino access in `JSMachine` constructor:
+- [x] **7.1** Tighten Rhino access in `JSMachine` constructor:
   - `cx.setClassShutter(className -> false)` — blocks `Packages.*`, `java.*`, `importClass()`, etc.
   - Remove `Packages`, `java`, `javax`, `org`, `com`, `edu`, `net` from top-level scope: `ScriptableObject.deleteProperty(scope, "Packages")` etc.
   - Override `CCContextFactory.makeScope()` or post-init cleanup to strip `JavaImporter`
   - `cx.setOptimizationLevel(-1)` already set — no class generation, no reflection bypass via bytecode
-- [ ] **7.2** Verify `java.lang.Runtime.getRuntime().exec("ls")` throws from JS
-- [ ] **7.3** Verify API objects only expose wrapped `BaseFunction` methods, not arbitrary Java fields
+- [x] **7.2** Verify `java.lang.Runtime.getRuntime().exec("ls")` throws from JS — covered by `java_runtime_exec_is_blocked()` and `java_packages_global_is_removed()` / `java_interop_globals_are_removed()` tests
+- [x] **7.3** Verify API objects only expose wrapped `BaseFunction` methods, not arbitrary Java fields — guaranteed by `JSAPIBuilder` which only puts `JSMethodBridge` (BaseFunction) instances on the returned NativeObject; no raw Java references are exposed
 - [ ] **Commit** — stage Phase 7 files; propose commit message; wait for user approval
 
 ---

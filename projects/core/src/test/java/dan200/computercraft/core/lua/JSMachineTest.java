@@ -146,4 +146,43 @@ class JSMachineTest {
         }
     }
 
+    @Test
+    void java_packages_global_is_removed() throws Exception {
+        // Phase 7.1: Packages global must not exist.
+        var machine = machineWith("if (typeof Packages !== 'undefined') throw new Error('Packages is accessible');");
+        try {
+            var result = machine.handleEvent(null, null);
+            assertFalse(result.isError(), "Packages global should be absent: " + result.getMessage());
+        } finally {
+            machine.close();
+        }
+    }
+
+    @Test
+    void java_interop_globals_are_removed() throws Exception {
+        // Phase 7.1: java/javax/org/com/edu/net/JavaImporter globals must not exist.
+        var check = "['java','javax','org','com','edu','net','JavaImporter','importClass','importPackage']" +
+            ".forEach(function(n){if(typeof this[n]!=='undefined')throw new Error(n+' is accessible');});";
+        var machine = machineWith(check);
+        try {
+            var result = machine.handleEvent(null, null);
+            assertFalse(result.isError(), "Java interop globals should be absent: " + result.getMessage());
+        } finally {
+            machine.close();
+        }
+    }
+
+    @Test
+    void java_runtime_exec_is_blocked() throws Exception {
+        // Phase 7.2: Attempting java.lang.Runtime.getRuntime().exec('ls') must throw — either because
+        // the `java` global is absent (ReferenceError) or because classShutter blocks class loading.
+        var machine = machineWith("java.lang.Runtime.getRuntime().exec('ls');");
+        try {
+            var result = machine.handleEvent(null, null);
+            assertTrue(result.isError(), "java.lang.Runtime must not be accessible from JS");
+        } finally {
+            machine.close();
+        }
+    }
+
 }

@@ -73,6 +73,15 @@ public class JSMachine implements ILuaMachine {
         cx = factory.enterContext();
         scope = cx.initStandardObjects();
 
+        // Strip all Java interop globals — classShutter already blocks class loading,
+        // but removing these prevents enumeration and makes the intent explicit.
+        for (var name : new String[]{
+            "Packages", "java", "javax", "org", "com", "edu", "net",
+            "JavaImporter", "importClass", "importPackage"
+        }) {
+            ScriptableObject.deleteProperty(scope, name);
+        }
+
         // Compile bios now so we can use executeScriptWithContinuations later.
         biosScript = cx.compileString(biosSource, "bios.js", 1, null);
 
