@@ -312,39 +312,156 @@ Defer until the API surface has stabilised (after Phase 9).
 
 ### 11.A — Planning (do this before writing any ROM code)
 
-Before implementing any JS ROM program or API, go through every Lua file under
-`projects/core/src/main/resources/data/computercraft/lua/rom/` and write a feature
-description for each one. **Do not port the Lua code** — read it to understand what
-capability it gives the user, then design a clean JS equivalent from scratch.
+- [x] **11.1** Read every Lua file under `lua/rom/` and write a one-line feature summary per file.
+- [x] **11.2** Collect summaries into `JS_ROM_FEATURES.md` as a JS design spec (not a port guide).
 
-- [ ] **11.1** For each file in `lua/rom/apis/`, `lua/rom/programs/`, `lua/rom/modules/`, and
-  `bios.lua`, write a one-line feature summary:
-  - What it lets the user do (e.g. "full-screen text editor with syntax highlighting and
-    tab-completion for API names")
-  - Any CC-specific behaviour that must be preserved (key bindings, terminal colour usage,
-    peripheral interaction, etc.)
-  - Note whether it depends on other APIs so the implementation order is clear
-- [ ] **11.2** Collect the summaries into a new `JS_ROM_FEATURES.md` document, one section per
-  ROM subdirectory, structured as a design spec — not a port guide. Each entry should describe
-  the feature contract (inputs, outputs, user-visible behaviour) that the JS implementation must
-  satisfy, without referring to how the Lua version achieves it.
+### 11.A.1 — Architecture concept (Linux-inspired OS layer)
 
-### 11.B — Implementation (driven by `JS_ROM_FEATURES.md`)
+The Lua ROM glued everything together in `bios.lua`: globals, shell path, aliases, autorun, startup
+discovery — all in one file. The JS ROM separates those responsibilities into three distinct layers,
+mirroring the Unix firmware → kernel → shell split:
 
-Each item below corresponds to a section in `JS_ROM_FEATURES.md`. Write each file as a `.ts`
-source under `projects/core/src/ts/rom/`; the Phase 1.5 pipeline transpiles it to the
-matching `/rom/` path at build time. Implement in dependency order as noted in the feature specs.
+```text
+┌──────────────────────────────────────────────────────────────────┐
+│  bios.ts  (firmware / bootloader)                                │
+│  • Terminal reset, boot banner                                   │
+│  • require.paths = ["/rom/lib", "/rom/bin"]                      │
+│  • Sets require.cache for native Java APIs (term, fs, …)         │
+│  • Transfers control: require("/rom/os")                         │
+└──────────────────────┬───────────────────────────────────────────┘
+                       │
+┌──────────────────────▼───────────────────────────────────────────┐
+│  /rom/os/index.ts  (the OS — init / "kernel" layer)              │
+│  • Detects device type (turtle / pocket / command / standard)    │
+│  • Builds PATH from device type + term.isColor()                 │
+│  • Sets process.env.PATH, process.env.HOME = "/"                 │
+│  • Registers standard aliases (ls, cp, mv, rm, …)               │
+│  • Registers tab-completion functions for all ROM programs        │
+│  • Runs /rom/autorun/ files in alphabetical order                │
+│  • Discovers and runs user startup scripts                        │
+│    – Disk startup (if process.settings.get("shell.allow_disk_startup"))│
+│    – /startup.js, /startup/, or /startup                         │
+│  • Launches the default shell: require("/rom/bin/bash")           │
+└──────────────────────┬───────────────────────────────────────────┘
+                       │
+┌──────────────────────▼───────────────────────────────────────────┐
+│  /rom/bin/bash.ts  (interactive shell)                           │
+│  • Readline loop: prompt → parse → resolve → execute             │
+│  • PATH search + alias resolution                                │
+│  • Tab completion (delegated to cc/shell/completion)             │
+│  • Built-ins: cd, exit, help, alias, set                         │
+│  • Ctrl+T → terminate current program                            │
+│  • Returns to OS when user calls exit()                          │
+└──────────────────────────────────────────────────────────────────┘
+```
 
-- [ ] **11.3** `bios.ts` — full boot sequence + `read()`, `write()`, `print()` terminal helpers;
-  copy/move the stub from Phase 2.4/6.7 and expand it here
-- [ ] **11.4** Standard library APIs (`src/ts/rom/apis/`) — one `.ts` per feature spec entry;
-  each uses `module.exports = { ... }` and is loadable via `require('<name>')`
-- [ ] **11.5** Shell & built-in programs (`src/ts/rom/programs/`) — one `.ts` per feature spec entry
-- [ ] **11.6** Compat module (`src/ts/rom/apis/compat.ts`) — Lua-style shims (`tostring`, `tonumber`,
-  `type`, `pairs`, `ipairs`, `pcall`, `xpcall`, `error`) for programs that need them
-- [ ] **11.7** Help text — copy `lua/rom/help/` markdown files to `src/ts/rom/help/` (copied as-is,
-  not transpiled); write `src/ts/rom/help/index.md` listing all available JS programs/APIs
-- [ ] **11.8** Verify: full in-game boot reaches the shell prompt; each built-in program runs without error
+**Directory layout** (`src/ts/` → transpiled at `/`):
+
+```text
+src/ts/
+├── bios.ts                        → /bios.js   (loaded by JSMachine on __start__)
+└── rom/
+    ├── os/
+    │   └── index.ts               → /rom/os/index.js  (the OS init layer)
+    ├── bin/                       → /rom/bin/   (executables on PATH)
+    │   ├── bash.ts                → interactive shell
+    │   ├── ls.ts, cp.ts, …        → file-management commands
+    │   ├── edit.ts                → full-screen text editor
+    │   └── …                      (one file per program from JS_ROM_FEATURES.md)
+    ├── lib/                       → /rom/lib/   (libraries, on require.paths)
+    │   ├── colors.ts
+    │   ├── textutils.ts
+    │   ├── keys.ts
+    │   └── cc/
+    │       ├── expect.ts
+    │       ├── strings.ts
+    │       └── …
+    └── help/                      → /rom/help/  (copied as-is, not transpiled)
+```
+
+**Key `require.paths` change**: `["/rom/lib", "/rom/bin"]` instead of the Lua `/rom/apis`.
+Programs in `/rom/bin` are both runnable and requireable as libraries (same as Unix commands).
+
+**OS environment object** (`/rom/os` exports):
+
+```ts
+{
+  env: Record<string, string>,   // PATH, HOME, TERM, COMPUTER_ID, COMPUTER_LABEL
+  path(): string,                // current PATH string
+  setPath(p: string): void,
+  alias(from: string, to: string): void,
+  aliases(): Record<string, string>,
+  setCompletionFunction(prog: string, fn: CompletionFn): void,
+  run(program: string, ...args: string[]): boolean,
+  exec(program: string, ...args: string[]): never,  // replaces current process
+}
+```
+
+### 11.B — Implementation (driven by `JS_ROM_FEATURES.md` + 11.A.1 architecture)
+
+Implement in strict dependency order. Each item is a separate file commit.
+
+#### Tier 0 — Pure utilities (no dependencies on other ROM files)
+
+- [ ] **11.3** `src/ts/rom/lib/colors.ts` — colour constants + pack/unpack/blit helpers
+- [ ] **11.4** `src/ts/rom/lib/keys.ts` — key-name constants (integer → name map)
+- [ ] **11.5** `src/ts/rom/lib/cc/expect.ts` — type-checking helpers (`expect`, `field`, `range`)
+- [ ] **11.6** `src/ts/rom/lib/cc/strings.ts` — `split`, `trim`, `contains`, `ensure_width`, `wrap`
+- [ ] **11.7** `src/ts/rom/lib/vector.ts` — 3D integer vector class (add, sub, mul, dot, cross, normalize, tostring)
+
+#### Tier 1 — Terminal + formatting (depends on `term` native)
+
+- [ ] **11.8** `src/ts/rom/lib/textutils.ts` — `serialize`/`unserialize`, `formatTime`, `pagedPrint`, `tabulate`, `urlEncode`/`urlDecode`
+- [ ] **11.9** `src/ts/rom/lib/cc/pretty.ts` — pretty-printing of arbitrary JS values with colour support
+- [ ] **11.10** `src/ts/rom/lib/window.ts` — virtual terminal window (redirectable sub-surface of `term`)
+- [ ] **11.11** `src/ts/rom/lib/paintutils.ts` — terminal pixel drawing (lines, boxes, images, NFT images)
+- [ ] **11.12** `src/ts/rom/lib/cc/image/nft.ts` — NFT image format (parse/build)
+
+#### Tier 2 — OS layer + shell (depends on Tier 0–1)
+
+- [ ] **11.13** `src/ts/bios.ts` — hardware init only: terminal reset, banner, `require.paths`, boot `/rom/os`
+- [ ] **11.14** `src/ts/rom/os/index.ts` — device detection, PATH, aliases, completion registration, autorun, startup discovery, launch bash
+- [ ] **11.15** `src/ts/rom/lib/cc/shell/completion.ts` — completion handler factories (`file`, `program`, `help`, `peripheral`)
+- [ ] **11.16** `src/ts/rom/bin/bash.ts` — readline loop, PATH search, alias resolution, tab-complete, built-ins (cd, exit, alias, set, help, clear, pwd)
+
+#### Tier 3 — Peripheral + network libraries (depends on Tier 0–2)
+
+- [ ] **11.17** `src/ts/rom/lib/peripheral.ts` — `wrap`, `find`, `getNames`, `isPresent`, `getType`, `call`
+- [ ] **11.18** `src/ts/rom/lib/rednet.ts` — open/close, send, broadcast, receive (with timeout), host/lookup, protocol filter
+- [ ] **11.19** `src/ts/rom/lib/http.ts` — `get`, `post`, `request`/`checkURL` wrappers with streaming; `websocket`
+- [ ] **11.20** `src/ts/rom/lib/gps.ts` — trilateration via `rednet` + modem; `locate()` blocking call
+- [ ] **11.21** `src/ts/rom/lib/disk.ts` — disk drive API wrappers
+
+#### Tier 4 — I/O + settings (depends on Tier 0–3)
+
+- [ ] **11.22** `src/ts/rom/lib/settings.ts` — typed key-value store backed by `/.settings` JSON file; `define`, `get`, `set`, `unset`, `load`, `save`
+- [ ] **11.23** `src/ts/rom/lib/io.ts` — JS file handles (`io.open`, `io.lines`, `io.read`, `io.write`); stdout/stdin/stderr stream objects
+- [ ] **11.24** `src/ts/rom/lib/help.ts` — `setPath`, `path`, `lookup`, `completeTopic`; topics are `.txt` files in help path
+
+#### Tier 5 — Built-in programs (depends on Tier 0–4)
+
+- [ ] **11.25** File management: `ls.ts`, `cp.ts`, `mv.ts`, `rm.ts`, `mkdir.ts`, `type.ts`, `drive.ts`
+- [ ] **11.26** Info/control: `id.ts`, `label.ts`, `reboot.ts`, `shutdown.ts`, `clear.ts`, `time.ts`, `about.ts`
+- [ ] **11.27** `help.ts` (program) — page help topics from `/rom/help/`; `programs.ts` — list available commands
+- [ ] **11.28** `edit.ts` — full-screen text editor: cursor movement, copy/paste, syntax highlighting for `.ts`/`.js`, tab-completion for `require` names
+- [ ] **11.29** `js.ts` — interactive JS REPL using `Function()`; print return values via `cc/pretty`; history, tab-completion
+- [ ] **11.30** `monitor.ts` — run a program redirecting its terminal output to an attached monitor peripheral
+- [ ] **11.31** Network programs: `wget.ts`, `pastebin.ts` (upload/download)
+- [ ] **11.32** Rednet programs: `chat.ts` (send/receive messages), `repeat.ts` (wireless relay daemon)
+- [ ] **11.33** Peripheral utilities: `peripherals.ts` (list attached), `redstone.ts` (inspect/set sides)
+- [ ] **11.34** Turtle programs: `go.ts`, `turn.ts`, `excavate.ts`, `tunnel.ts`, `refuel.ts`, `craft.ts`, `dance.ts`, `equip.ts`, `unequip.ts`
+- [ ] **11.35** Pocket programs: `equip.ts`, `unequip.ts`, `falling.ts`
+- [ ] **11.36** Command-computer programs: `commands.ts`, `exec.ts`
+- [ ] **11.37** Multishell + bg/fg: `src/ts/rom/bin/multishell.ts` — tabbed shell using `window`; `bg.ts` / `fg.ts` open/move tabs
+- [ ] **11.38** Fun programs: `hello.ts`, `dj.ts`, `speaker.ts`, `worm.ts`, `adventure.ts`, `paint.ts`, `redirection.ts`
+
+#### Tier 6 — Help content + validation
+
+- [ ] **11.39** Copy `lua/rom/help/` files to `src/ts/rom/help/` (verbatim, not transpiled); update references to APIs that were renamed
+- [ ] **11.40** Write `src/ts/rom/help/index.md` listing all JS programs and lib modules
+- [ ] **11.41** Verify: full in-game boot → OS banner → bash prompt; each Tier 5 program runs without error
+- [ ] **11.42** MOTD: copy/adapt `motd.txt`; `motd.ts` program reads it and prints on boot (called by OS layer)
+
 - [ ] **Commit** — stage Phase 11 files; propose commit message; wait for user approval
 
 ---
