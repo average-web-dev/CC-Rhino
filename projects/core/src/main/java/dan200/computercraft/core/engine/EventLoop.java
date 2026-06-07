@@ -58,7 +58,9 @@ public final class EventLoop {
      */
     void schedule(ContinuationPending pending) {
         if (!(pending.getApplicationState() instanceof MethodResult mr)) return;
-        switch (mr.getDestination()) {
+        var dest = mr.getDestination();
+        if (dest == null) return;
+        switch (dest) {
             case TIMER -> {
                 var r = mr.getResult();
                 if (r != null && r.length > 0 && r[0] instanceof Number n) timerMap.put(n.intValue(), pending);

@@ -18,11 +18,14 @@ import java.util.*;
  */
 public final class MethodResult {
 
-    /** Routes a continuation into the matching event-loop phase when no callback is needed. */
+    /**
+     * Routes a captured continuation into the matching event-loop phase bucket.
+     * A {@code null} destination means the result is returned to JS immediately — no continuation is captured.
+     */
     public enum Bucket {
         /** Phase 1 — timer map; {@code result[0]} is the CC timer ID. */
         TIMER,
-        /** Phase 2 — I/O map; {@code result[0]} (if String) is the event filter. */
+        /** Phase 2 — I/O map; {@code result[0]} (if String) is the event filter. Requires a callback. */
         IO,
         /** Phase 4 — yield queue; resumed with {@code undefined} next tick. */
         YIELD,
@@ -33,22 +36,33 @@ public final class MethodResult {
     private final @Nullable Object @Nullable [] result;
     private final @Nullable ICallback callback;
     private final int adjust;
-    private final Bucket destination;
+    private final @Nullable Bucket destination;
 
+    /** Immediate return — no continuation. Used by {@link #of} factories. */
     private MethodResult(@Nullable Object @Nullable [] arguments, @Nullable ICallback callback) {
         result = arguments;
         this.callback = callback;
         adjust = 0;
-        destination = Bucket.IO;
+        destination = null;
     }
 
+    /** Immediate return with error-level adjustment — no continuation. Used by {@link #adjustError}. */
     private MethodResult(@Nullable Object @Nullable [] arguments, @Nullable ICallback callback, int adjust) {
         result = arguments;
         this.callback = callback;
         this.adjust = adjust;
-        destination = Bucket.IO;
+        destination = null;
     }
 
+    /** Continuation with a callback (IO bucket). Used by {@link #pullEvent}, {@link #pullEventRaw}, {@link #yield}. */
+    private MethodResult(Bucket destination, @Nullable Object @Nullable [] arguments, ICallback callback) {
+        this.destination = destination;
+        result = arguments;
+        this.callback = callback;
+        adjust = 0;
+    }
+
+    /** Continuation without a callback (TIMER / YIELD buckets). Used by {@link #awaitTimer}, {@link #awaitYield}. */
     private MethodResult(Bucket destination, @Nullable Object @Nullable [] arguments) {
         this.destination = destination;
         result = arguments;
@@ -109,7 +123,7 @@ public final class MethodResult {
      */
     public static MethodResult pullEvent(@Nullable String filter, ICallback callback) {
         Objects.requireNonNull(callback, "callback cannot be null");
-        return new MethodResult(new Object[]{ filter }, results -> {
+        return new MethodResult(Bucket.IO, new Object[]{ filter }, results -> {
             if (results.length >= 1 && Objects.equals(results[0], "terminate")) {
                 throw new ScriptException("Terminated", 0);
             }
@@ -129,22 +143,7 @@ public final class MethodResult {
      */
     public static MethodResult pullEventRaw(@Nullable String filter, ICallback callback) {
         Objects.requireNonNull(callback, "callback cannot be null");
-        return new MethodResult(new Object[]{ filter }, callback);
-    }
-
-    /**
-     * Yield the current coroutine with some arguments until it is resumed. This method is exactly equivalent to
-     * {@code coroutine.yield()} in lua. Use {@code pullEvent()} if you wish to wait for events.
-     *
-     * @param arguments An object array containing the arguments to pass to coroutine.yield()
-     * @param callback  The callback to resume with an array containing the return values from coroutine.yield()
-     * @return The method result which represents this yield.
-     * @see #pullEvent(String, ICallback)
-     */
-    @SuppressWarnings("NamedLikeContextualKeyword")
-    public static MethodResult yield(@Nullable Object @Nullable [] arguments, ICallback callback) {
-        Objects.requireNonNull(callback, "callback cannot be null");
-        return new MethodResult(arguments, callback);
+        return new MethodResult(Bucket.IO, new Object[]{ filter }, callback);
     }
 
     /**
@@ -154,7 +153,7 @@ public final class MethodResult {
      * @param timerId The CC timer ID returned by {@link dan200.computercraft.core.apis.IAPIEnvironment#startTimer}.
      * @return A method result that captures a continuation routed to the timer bucket.
      */
-    public static MethodResult awaitTimer(int timerId) {
+    public static MethodResult timer(int timerId) {
         return new MethodResult(Bucket.TIMER, new Object[]{ timerId });
     }
 
@@ -164,7 +163,7 @@ public final class MethodResult {
      *
      * @return A method result that captures a continuation routed to the yield queue.
      */
-    public static MethodResult awaitYield() {
+    public static MethodResult yield() {
         return new MethodResult(Bucket.YIELD, new Object[0]);
     }
 
@@ -177,6 +176,10 @@ public final class MethodResult {
         return callback;
     }
 
+    /**
+     * The event-loop bucket this result routes to, or {@code null} if the value should be returned to JS immediately.
+     */
+    @Nullable
     public Bucket getDestination() {
         return destination;
     }

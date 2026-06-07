@@ -381,7 +381,7 @@ public class OSAPI implements IComputerAPI {
     @ScriptFunction("yield")
     public MethodResult doYield() {
         apiEnvironment.queueEvent("cc:yield", new Object[0]);
-        return MethodResult.awaitYield();
+        return MethodResult.yield();
     }
 
 }
