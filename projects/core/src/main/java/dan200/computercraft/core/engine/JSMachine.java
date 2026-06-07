@@ -5,7 +5,7 @@
 package dan200.computercraft.core.engine;
 
 import dan200.computercraft.core.CoreConfig;
-import dan200.computercraft.core.apis.OSAPI;
+import dan200.computercraft.core.computer.EventsAPI;
 import dan200.computercraft.core.computer.TimeoutState;
 import org.jspecify.annotations.Nullable;
 import org.mozilla.javascript.*;
@@ -88,23 +88,6 @@ public class JSMachine implements IMachine {
 
         emitter = new JSEventEmitter();
 
-        // Find OSAPI and inject JS-runtime hooks before APIs are exposed to JS.
-        OSAPI osApi = null;
-        for (var api : environment.apis()) {
-            if (api instanceof OSAPI osa) { osApi = osa; break; }
-        }
-        if (osApi != null) {
-            osApi.setJSRuntime(new OSAPI.JSRuntime() {
-                @Override public void on(String e, Object fn) { if (fn instanceof Callable c) emitter.on(e, c); }
-                @Override public void once(String e, Object fn) { if (fn instanceof Callable c) emitter.once(e, c); }
-                @Override public void off(String e, Object fn) { if (fn instanceof Callable c) emitter.off(e, c); }
-                @Override public int listenerCount(String e) { return emitter.listenerCount(e); }
-                @Override public void queueMicrotask(Object fn) { if (fn instanceof Callable c) eventLoop.scheduleMicrotask(c); }
-                @Override public int scheduleImmediate(Object fn) { return fn instanceof Callable c ? eventLoop.scheduleImmediate(c) : -1; }
-                @Override public void cancelImmediate(int id) { eventLoop.cancelImmediate(id); }
-            });
-        }
-
         // Build the module loader and register all CC APIs as native modules.
         var loader = new JSRequire(scope, environment.fileSystem());
         var context = environment.context();
@@ -115,6 +98,10 @@ public class JSMachine implements IMachine {
                 loader.registerNative(name, obj);
             }
         }
+
+        // Register the engine-internal 'events' module (emitter + scheduler).
+        var eventsApi = new EventsAPI(emitter, eventLoop);
+        loader.registerNative("events", JSAPIBuilder.build(cx, scope, eventsApi, context, methods));
 
         // Expose loader, run the JS require() setup, then remove the loader from global scope.
         // The setup script captures a reference via closure so require() still works after deletion.

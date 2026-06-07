@@ -17,23 +17,23 @@ import java.util.Map;
 /**
  * Pure-Java event listener registry for the JS machine.
  *
- * <p>Exposed to JS via the {@code os} native module ({@code on/once/off/listenerCount}).
+ * <p>Exposed to JS via the {@code events} native module ({@code on/once/off/listenerCount}).
  * All listener invocations happen synchronously inside {@link #emit}.
- */
-final class JSEventEmitter {
+*/
+public final class JSEventEmitter {
     record ListenerEntry(Callable fn, boolean once) {}
 
     private final Map<String, List<ListenerEntry>> listeners = new HashMap<>();
 
-    void on(String event, Callable fn) {
+    public void on(String event, Callable fn) {
         listeners.computeIfAbsent(event, k -> new ArrayList<>()).add(new ListenerEntry(fn, false));
     }
 
-    void once(String event, Callable fn) {
+    public void once(String event, Callable fn) {
         listeners.computeIfAbsent(event, k -> new ArrayList<>()).add(new ListenerEntry(fn, true));
     }
 
-    void off(String event, Callable fn) {
+    public void off(String event, Callable fn) {
         var list = listeners.get(event);
         if (list != null) list.removeIf(e -> e.fn() == fn);
     }
@@ -43,7 +43,7 @@ final class JSEventEmitter {
      * {@code once} listeners are removed before invocation so they can't be called twice even if
      * a listener re-registers during emission.
      */
-    void emit(Context cx, Scriptable scope, String event, Object[] jsArgs) {
+    public void emit(Context cx, Scriptable scope, String event, Object[] jsArgs) {
         var list = listeners.get(event);
         if (list == null || list.isEmpty()) return;
         var snapshot = new ArrayList<>(list);
@@ -62,7 +62,7 @@ final class JSEventEmitter {
         if (captured != null) throw new MultiContinuationPending(captured);
     }
 
-    int listenerCount(String event) {
+    public int listenerCount(String event) {
         var list = listeners.get(event);
         return list == null ? 0 : list.size();
     }

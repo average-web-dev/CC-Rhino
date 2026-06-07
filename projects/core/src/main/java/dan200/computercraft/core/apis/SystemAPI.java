@@ -19,28 +19,12 @@ import java.util.*;
 import static dan200.computercraft.api.scripting.ScriptValues.checkFinite;
 
 /**
- * The {@link OSAPI} API allows interacting with the current computer.
+ * The {@link SystemAPI} API allows interacting with the current computer.
  *
- * @cc.module os
+ * @cc.module system
  */
-public class OSAPI implements IComputerAPI {
-
-    /**
-     * JS-engine hooks for event-emitter and task-scheduler functionality exposed via the {@code os} module.
-     * Null when running under Lua; injected by {@code JSMachine} at construction time.
-     */
-    public interface JSRuntime {
-        void on(String event, Object fn);
-        void once(String event, Object fn);
-        void off(String event, Object fn);
-        int listenerCount(String event);
-        void queueMicrotask(Object fn);
-        int scheduleImmediate(Object fn);
-        void cancelImmediate(int id);
-    }
-
+public class SystemAPI implements IComputerAPI {
     private final IAPIEnvironment apiEnvironment;
-    private @Nullable JSRuntime jsRuntime;
 
     private final Int2ObjectMap<Alarm> alarms = new Int2ObjectOpenHashMap<>();
     private int clock;
@@ -58,13 +42,13 @@ public class OSAPI implements IComputerAPI {
         }
     }
 
-    public OSAPI(IAPIEnvironment environment) {
+    public SystemAPI(IAPIEnvironment environment) {
         apiEnvironment = environment;
     }
 
     @Override
     public String[] getNames() {
-        return new String[]{ "os" };
+        return new String[]{ "system" };
     }
 
     @Override
@@ -135,22 +119,6 @@ public class OSAPI implements IComputerAPI {
 
     private static long getEpochForCalendar(Calendar c) {
         return c.getTimeInMillis();
-    }
-
-    /**
-     * Adds an event to the event queue. This event can later be pulled with
-     * os.pullEvent.
-     *
-     * @param name The name of the event to queue.
-     * @param args The parameters of the event.
-     * @cc.tparam string name The name of the event to queue.
-     * @cc.param ... The parameters of the event. These can be any primitive type (boolean, number, string) as well as
-     *               tables. Other types (like functions), as well as metatables, will not be preserved.
-     * @cc.see os.pullEvent To pull the event queued
-     */
-    @ScriptFunction
-    public final void queueEvent(String name, IArguments args) throws ScriptException {
-        apiEnvironment.queueEvent(name, args.drop(1).getAll());
     }
 
     /**
@@ -396,54 +364,8 @@ public class OSAPI implements IComputerAPI {
 
     @ScriptFunction("yield")
     public MethodResult doYield() {
-        apiEnvironment.queueEvent("cc:yield", new Object[0]);
         return MethodResult.yield();
     }
 
-    // ---------------------------------------------------------------------- JS runtime hooks
-
-    public void setJSRuntime(JSRuntime runtime) {
-        this.jsRuntime = runtime;
-    }
-
-    @ScriptFunction
-    public void on(String event, IArguments args) throws ScriptException {
-        var fns = args.drop(1).getAll();
-        if (fns.length > 0 && jsRuntime != null) jsRuntime.on(event, fns[0]);
-    }
-
-    @ScriptFunction
-    public void once(String event, IArguments args) throws ScriptException {
-        var fns = args.drop(1).getAll();
-        if (fns.length > 0 && jsRuntime != null) jsRuntime.once(event, fns[0]);
-    }
-
-    @ScriptFunction
-    public void off(String event, IArguments args) throws ScriptException {
-        var fns = args.drop(1).getAll();
-        if (fns.length > 0 && jsRuntime != null) jsRuntime.off(event, fns[0]);
-    }
-
-    @ScriptFunction
-    public int listenerCount(String event) {
-        return jsRuntime != null ? jsRuntime.listenerCount(event) : 0;
-    }
-
-    @ScriptFunction
-    public void queueMicrotask(IArguments args) throws ScriptException {
-        var fns = args.getAll();
-        if (fns.length > 0 && jsRuntime != null) jsRuntime.queueMicrotask(fns[0]);
-    }
-
-    @ScriptFunction
-    public int setImmediate(IArguments args) throws ScriptException {
-        var fns = args.getAll();
-        return fns.length > 0 && jsRuntime != null ? jsRuntime.scheduleImmediate(fns[0]) : -1;
-    }
-
-    @ScriptFunction
-    public void clearImmediate(int id) {
-        if (jsRuntime != null) jsRuntime.cancelImmediate(id);
-    }
 
 }

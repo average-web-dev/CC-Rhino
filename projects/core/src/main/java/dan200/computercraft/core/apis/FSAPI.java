@@ -469,7 +469,7 @@ public class FSAPI implements IComputerAPI {
      * when it was created and last modified, and whether it is read only.
      * <p>
      * The creation and modification times are given as the number of milliseconds since the UNIX epoch. This may be
-     * given to {@link OSAPI#date} in order to convert it to more usable form.
+     * given to {@link SystemAPI#date} in order to convert it to more usable form.
      *
      * @param path The path to get attributes for.
      * @return The resulting attributes.

@@ -70,15 +70,15 @@ public final class EventLoop {
         }
     }
 
-    void scheduleMicrotask(Callable fn) { microtaskQueue.add(fn); }
+    public void scheduleMicrotask(Callable fn) { microtaskQueue.add(fn); }
 
-    int scheduleImmediate(Callable fn) {
+    public int scheduleImmediate(Callable fn) {
         int id = nextCheckId++;
         checkMap.put(id, fn);
         return id;
     }
 
-    void cancelImmediate(int id) { checkMap.remove(id); }
+    public void cancelImmediate(int id) { checkMap.remove(id); }
 
     // ------------------------------------------------------------------ phase execution
 

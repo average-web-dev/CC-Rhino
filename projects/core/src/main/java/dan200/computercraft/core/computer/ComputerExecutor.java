@@ -161,7 +161,7 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
         addApi(new RedstoneAPI(computer.getRedstone()));
         addApi(new FSAPI(environment));
         addApi(new PeripheralAPI(environment, context.peripheralMethods()));
-        addApi(new OSAPI(environment));
+        addApi(new SystemAPI(environment));
         if (CoreConfig.httpEnabled) addApi(new HTTPAPI(environment));
     }
 
