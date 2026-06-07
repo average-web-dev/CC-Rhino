@@ -24,7 +24,23 @@ import static dan200.computercraft.api.scripting.ScriptValues.checkFinite;
  * @cc.module os
  */
 public class OSAPI implements IComputerAPI {
+
+    /**
+     * JS-engine hooks for event-emitter and task-scheduler functionality exposed via the {@code os} module.
+     * Null when running under Lua; injected by {@code JSMachine} at construction time.
+     */
+    public interface JSRuntime {
+        void on(String event, Object fn);
+        void once(String event, Object fn);
+        void off(String event, Object fn);
+        int listenerCount(String event);
+        void queueMicrotask(Object fn);
+        int scheduleImmediate(Object fn);
+        void cancelImmediate(int id);
+    }
+
     private final IAPIEnvironment apiEnvironment;
+    private @Nullable JSRuntime jsRuntime;
 
     private final Int2ObjectMap<Alarm> alarms = new Int2ObjectOpenHashMap<>();
     private int clock;
@@ -375,13 +391,59 @@ public class OSAPI implements IComputerAPI {
     @ScriptFunction("sleep")
     public MethodResult doSleep(int ticks) {
         var timerId = apiEnvironment.startTimer(Math.max(1, ticks));
-        return MethodResult.awaitTimer(timerId);
+        return MethodResult.timer(timerId);
     }
 
     @ScriptFunction("yield")
     public MethodResult doYield() {
         apiEnvironment.queueEvent("cc:yield", new Object[0]);
         return MethodResult.yield();
+    }
+
+    // ---------------------------------------------------------------------- JS runtime hooks
+
+    public void setJSRuntime(JSRuntime runtime) {
+        this.jsRuntime = runtime;
+    }
+
+    @ScriptFunction
+    public void on(String event, IArguments args) throws ScriptException {
+        var fns = args.drop(1).getAll();
+        if (fns.length > 0 && jsRuntime != null) jsRuntime.on(event, fns[0]);
+    }
+
+    @ScriptFunction
+    public void once(String event, IArguments args) throws ScriptException {
+        var fns = args.drop(1).getAll();
+        if (fns.length > 0 && jsRuntime != null) jsRuntime.once(event, fns[0]);
+    }
+
+    @ScriptFunction
+    public void off(String event, IArguments args) throws ScriptException {
+        var fns = args.drop(1).getAll();
+        if (fns.length > 0 && jsRuntime != null) jsRuntime.off(event, fns[0]);
+    }
+
+    @ScriptFunction
+    public int listenerCount(String event) {
+        return jsRuntime != null ? jsRuntime.listenerCount(event) : 0;
+    }
+
+    @ScriptFunction
+    public void queueMicrotask(IArguments args) throws ScriptException {
+        var fns = args.getAll();
+        if (fns.length > 0 && jsRuntime != null) jsRuntime.queueMicrotask(fns[0]);
+    }
+
+    @ScriptFunction
+    public int setImmediate(IArguments args) throws ScriptException {
+        var fns = args.getAll();
+        return fns.length > 0 && jsRuntime != null ? jsRuntime.scheduleImmediate(fns[0]) : -1;
+    }
+
+    @ScriptFunction
+    public void clearImmediate(int id) {
+        if (jsRuntime != null) jsRuntime.cancelImmediate(id);
     }
 
 }
