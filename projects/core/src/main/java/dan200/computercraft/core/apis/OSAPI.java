@@ -361,24 +361,27 @@ public class OSAPI implements IComputerAPI {
     }
 
     /**
-     * Queues the synthetic {@code cc:yield} wakeup event so the computer is scheduled for the next
-     * game tick. Called by {@link dan200.computercraft.core.engine.JSMachine} when JS code calls
-     * {@code os.yield()} — the actual continuation capture and routing happen in the engine layer.
+     * Pauses execution for the given number of game ticks (1 tick = 0.05 s).
+     * Other events continue to be processed while sleeping.
+     *
+     * @param ticks Number of ticks to wait. Clamped to a minimum of 1.
+     * @cc.tparam int ticks Number of game ticks to sleep.
+     * @cc.since CC:Rhino 1.0
+     * @cc.usage Sleep for one second (20 ticks).
+     * <pre>{@code
+     * os.sleep(20);
+     * }</pre>
      */
-    public void queueYieldEvent() {
-        apiEnvironment.queueEvent("cc:yield", new Object[0]);
+    @ScriptFunction("sleep")
+    public MethodResult doSleep(int ticks) {
+        var timerId = apiEnvironment.startTimer(Math.max(1, ticks));
+        return MethodResult.awaitTimer(timerId);
     }
 
-    /**
-     * Starts a CC timer scheduled {@code ticks} game-ticks from now and returns its ID.
-     * Used by {@code JSMachine} to wire {@code os.sleep()} directly into the Phase 1 timer map
-     * (Phase 12.3 of the JS migration) without going through the {@code MethodResult.pullEvent} chain.
-     *
-     * @param ticks Number of game ticks to wait (minimum 1).
-     * @return The CC timer ID.
-     */
-    public int startTimerForSleep(long ticks) {
-        return apiEnvironment.startTimer(Math.max(1L, ticks));
+    @ScriptFunction("yield")
+    public MethodResult doYield() {
+        apiEnvironment.queueEvent("cc:yield", new Object[0]);
+        return MethodResult.awaitYield();
     }
 
 }

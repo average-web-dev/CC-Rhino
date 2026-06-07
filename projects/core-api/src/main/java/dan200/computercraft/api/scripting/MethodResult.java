@@ -17,22 +17,43 @@ import java.util.*;
  * When the current coroutine is resumed, we invoke the provided {@link ICallback#resume(Object[])} callback.
  */
 public final class MethodResult {
-    private static final MethodResult empty = new MethodResult(null, null);
+
+    /** Routes a continuation into the matching event-loop phase when no callback is needed. */
+    public enum Bucket {
+        /** Phase 1 — timer map; {@code result[0]} is the CC timer ID. */
+        TIMER,
+        /** Phase 2 — I/O map; {@code result[0]} (if String) is the event filter. */
+        IO,
+        /** Phase 4 — yield queue; resumed with {@code undefined} next tick. */
+        YIELD,
+    }
+
+    private static final MethodResult empty = new MethodResult((Object[]) null, null);
 
     private final @Nullable Object @Nullable [] result;
     private final @Nullable ICallback callback;
     private final int adjust;
+    private final Bucket destination;
 
     private MethodResult(@Nullable Object @Nullable [] arguments, @Nullable ICallback callback) {
         result = arguments;
         this.callback = callback;
         adjust = 0;
+        destination = Bucket.IO;
     }
 
     private MethodResult(@Nullable Object @Nullable [] arguments, @Nullable ICallback callback, int adjust) {
         result = arguments;
         this.callback = callback;
         this.adjust = adjust;
+        destination = Bucket.IO;
+    }
+
+    private MethodResult(Bucket destination, @Nullable Object @Nullable [] arguments) {
+        this.destination = destination;
+        result = arguments;
+        callback = null;
+        adjust = 0;
     }
 
     /**
@@ -126,6 +147,27 @@ public final class MethodResult {
         return new MethodResult(arguments, callback);
     }
 
+    /**
+     * Suspend execution until the CC timer with the given ID fires (Phase 1 — timers).
+     * The continuation is resumed with {@code undefined}; no callback is needed.
+     *
+     * @param timerId The CC timer ID returned by {@link dan200.computercraft.core.apis.IAPIEnvironment#startTimer}.
+     * @return A method result that captures a continuation routed to the timer bucket.
+     */
+    public static MethodResult awaitTimer(int timerId) {
+        return new MethodResult(Bucket.TIMER, new Object[]{ timerId });
+    }
+
+    /**
+     * Suspend execution until the next game tick (Phase 4 — yields).
+     * The continuation is resumed with {@code undefined} on the next {@code cc:yield} event.
+     *
+     * @return A method result that captures a continuation routed to the yield queue.
+     */
+    public static MethodResult awaitYield() {
+        return new MethodResult(Bucket.YIELD, new Object[0]);
+    }
+
     public @Nullable Object @Nullable [] getResult() {
         return result;
     }
@@ -133,6 +175,10 @@ public final class MethodResult {
     @Nullable
     public ICallback getCallback() {
         return callback;
+    }
+
+    public Bucket getDestination() {
+        return destination;
     }
 
     public int getErrorAdjust() {

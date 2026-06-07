@@ -29,21 +29,7 @@ import java.util.*;
  *
  * @see JSMachine
  */
-final class EventLoop {
-
-    /**
-     * Application-state marker placed on continuations captured by {@code os.sleep()}.
-     * Carries the CC timer ID so Phase 1 can find the right continuation without scanning Phase 2's map.
-     */
-    record SleepState(int timerId) {}
-
-    /**
-     * Application-state marker placed on continuations captured by {@code os.yield()}.
-     * Yields run in Phase 4 ({@link #drainYields}): after I/O and Promises have settled but before
-     * {@code setImmediate} (Phase 5). A snapshot-clear ensures re-yields from the resumed code are
-     * deferred to the next {@code handleEvent} invocation (triggered by the queued {@code cc:yield} event).
-     */
-    record YieldState() {}
+public final class EventLoop {
 
     private record IOEntry(ContinuationPending pending, MethodResult mr) {}
 
@@ -67,19 +53,19 @@ final class EventLoop {
 
     /**
      * Route a freshly-caught {@link ContinuationPending} into the correct phase bucket.
-     * Sleep → Phase 1 timer map; Yield → Phase 3 yield queue; everything else → Phase 2 I/O map.
+     * The {@link MethodResult#getDestination()} field encodes which bucket to use:
+     * TIMER → Phase 1; YIELD → Phase 4; null → Phase 2 I/O.
      */
     void schedule(ContinuationPending pending) {
-        var state = pending.getApplicationState();
-        if (state instanceof SleepState ss) {
-            timerMap.put(ss.timerId(), pending);
-        } else if (state instanceof YieldState) {
-            pendingYields.add(pending);
-        } else if (state instanceof MethodResult mr) {
-            ioMap.computeIfAbsent(filterOf(mr), k -> new ArrayList<>())
-                 .add(new IOEntry(pending, mr));
+        if (!(pending.getApplicationState() instanceof MethodResult mr)) return;
+        switch (mr.getDestination()) {
+            case TIMER -> {
+                var r = mr.getResult();
+                if (r != null && r.length > 0 && r[0] instanceof Number n) timerMap.put(n.intValue(), pending);
+            }
+            case YIELD -> pendingYields.add(pending);
+            case IO -> ioMap.computeIfAbsent(filterOf(mr), k -> new ArrayList<>()).add(new IOEntry(pending, mr));
         }
-        // Unknown application state — discard (should not occur in normal operation)
     }
 
     void scheduleMicrotask(Callable fn) { microtaskQueue.add(fn); }

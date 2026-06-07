@@ -5,6 +5,7 @@
 package dan200.computercraft.core.engine;
 
 import dan200.computercraft.api.scripting.IContext;
+import dan200.computercraft.api.scripting.MethodResult;
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.core.methods.ApiMethod;
 import org.mozilla.javascript.*;
@@ -34,7 +35,7 @@ final class JSMethodBridge extends BaseFunction {
     public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
         try {
             var mr = method.apply(target, context, new JSArguments(args));
-            if (mr.getCallback() == null) {
+            if (mr.getDestination() == MethodResult.Bucket.IO && mr.getCallback() == null) {
                 return JSValues.toJsResult(cx, scope, mr.getResult());
             }
             // Method wants to yield — capture a Rhino continuation so JS execution suspends.

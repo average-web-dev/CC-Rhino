@@ -4,10 +4,7 @@
 
 package dan200.computercraft.core.engine;
 
-import dan200.computercraft.api.scripting.MethodResult;
-import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.core.CoreConfig;
-import dan200.computercraft.core.apis.OSAPI;
 import dan200.computercraft.core.computer.TimeoutState;
 import org.jspecify.annotations.Nullable;
 import org.mozilla.javascript.*;
@@ -90,12 +87,6 @@ public class JSMachine implements IMachine {
 
         emitter = new JSEventEmitter();
 
-        // Find OSAPI — needed to schedule sleep timers directly into the event loop (Phase 12.3).
-        OSAPI osApi = null;
-        for (var api : environment.apis()) {
-            if (api instanceof OSAPI osa) { osApi = osa; break; }
-        }
-
         // Build the module loader and register all CC APIs as native modules.
         var loader = new JSRequire(scope, environment.fileSystem());
         var context = environment.context();
@@ -104,7 +95,7 @@ public class JSMachine implements IMachine {
             for (var name : api.getNames()) {
                 var obj = JSAPIBuilder.build(cx, scope, api, context, methods);
                 if ("os".equals(name)) {
-                    addOsMethods(obj, osApi);
+                    addOsMethods(obj);
                 }
                 loader.registerNative(name, obj);
             }
@@ -129,8 +120,8 @@ public class JSMachine implements IMachine {
         timeout.addListener(abortListener);
     }
 
-    /** Attach os event-emitter methods + sleep to the {@code os} native module object. */
-    private void addOsMethods(Scriptable obj, @Nullable OSAPI osApi) {
+    /** Attach os event-emitter methods to the {@code os} native module object. */
+    private void addOsMethods(Scriptable obj) {
         ScriptableObject.putProperty(obj, "on", new BaseFunction() {
             @Override
             public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
@@ -165,34 +156,6 @@ public class JSMachine implements IMachine {
             }
         });
 
-        // sleep + yield — Phase 12.3: both capture continuations directly into event-loop buckets
-        // rather than going through MethodResult.pullEvent / ioMap.
-        if (osApi != null) {
-            var capturedOsApi = osApi;
-            ScriptableObject.putProperty(obj, "sleep", new BaseFunction() {
-                @Override
-                public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
-                    double seconds = args.length > 0 ? Context.toNumber(args[0]) : 0;
-                    long ticks = Math.max(1L, Math.round(seconds / 0.05));
-                    int timerId = capturedOsApi.startTimerForSleep(ticks);
-                    var pending = cx.captureContinuation();
-                    pending.setApplicationState(new EventLoop.SleepState(timerId));
-                    throw pending;
-                }
-            });
-            // yield — treated as a microtask (Phase 3): resumes in the same handleEvent call,
-            // after I/O is drained. The cc:yield event ensures the computer wakes up next tick
-            // if the yielding code re-yields (snapshot-clear prevents spinning within one tick).
-            ScriptableObject.putProperty(obj, "yield", new BaseFunction() {
-                @Override
-                public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
-                    capturedOsApi.queueYieldEvent();
-                    var pending = cx.captureContinuation();
-                    pending.setApplicationState(new EventLoop.YieldState());
-                    throw pending;
-                }
-            });
-        }
     }
 
     /** Register global event-loop functions: queueMicrotask, setImmediate, clearImmediate. */
