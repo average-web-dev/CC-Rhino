@@ -239,6 +239,15 @@ public final class EventLoop {
         return !timerMap.isEmpty() || !ioMap.isEmpty() || !pendingYields.isEmpty() || !checkMap.isEmpty();
     }
 
+    /**
+     * Returns {@code true} if there is internal work that cannot self-schedule via a real CC event and therefore
+     * requires a synthetic {@code cc:js-tick} to keep the loop running.
+     * Timers and I/O continuations are excluded — they are woken by real CC events ({@code timer}, etc.).
+     */
+    boolean needsSelfTick() {
+        return !microtaskQueue.isEmpty() || !checkMap.isEmpty() || !pendingYields.isEmpty();
+    }
+
     void clear() {
         timerMap.clear();
         ioMap.clear();

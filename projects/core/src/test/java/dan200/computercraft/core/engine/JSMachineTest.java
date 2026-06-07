@@ -44,7 +44,7 @@ class JSMachineTest {
 
     private static JSMachine machineWith(String js) throws Exception {
         InputStream bios = new ByteArrayInputStream(js.getBytes(StandardCharsets.UTF_8));
-        var env = new MachineEnvironment(NO_CONTEXT, MetricsObserver.discard(), NO_TIMEOUT, List.of(), NO_METHODS, "test", null);
+        var env = new MachineEnvironment(NO_CONTEXT, MetricsObserver.discard(), NO_TIMEOUT, List.of(), NO_METHODS, "test", null, () -> {});
         return new JSMachine(env, bios);
     }
 
@@ -91,7 +91,7 @@ class JSMachineTest {
         };
 
         InputStream bios = new ByteArrayInputStream("while(true){}".getBytes(StandardCharsets.UTF_8));
-        var env = new MachineEnvironment(NO_CONTEXT, MetricsObserver.discard(), timeout, List.of(), NO_METHODS, "test", null);
+        var env = new MachineEnvironment(NO_CONTEXT, MetricsObserver.discard(), timeout, List.of(), NO_METHODS, "test", null, () -> {});
         var machine = new JSMachine(env, bios);
         try {
             var result = machine.handleEvent(null, null);
@@ -110,7 +110,7 @@ class JSMachineTest {
         };
 
         var bios2 = new ByteArrayInputStream("while(true){}".getBytes(StandardCharsets.UTF_8));
-        var env2 = new MachineEnvironment(NO_CONTEXT, MetricsObserver.discard(), timeout, List.of(), NO_METHODS, "test", null);
+        var env2 = new MachineEnvironment(NO_CONTEXT, MetricsObserver.discard(), timeout, List.of(), NO_METHODS, "test", null, () -> {});
         var machine2 = new JSMachine(env2, bios2);
         try {
             var result = machine2.handleEvent(null, null);

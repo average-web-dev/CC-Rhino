@@ -4,13 +4,10 @@
 
 package dan200.computercraft.core.computer;
 
-import dan200.computercraft.api.scripting.IArguments;
 import dan200.computercraft.api.scripting.IComputerAPI;
-import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.engine.EventLoop;
 import dan200.computercraft.core.engine.JSEventEmitter;
-
 import org.mozilla.javascript.Callable;
 
 /**
@@ -18,6 +15,10 @@ import org.mozilla.javascript.Callable;
  *
  * <p>Provides Node.js-style event-emitter and task-scheduler primitives:
  * {@code on/once/off/listenerCount}, {@code queueMicrotask}, {@code setImmediate}/{@code clearImmediate}.
+ *
+ * <p>Callback parameters are typed as {@code Object} so the annotation processor extracts them via
+ * {@link dan200.computercraft.core.engine.JSArguments#get}, which passes Rhino {@link Callable}
+ * instances through without nulling them out (see {@code JSValues.toJava}).
  */
 public final class EventsAPI implements IComputerAPI {
     private final JSEventEmitter emitter;
@@ -34,21 +35,18 @@ public final class EventsAPI implements IComputerAPI {
     }
 
     @ScriptFunction
-    public void on(String event, IArguments args) throws ScriptException {
-        var fns = args.drop(1).getAll();
-        if (fns.length > 0 && fns[0] instanceof Callable fn) emitter.on(event, fn);
+    public void on(String event, Object callback) {
+        if (callback instanceof Callable fn) emitter.on(event, fn);
     }
 
     @ScriptFunction
-    public void once(String event, IArguments args) throws ScriptException {
-        var fns = args.drop(1).getAll();
-        if (fns.length > 0 && fns[0] instanceof Callable fn) emitter.once(event, fn);
+    public void once(String event, Object callback) {
+        if (callback instanceof Callable fn) emitter.once(event, fn);
     }
 
     @ScriptFunction
-    public void off(String event, IArguments args) throws ScriptException {
-        var fns = args.drop(1).getAll();
-        if (fns.length > 0 && fns[0] instanceof Callable fn) emitter.off(event, fn);
+    public void off(String event, Object callback) {
+        if (callback instanceof Callable fn) emitter.off(event, fn);
     }
 
     @ScriptFunction
@@ -57,15 +55,13 @@ public final class EventsAPI implements IComputerAPI {
     }
 
     @ScriptFunction
-    public void queueMicrotask(IArguments args) throws ScriptException {
-        var fns = args.getAll();
-        if (fns.length > 0 && fns[0] instanceof Callable fn) eventLoop.scheduleMicrotask(fn);
+    public void queueMicrotask(Object callback) {
+        if (callback instanceof Callable fn) eventLoop.scheduleMicrotask(fn);
     }
 
     @ScriptFunction
-    public int setImmediate(IArguments args) throws ScriptException {
-        var fns = args.getAll();
-        return fns.length > 0 && fns[0] instanceof Callable fn ? eventLoop.scheduleImmediate(fn) : -1;
+    public int setImmediate(Object callback) {
+        return callback instanceof Callable fn ? eventLoop.scheduleImmediate(fn) : -1;
     }
 
     @ScriptFunction

@@ -107,7 +107,7 @@ final class JSMachineBuilder {
         };
 
         var env = new MachineEnvironment(
-            context, MetricsObserver.discard(), timeout, apis, supplier, "test", fileSystem);
+            context, MetricsObserver.discard(), timeout, apis, supplier, "test", fileSystem, () -> {});
         var stream = new ByteArrayInputStream(bios.getBytes(StandardCharsets.UTF_8));
         return new JSMachine(env, stream);
     }

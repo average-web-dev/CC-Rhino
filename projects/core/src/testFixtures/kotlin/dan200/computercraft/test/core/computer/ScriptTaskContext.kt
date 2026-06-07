@@ -8,7 +8,7 @@ import dan200.computercraft.api.scripting.IComputerAPI
 import dan200.computercraft.api.scripting.IContext
 import dan200.computercraft.api.scripting.MethodResult
 import dan200.computercraft.api.scripting.ObjectArguments
-import dan200.computercraft.core.apis.OSAPI
+import dan200.computercraft.core.apis.SystemAPI
 import dan200.computercraft.core.apis.PeripheralAPI
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
@@ -57,7 +57,7 @@ interface ScriptTaskContext {
      * Sleep for the given duration. This uses the internal computer clock, so won't be accurate.
      */
     suspend fun ScriptTaskContext.sleep(duration: Duration) {
-        val timer = getApi<OSAPI>().startTimer(duration.inWholeMilliseconds / 1000.0)
+        val timer = getApi<SystemAPI>().startTimer(duration.inWholeMilliseconds / 1000.0)
         while (true) {
             val event = pullEvent("timer")
             if (event[0] == "timer" && event[1] is Number && (event[1] as Number).toInt() == timer) {

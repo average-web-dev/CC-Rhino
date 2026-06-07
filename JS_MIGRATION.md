@@ -523,7 +523,7 @@ Each continuation is bucketed by its phase rather than kept in a single flat lis
 - [x] **12.6** Expose `queueMicrotask(fn)` as a JS global backed by the microtask queue
 - [x] **12.7** Expose `setImmediate(fn)` / `clearImmediate(handle)` as JS globals backed by `checkMap`
 - [ ] **12.8** Verify: `os.sleep(0.05)` resumes exactly 1 tick later; multiple concurrent sleeps each fire at the right tick; `queueMicrotask` runs before the next I/O phase
-- [ ] **12.9** Update `JS_MIGRATION.md` cross-cutting reference table with event loop model
+- [x] **12.9** Update `JS_MIGRATION.md` cross-cutting reference table with event loop model
 
 - [ ] **Commit** — stage Phase 12 files; propose commit message; wait for user approval
 
@@ -541,8 +541,76 @@ Each continuation is bucketed by its phase rather than kept in a single flat lis
 | Blocking during pending | Other `events.on()` events dispatch normally while continuation is stored |
 | Rhino mode | `optimizationLevel(-1)` interpreter — pure Java, no class generation, continuations work |
 | Security | `cx.setClassShutter(name -> false)`, strip `Packages`/`java` globals |
-| Globals | `require` + global timers (`setTimeout`/`setInterval`/`clearTimeout`/`clearInterval`, `sleep`) — all APIs (`process`, `events`, `turtle`, `term`, `fs`, …) must be loaded with `require()` |
+| Globals | `require` only — all APIs (`process`, `events`, `turtle`, `term`, `fs`, …) must be loaded with `require()` |
 | Event model | `var events = require('events'); events.on(event, cb)` — synchronous callbacks in `handleEvent()` |
 | Sync ops | `turtle.dig()` returns value directly (`{ ok, reason? }`); no `await`, no Promise |
-| Modules | `require(id)`: checks native registry first, then CC filesystem; `require.paths = ["/rom/apis"]` |
-| Native modules | Java APIs registered by name in `JSRequire.nativeModules`; CC `os` is split into the `process` and `events` modules |
+| Modules | `require(id)`: checks native registry first, then CC filesystem; `require.paths = ["/rom/lib", "/rom/bin"]` |
+| Native modules | Java APIs registered by name in `JSRequire.nativeModules`; CC `os` split into `process` + `events` modules; engine internals (emitter, scheduler) exposed via `require('events')` through `EventsAPI` |
+| Continuation routing | `MethodResult.Bucket` enum encodes the event-loop phase: `TIMER` → Phase 1 timer map; `IO` → Phase 2 I/O map; `YIELD` → Phase 4 yield queue; `null` → return immediately (no continuation captured) |
+| Event loop — Phase 1 Timers | `EventLoop.drainTimers()` — resumes `os.sleep()` continuations keyed by CC timer ID; O(1) lookup via `timerMap` |
+| Event loop — Phase 2 I/O | `EventLoop.drainIO()` — resumes continuations matched by event-filter string (or null wildcard); callback chain re-bucketed if not yet complete |
+| Event loop — Phase 3 Microtasks | `EventLoop.drainMicrotasks()` — drains `queueMicrotask()` callbacks after every other phase; new microtasks enqueued during draining also run this cycle |
+| Event loop — Phase 4 Yields | `EventLoop.drainYields()` — resumes `os.yield()` continuations with `undefined`; snapshot-clear so re-yields land in the next tick |
+| Event loop — Phase 5 Check | `EventLoop.drainCheck()` — runs `setImmediate()` callbacks registered before the current cycle; cleared callbacks carry over to next tick |
+| `os.sleep(n)` | `OSAPI.doSleep` calls `apiEnvironment.startTimer(n)`, returns `MethodResult.timer(id)` → captured continuation stored in `timerMap[id]`; resumed by Phase 1 when CC fires `timer` event |
+| `os.yield()` | `OSAPI.doYield` queues a `cc:yield` event, returns `MethodResult.yield()` → continuation stored in `pendingYields`; resumed by Phase 4 on the same tick |
+| `queueMicrotask(fn)` | `EventsAPI.queueMicrotask` → `EventLoop.scheduleMicrotask(fn)`; runs in Phase 3 after the current phase completes |
+| `setImmediate(fn)` / `clearImmediate(id)` | `EventsAPI.setImmediate/clearImmediate` → `EventLoop.scheduleImmediate/cancelImmediate`; runs in Phase 5 (check phase) |
+
+---
+
+## Phase 13 — Unified event bus
+
+Right now two separate systems dispatch events to JS:
+
+```text
+Path A — CC-originated events (Java APIs, peripherals, timers)
+  apiEnvironment.queueEvent("modem_message", args)
+    → CC computer event queue (cross-tick, cross-thread safe)
+      → next tick: JSMachine.handleEvent("modem_message", args)
+        → JSEventEmitter.emit(…)  ← JS listeners finally fire
+
+Path B — JS-originated events (user code calling events.emit())
+  JSEventEmitter.emit("custom", args)  ← fires synchronously, this tick
+```
+
+The gap: a Java API that calls `queueEvent()` from inside a method invoked by JS
+(e.g. a peripheral side-effect) does **not** reach `events.on()` listeners until the
+next tick. Listeners registered with `events.on()` have no way to receive a
+synchronous event from Java without waiting a full CC tick.
+
+### Goal
+
+Make `JSEventEmitter` the single authoritative dispatch point. Java code that needs
+to fire an event from within the current JS execution context calls directly into
+the emitter; Java code running on another thread (server thread, modem callbacks)
+still queues via `apiEnvironment.queueEvent()` → CC scheduler → `handleEvent()` → emitter.
+
+```text
+Unified model:
+
+  Same-context Java call (inside handleEvent execution):
+    JSEventBus.fireNow("modem_message", args)   ← emitter.emit() directly
+
+  Cross-thread / cross-tick Java call:
+    apiEnvironment.queueEvent("modem_message", args)
+      → CC queue → handleEvent() → emitter (as today)
+
+  JS-side call:
+    require('events').emit("custom", args)      ← emitter.emit() directly (unchanged)
+```
+
+### Implementation approach
+
+- **`JSEventEmitter.java`** — add `void fireNow(Context cx, Scriptable scope, String event, Object[] javaArgs)`: converts args via `JSValues.toJs()` then calls `emit()`. Requires an active Rhino `Context` (only call from within `handleEvent()`).
+- **`EventsAPI.java`** — expose `emit(event, ...args)` as a JS-callable method backed by `emitter.fireNow()`, replacing any manual workaround users might have.
+- **`OSAPI.java`** — remove the `apiEnvironment.queueEvent("cc:yield", …)` call from `doYield()`: the yield continuation is already handled by `MethodResult.YIELD` and Phase 4; the queued event is a no-op and can be deleted.
+- **`JSMachine.handleEvent()`** — no structural change; it already calls `emitter.emit()` for all CC-queue events. It remains the bridge for cross-thread events.
+- **`IAPIEnvironment` / `SystemAPI`** — audit all `queueEvent()` call sites: classify each as same-context (can switch to `fireNow`) or cross-thread (must stay as `queueEvent`).
+
+- [ ] **13.1** Remove the redundant `apiEnvironment.queueEvent("cc:yield", …)` from `OSAPI.doYield()` — the `MethodResult.YIELD` bucket already handles the yield without needing a CC event
+- [ ] **13.2** Add `JSEventEmitter.fireNow(Context, Scriptable, String, Object[])` — `JSValues`-converting wrapper around `emit()` for Java callers inside the JS execution context
+- [ ] **13.3** Expose `events.emit(event, ...args)` in `EventsAPI` backed by `fireNow`
+- [ ] **13.4** Audit all `apiEnvironment.queueEvent()` call sites across all API classes; annotate each as `// cross-thread: must stay` or migrate to `fireNow`
+- [ ] **13.5** Verify: a peripheral that calls `fireNow()` from inside a `@ScriptFunction` invocation fires `events.on()` listeners synchronously in the same tick; cross-thread calls still deliver on the next tick
+- [ ] **Commit** — stage Phase 13 files; propose commit message; wait for user approval

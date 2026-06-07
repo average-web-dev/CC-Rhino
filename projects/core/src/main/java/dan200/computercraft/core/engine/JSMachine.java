@@ -19,6 +19,10 @@ public class JSMachine implements IMachine {
     // Package-visible so EventLoop.mapEvaluator() can compare against it.
     static final String HARD_ABORT_MESSAGE = "hard abort";
 
+    // Synthetic CC event name used to keep the JS event loop running when there is pending internal
+    // work (microtasks, setImmediate) but no real CC event is incoming.
+    private static final String SELF_TICK_EVENT = "cc:js-tick";
+
     /**
      * JS bootstrap that installs the global {@code require()} function using the {@code __cc_loader__}
      * infrastructure object.  Module execution is done via {@code new Function()} so that the call
@@ -51,24 +55,25 @@ public class JSMachine implements IMachine {
     private final Script biosScript;
     private final TimeoutState timeout;
     private final JSEventEmitter emitter;
+    private final Runnable scheduleTick;
 
     // Stored by observeInstructionCount so the abort listener can unpark this thread.
     private volatile @Nullable Thread executionThread;
     private @Nullable Runnable abortListener;
 
-    // TODO: Phase 12 event loop — see JS_MIGRATION.md §Phase 12 for the full Node.js-style architecture.
-    //   Currently continuations are bucketed by phase (timerMap / ioMap / microtaskQueue / checkMap)
-    //   rather than kept in a flat list, giving O(1) lookup per event.
     private final EventLoop eventLoop = new EventLoop();
 
     private boolean started = false;
     private volatile boolean isDisposed = false;
+    // Guards against queuing multiple cc:js-tick events when the loop is already scheduled.
+    private boolean tickPending = false;
 
     // Read the bios eagerly: ComputerExecutor closes the stream in a try-with-resources
     // immediately after construction, before handleEvent() is ever called.
     public JSMachine(MachineEnvironment environment, InputStream bios) throws IOException {
         var biosSource = new String(bios.readAllBytes(), StandardCharsets.UTF_8);
         timeout = environment.timeout();
+        scheduleTick = environment.scheduleTick();
 
         factory = new CCContextFactory();
         cx = factory.enterContext();
@@ -119,6 +124,18 @@ public class JSMachine implements IMachine {
         timeout.addListener(abortListener);
     }
 
+    /**
+     * Queue a synthetic {@value SELF_TICK_EVENT} CC event if the event loop has pending microtasks or
+     * {@code setImmediate} callbacks that cannot self-schedule via a real CC event.
+     * At most one tick is queued at a time — {@code tickPending} is cleared when the event is processed.
+     */
+    private void scheduleSelfTick() {
+        if (!tickPending && eventLoop.needsSelfTick()) {
+            tickPending = true;
+            scheduleTick.run();
+        }
+    }
+
     @Override
     public MachineResult handleEvent(@Nullable String eventName, @Nullable Object @Nullable [] arguments) {
         if (isDisposed) return MachineResult.OK;
@@ -141,11 +158,26 @@ public class JSMachine implements IMachine {
                     return MachineResult.error(e.getMessage() != null ? e.getMessage() : e.toString());
                 }
                 // Fire __start__ so any os.on("__start__", cb) listeners run.
-                return emitSafe("__start__", new Object[0]);
+                var startResult = emitSafe("__start__", new Object[0]);
+                if (!startResult.isError()) scheduleSelfTick();
+                return startResult;
             }
 
             // Null event after startup is a no-op (Phase 5.4).
             if (eventName == null) return MachineResult.OK;
+
+            // Internal self-tick: drain all internally-queued work without dispatching to JS listeners.
+            if (SELF_TICK_EVENT.equals(eventName)) {
+                tickPending = false;
+                var r1 = eventLoop.drainMicrotasks(cx, scope);
+                if (r1.isError()) { close(); return r1; }
+                var r2 = eventLoop.drainYields(cx, scope);
+                if (r2.isError()) { close(); return r2; }
+                var r3 = eventLoop.drainCheck(cx, scope);
+                if (r3.isError()) { close(); return r3; }
+                scheduleSelfTick();
+                return MachineResult.OK;
+            }
 
             var rawArgs = arguments != null ? arguments : new Object[0];
             var fullArgs = buildFullArgs(eventName, rawArgs);
@@ -176,6 +208,7 @@ public class JSMachine implements IMachine {
             var r5 = eventLoop.drainCheck(cx, scope);
             if (r5.isError()) { close(); return r5; }
 
+            scheduleSelfTick();
             return MachineResult.OK;
 
         } finally {

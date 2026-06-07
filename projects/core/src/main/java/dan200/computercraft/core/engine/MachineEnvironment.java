@@ -18,13 +18,16 @@ import org.jspecify.annotations.Nullable;
 /**
  * Arguments used to construct an {@link IMachine}.
  *
- * @param context    The context to execute main-thread tasks with.
- * @param metrics    A sink to submit metrics to.
- * @param timeout    The current timeout state. This should be used by the machine to interrupt its execution.
- * @param apis       APIs to expose to scripts. Each API is registered under all names in {@link IComputerAPI#getNames()}.
- * @param luaMethods A {@link MethodSupplier} to find methods on returned values.
- * @param hostString A {@linkplain GlobalEnvironment#getHostString() host string} to identify the current environment.
- * @param fileSystem The computer's filesystem, used by {@code require()} to load modules. May be null in tests.
+ * @param context      The context to execute main-thread tasks with.
+ * @param metrics      A sink to submit metrics to.
+ * @param timeout      The current timeout state. This should be used by the machine to interrupt its execution.
+ * @param apis         APIs to expose to scripts. Each API is registered under all names in {@link IComputerAPI#getNames()}.
+ * @param luaMethods   A {@link MethodSupplier} to find methods on returned values.
+ * @param hostString   A {@linkplain GlobalEnvironment#getHostString() host string} to identify the current environment.
+ * @param fileSystem   The computer's filesystem, used by {@code require()} to load modules. May be null in tests.
+ * @param scheduleTick Called by the machine when it has internal pending work (microtasks, setImmediate) that must
+ *                     run even if no CC event arrives. The implementation should enqueue a synthetic tick event so
+ *                     the machine's {@code handleEvent} is called again soon. No-op for non-JS runtimes.
  * @see IMachine.Factory
  */
 public record MachineEnvironment(
@@ -34,6 +37,7 @@ public record MachineEnvironment(
     Iterable<IComputerAPI> apis,
     MethodSupplier<ApiMethod> luaMethods,
     String hostString,
-    @Nullable FileSystem fileSystem
+    @Nullable FileSystem fileSystem,
+    Runnable scheduleTick
 ) {
 }

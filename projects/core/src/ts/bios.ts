@@ -8,7 +8,13 @@ function print(...args: unknown[]): void {
     const text = args.map(String).join('\t');
     term.write(text);
     const { y } = term.getCursorPos();
-    term.setCursorPos({ x: 0, y: y + 1 });
+    const { height } = term.getSize();
+    if (y + 1 >= height) {
+        term.scroll(1);
+        term.setCursorPos({ x: 0, y: height - 1 });
+    } else {
+        term.setCursorPos({ x: 0, y: y + 1 });
+    }
 }
 
 // Bootstrap: try to load the user's startup script.

@@ -7,6 +7,7 @@ package dan200.computercraft.core.engine;
 import dan200.computercraft.api.scripting.IArguments;
 import dan200.computercraft.api.scripting.ScriptException;
 import org.jspecify.annotations.Nullable;
+import org.mozilla.javascript.Callable;
 
 /** {@link IArguments} backed by a Rhino Object[] — argument values are converted lazily via {@link JSValues}. */
 final class JSArguments implements IArguments {
@@ -30,7 +31,11 @@ final class JSArguments implements IArguments {
     @Override
     public @Nullable Object get(int index) throws ScriptException {
         if (index < 0 || index >= count()) return null;
-        return JSValues.toJava(args[offset + index]);
+        var raw = args[offset + index];
+        // Preserve Rhino Callable (functions, arrow functions) so callers can instanceof-check them.
+        // toJava() converts anything it doesn't recognise to null, which would silently drop callbacks.
+        if (raw instanceof Callable) return raw;
+        return JSValues.toJava(raw);
     }
 
     @Override
