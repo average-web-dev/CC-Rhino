@@ -257,6 +257,11 @@ public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralC
     }
 
     @ScriptFunction
+    public final List<String> getSides() {
+        return ComputerSide.NAMES;
+    }
+
+    @ScriptFunction
     public final boolean isPresent(String sideName) {
         var side = ComputerSide.valueOfInsensitive(sideName);
         if (side != null) {

@@ -8,7 +8,7 @@
 type WrappedPeripheral = Record<string, (...args: unknown[]) => unknown>;
 
 interface PeripheralModule {
-    getNames(): string[];
+    getSides(): string[];
     isPresent(side: string): boolean;
     /** The peripheral's type(s), or `null` if nothing is attached. */
     getType(side: string): string[] | null;
@@ -17,7 +17,4 @@ interface PeripheralModule {
 
     /** Call a method by name. Returns the method's result (an array if it yields several values). */
     call(side: string, method: string, ...args: unknown[]): unknown;
-
-    /** Wrap a peripheral into an object with callable methods, or `null` if absent. */
-    wrap(side: string): WrappedPeripheral | null;
 }

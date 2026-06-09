@@ -10,7 +10,7 @@
 /** Load a built-in API module by name, returning its typed surface. */
 declare function require(id: "fs"): FsModule;
 declare function require(id: "path"): PathModule;
-declare function require(id: "process"): ProcessModule;
+declare function require(id: "system"): SystemModule;
 declare function require(id: "events"): EventsModule;
 declare function require(id: "http"): HttpModule;
 declare function require(id: "term"): TermModule;
@@ -23,8 +23,17 @@ declare function require(id: "pocket"): PocketModule;
 /** Load a user/ROM module (e.g. `require("/startup")`). */
 declare function require(id: string): unknown;
 
+declare namespace require {
+    /** Module search paths checked when resolving bare module ids. */
+    let paths: string[];
+    /** Cache of resolved modules; key is the absolute path, value is `module.exports`. */
+    const cache: Record<string, unknown>;
+}
+
 declare const module: { exports: unknown };
 declare const exports: unknown;
+
+declare function print(...args: unknown[]): void
 
 // --- Global timer functions (Node-style, layered on the CC timer mechanism) ---
 

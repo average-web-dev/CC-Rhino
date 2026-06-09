@@ -11,11 +11,11 @@ import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.Map;
 
-final class JSValues {
+public final class JSValues {
     private JSValues() {}
 
     /** Convert a Java/CC value to a Rhino JS value. */
-    static @Nullable Object toJs(Context cx, Scriptable scope, @Nullable Object java) {
+    public static @Nullable Object toJs(Context cx, Scriptable scope, @Nullable Object java) {
         if (java == null) return null;
         if (java instanceof Boolean || java instanceof String) return java;
         if (java instanceof Number n) return n.doubleValue();

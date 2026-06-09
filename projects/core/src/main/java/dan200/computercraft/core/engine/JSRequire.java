@@ -52,7 +52,7 @@ final class JSRequire extends ScriptableObject {
 
     // --- path helpers -------------------------------------------------------
 
-    private String resolvePath(String id, String currentDir) {
+    private String resolvePath(String id, String currentDir, @Nullable Object jsPaths) {
         if (id.startsWith("./") || id.startsWith("../")) {
             var base = currentDir.isEmpty() ? id : currentDir + "/" + id;
             return addJsExtension(normalize(base));
@@ -60,7 +60,16 @@ final class JSRequire extends ScriptableObject {
         if (id.startsWith("/")) {
             return addJsExtension(normalize(id));
         }
-        // Bare name: search /rom/apis
+        // Bare name: iterate require.paths forwarded from the JS side.
+        if (jsPaths instanceof NativeArray arr) {
+            var len = (int) arr.getLength();
+            for (var i = 0; i < len; i++) {
+                var dir = Context.toString(arr.get(i, arr));
+                var candidate = addJsExtension(normalize(dir + "/" + id));
+                if (existsQuietly(candidate)) return candidate;
+            }
+        }
+        // Fallback: /rom/apis when paths is not yet set (e.g. during bios bootstrap).
         var candidate = addJsExtension(normalize("/rom/apis/" + id));
         if (existsQuietly(candidate)) return candidate;
         return addJsExtension(normalize(id));
@@ -117,7 +126,8 @@ final class JSRequire extends ScriptableObject {
             var nat = nativeModules.get(id);
             if (nat != null) return nat;
 
-            var resolved = resolvePath(id, currentDir);
+            var jsPaths = args.length > 2 ? args[2] : null;
+            var resolved = resolvePath(id, currentDir, jsPaths);
 
             var cached = cache.get(resolved);
             if (cached != null) return cached;

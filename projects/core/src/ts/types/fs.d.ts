@@ -14,8 +14,10 @@ interface Stats {
     ctimeMs: number;
     /** Creation time, in milliseconds since the epoch. */
     birthtimeMs: number;
-    isDirectory(): boolean;
-    isFile(): boolean;
+    /** True if the path is a directory. Plain boolean — CC has no symlinks, no need for a method. */
+    isDirectory: boolean;
+    /** True if the path is a regular file. */
+    isFile: boolean;
     /** CC extension: whether the path is on a read-only mount. */
     isReadOnly: boolean;
 }
@@ -98,9 +100,9 @@ interface FsModule {
 
     realpathSync(path: string): string;
 
-    // --- handles ---
-    openSync(path: string, flags: OpenFlags): FileHandle;
-    open(path: string, flags: OpenFlags, cb: Callback<FileHandle>): void;
+    // --- handles (deferred — file-handle bridge not yet implemented) ---
+    openSync?(path: string, flags: OpenFlags): FileHandle;
+    open?(path: string, flags: OpenFlags, cb: Callback<FileHandle>): void;
 
     // --- CC-specific extensions (no Node equivalent) ---
     /** Name of the mount a path lives on (e.g. `"hdd"`, `"rom"`), or `null` if it doesn't exist. */

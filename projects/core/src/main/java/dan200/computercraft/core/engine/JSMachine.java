@@ -33,9 +33,13 @@ public class JSMachine implements IMachine {
         var require;
         (function () {
             var L = __cc_loader__;
+            // Shared paths array: all require() functions (root + child) read/write the same variable.
+            // Any assignment — require.paths = [...] — updates it for the entire runtime.
+            var paths = ["/rom/apis"];
+
             function makeRequire(currentDir) {
-                return function (id) {
-                    var r = L.lookup(id, currentDir);
+                var fn = function (id) {
+                    var r = L.lookup(id, currentDir, paths);
                     if (!r || typeof r !== 'object' || !r.__CC_LOAD__) return r;
                     var module = { exports: {}, id: r.resolved, filename: r.resolved };
                     (new Function('module', 'exports', 'require', '__filename', '__dirname', r.source))(
@@ -44,6 +48,14 @@ public class JSMachine implements IMachine {
                     L.setCache(r.resolved, module.exports);
                     return module.exports;
                 };
+                // Expose paths as a getter/setter so child require() functions also
+                // share the same variable — require.paths = [...] works from any module.
+                Object.defineProperty(fn, 'paths', {
+                    get: function() { return paths; },
+                    set: function(v) { paths = v; },
+                    enumerable: true, configurable: true
+                });
+                return fn;
             }
             require = makeRequire('');
         })();

@@ -1,6 +1,6 @@
-// Copyright Daniel Ratcliffe, 2011-2022. Do not distribute without permission.
+// SPDX-FileCopyrightText: 2026 average-web-dev
 //
-// SPDX-License-Identifier: LicenseRef-CCPL
+// SPDX-License-Identifier: MPL-2.0
 
 package dan200.computercraft.core.apis;
 
@@ -9,54 +9,38 @@ import dan200.computercraft.api.scripting.IArguments;
 import dan200.computercraft.api.scripting.IComputerAPI;
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.scripting.ScriptFunction;
-import dan200.computercraft.core.apis.handles.ReadHandle;
-import dan200.computercraft.core.apis.handles.ReadWriteHandle;
-import dan200.computercraft.core.apis.handles.WriteHandle;
 import dan200.computercraft.core.filesystem.FileSystem;
 import dan200.computercraft.core.filesystem.FileSystemException;
 import dan200.computercraft.core.metrics.Metrics;
 import org.jspecify.annotations.Nullable;
+import org.mozilla.javascript.Context;
+import org.mozilla.javascript.Function;
 
+import com.google.common.math.Stats;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.OpenOption;
-import java.nio.file.StandardOpenOption;
 import java.util.*;
 
+import dan200.computercraft.core.engine.JSValues;
+
 /**
- * Interact with the computer's files and filesystem, allowing you to manipulate files, directories and paths. This
- * includes:
+ * Interact with the computer's filesystem. Modelled on Node.js {@code fs}: every operation
+ * comes in a blocking {@code …Sync} variant (throws on error) and a callback variant that
+ * calls {@code (err, result)} before returning.
  *
- * <ul>
- * <li>**Reading and writing files:** Call {@link #open} to obtain a file "handle", which can be used to read from or
- * write to a file.</li>
- * <li>**Path manipulation:** {@link #combine}, {@link #getName} and {@link #getDir} allow you to manipulate file
- * paths, joining them together or extracting components.</li>
- * <li>**Querying paths:** For instance, checking if a file exists, or whether it's a directory. See {@link #getSize},
- * {@link #exists}, {@link #isDir}, {@link #isReadOnly} and {@link #attributes}.</li>
- * <li>**File and directory manipulation:** For instance, moving or copying files. See {@link #makeDir}, {@link #move},
- * {@link #copy} and {@link #delete}.</li>
- * </ul>
- * <p>
- * > [!NOTE]
- * > All functions in the API work on absolute paths, and do not take the [current directory][`shell.dir`] into account.
- * > You can use [`shell.resolve`] to convert a relative path into an absolute one.
- * <p>
- * ## Mounts
- * While a computer can only have one hard drive and filesystem, other filesystems may be "mounted" inside it. For
- * instance, the {@link dan200.computercraft.shared.peripheral.diskdrive.DiskDrivePeripheral drive peripheral} mounts
- * its disk's contents at {@code "disk/"}, {@code "disk1/"}, etc...
- * <p>
- * You can see which mount a path belongs to with the {@link #getDrive} function. This returns {@code "hdd"} for the
- * computer's main filesystem ({@code "/"}), {@code "rom"} for the rom ({@code "rom/"}).
- * <p>
- * Most filesystems have a limited capacity, operations which would cause that capacity to be reached (such as writing
- * an incredibly large file) will fail. You can see a mount's capacity with {@link #getCapacity} and the remaining
- * space with {@link #getFreeSpace}.
+ * <p>Path helpers ({@code join}, {@code basename}, …) live in the separate {@code path} module.
+ * File handles ({@code openSync} / {@code open}) are deferred to a later phase.
  *
  * @cc.module fs
  */
 public class FSAPI implements IComputerAPI {
-    private static final Set<OpenOption> READ_EXTENDED = Set.of(StandardOpenOption.READ, StandardOpenOption.WRITE);
-    private static final Set<OpenOption> WRITE_EXTENDED = union(Set.of(StandardOpenOption.READ), MountConstants.WRITE_OPTIONS);
+    private static final Set<OpenOption> READ_EXTENDED =
+        Set.of(java.nio.file.StandardOpenOption.READ, java.nio.file.StandardOpenOption.WRITE);
 
     private final IAPIEnvironment environment;
     private @Nullable FileSystem fileSystem = null;
@@ -81,27 +65,169 @@ public class FSAPI implements IComputerAPI {
     }
 
     private FileSystem getFileSystem() {
-        var filesystem = fileSystem;
-        if (filesystem == null) throw new IllegalStateException("File system is not mounted");
-        return filesystem;
+        var fs = fileSystem;
+        if (fs == null) throw new IllegalStateException("File system is not mounted");
+        return fs;
+    }
+
+    // ── Convenience read ──────────────────────────────────────────────────────
+
+    /**
+     * Read the entire contents of a file synchronously.
+     *
+     * @param path     The file path.
+     * @param encoding {@code "binary"} / {@code "latin1"} / {@code "ascii"} for raw bytes;
+     *                 omit or {@code "utf8"} / {@code "utf-8"} for a text string.
+     * @return File contents as a {@code string} (text) or {@code Buffer} (binary).
+     * @throws ScriptException If the file cannot be read.
+     */
+    @ScriptFunction
+    public final Object readFileSync(String path, Optional<String> encoding) throws ScriptException {
+        var binary = isBinary(encoding.orElse(null));
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            var bytes = doReadBytes(path);
+            return binary ? bytes : new String(bytes, StandardCharsets.UTF_8);
+        } catch (FileSystemException | IOException e) {
+            throw new ScriptException(e.getMessage());
+        }
     }
 
     /**
-     * Returns a list of files in a directory.
+     * Read the entire contents of a file, calling {@code callback(err, data)} when done.
+     * The callback is invoked synchronously (CC filesystem I/O does not block a separate thread).
      *
-     * @param path The path to list.
-     * @return A table with a list of files in the directory.
-     * @throws ScriptException If the path doesn't exist.
-     * @cc.usage List all files under {@code /rom/}
-     * <pre>{@code
-     * local files = fs.list("/rom/")
-     * for i = 1, #files do
-     *   print(files[i])
-     * end
-     * }</pre>
+     * @param args {@code (path, callback)} or {@code (path, encoding, callback)}.
+     * @throws ScriptException On argument errors.
      */
     @ScriptFunction
-    public final List<String> list(String path) throws ScriptException {
+    public final void readFile(IArguments args) throws ScriptException {
+        if (args.count() < 2) throw new ScriptException("Expected (path, [encoding,] callback)");
+        var path = args.getString(0);
+        String encoding = null;
+        Function callback;
+        if (args.count() >= 3) {
+            encoding = args.getString(1);
+            callback = extractCallback(args.get(2));
+        } else {
+            callback = extractCallback(args.get(1));
+        }
+        var binary = isBinary(encoding);
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            var bytes = doReadBytes(path);
+            Object result = binary ? bytes : new String(bytes, StandardCharsets.UTF_8);
+            callResult(callback, result);
+        } catch (FileSystemException | IOException e) {
+            callError(callback, e.getMessage());
+        }
+    }
+
+    // ── Convenience write ─────────────────────────────────────────────────────
+
+    /**
+     * Write data to a file synchronously, replacing any existing content.
+     *
+     * @param args {@code (path, data)} or {@code (path, data, encoding)}.
+     * @throws ScriptException If the file cannot be written.
+     */
+    @ScriptFunction
+    public final void writeFileSync(IArguments args) throws ScriptException {
+        if (args.count() < 2) throw new ScriptException("Expected (path, data[, encoding])");
+        var path = args.getString(0);
+        var bytes = toBytesFromArg(args.get(1), args.count() > 2 ? args.getString(2) : null);
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            doWriteBytes(path, bytes, MountConstants.WRITE_OPTIONS);
+        } catch (FileSystemException | IOException e) {
+            throw new ScriptException(e.getMessage());
+        }
+    }
+
+    /**
+     * Write data to a file, calling {@code callback(err)} when done.
+     *
+     * @param args {@code (path, data, callback)} or {@code (path, data, encoding, callback)}.
+     * @throws ScriptException On argument errors.
+     */
+    @ScriptFunction
+    public final void writeFile(IArguments args) throws ScriptException {
+        if (args.count() < 3) throw new ScriptException("Expected (path, data, [encoding,] callback)");
+        var path = args.getString(0);
+        var rawData = args.get(1);
+        String encoding = null;
+        Function callback;
+        if (args.count() >= 4) {
+            encoding = args.getString(2);
+            callback = extractCallback(args.get(3));
+        } else {
+            callback = extractCallback(args.get(2));
+        }
+        var bytes = toBytesFromArg(rawData, encoding);
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            doWriteBytes(path, bytes, MountConstants.WRITE_OPTIONS);
+            callResult(callback, null);
+        } catch (FileSystemException | IOException e) {
+            callError(callback, e.getMessage());
+        }
+    }
+
+    // ── Convenience append ────────────────────────────────────────────────────
+
+    /**
+     * Append data to a file synchronously, creating it if it does not exist.
+     *
+     * @param args {@code (path, data)} or {@code (path, data, encoding)}.
+     * @throws ScriptException If the file cannot be written.
+     */
+    @ScriptFunction
+    public final void appendFileSync(IArguments args) throws ScriptException {
+        if (args.count() < 2) throw new ScriptException("Expected (path, data[, encoding])");
+        var path = args.getString(0);
+        var bytes = toBytesFromArg(args.get(1), args.count() > 2 ? args.getString(2) : null);
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            doWriteBytes(path, bytes, MountConstants.APPEND_OPTIONS);
+        } catch (FileSystemException | IOException e) {
+            throw new ScriptException(e.getMessage());
+        }
+    }
+
+    /**
+     * Append data to a file, calling {@code callback(err)} when done.
+     *
+     * @param args {@code (path, data, callback)} or {@code (path, data, encoding, callback)}.
+     * @throws ScriptException On argument errors.
+     */
+    @ScriptFunction
+    public final void appendFile(IArguments args) throws ScriptException {
+        if (args.count() < 3) throw new ScriptException("Expected (path, data, [encoding,] callback)");
+        var path = args.getString(0);
+        var rawData = args.get(1);
+        String encoding = null;
+        Function callback;
+        if (args.count() >= 4) {
+            encoding = args.getString(2);
+            callback = extractCallback(args.get(3));
+        } else {
+            callback = extractCallback(args.get(2));
+        }
+        var bytes = toBytesFromArg(rawData, encoding);
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            doWriteBytes(path, bytes, MountConstants.APPEND_OPTIONS);
+            callResult(callback, null);
+        } catch (FileSystemException | IOException e) {
+            callError(callback, e.getMessage());
+        }
+    }
+
+    // ── Directory operations ──────────────────────────────────────────────────
+
+    /**
+     * Returns a list of entries in the directory at {@code path}.
+     *
+     * @param path The directory path.
+     * @return A list of entry names (not full paths).
+     * @throws ScriptException If the path doesn't exist or is not a directory.
+     */
+    @ScriptFunction
+    public final List<String> readdirSync(String path) throws ScriptException {
         try (var ignored = environment.time(Metrics.FS_OPS)) {
             return getFileSystem().list(path);
         } catch (FileSystemException e) {
@@ -110,139 +236,30 @@ public class FSAPI implements IComputerAPI {
     }
 
     /**
-     * Combines several parts of a path into one full path, adding separators as
-     * needed.
+     * List a directory, calling {@code callback(err, entries)} when done.
      *
-     * @param arguments The paths to combine.
-     * @return The new path, with separators added between parts as needed.
+     * @param path     The directory path.
+     * @param callback Called with {@code (err, string[])} .
      * @throws ScriptException On argument errors.
-     * @cc.tparam string path The first part of the path. For example, a parent directory path.
-     * @cc.tparam string ... Additional parts of the path to combine.
-     * @cc.changed 1.95.0 Now supports multiple arguments.
-     * @cc.usage Combine several file paths together
-     * <pre>{@code
-     * fs.combine("/rom/programs", "../apis", "parallel.js")
-     * -- => rom/apis/parallel.js
-     * }</pre>
      */
     @ScriptFunction
-    public final String combine(IArguments arguments) throws ScriptException {
-        var result = new StringBuilder();
-        result.append(FileSystem.sanitizePath(arguments.getString(0), true));
-
-        for (int i = 1, n = arguments.count(); i < n; i++) {
-            var part = FileSystem.sanitizePath(arguments.getString(i), true);
-            if (result.length() != 0 && !part.isEmpty()) result.append('/');
-            result.append(part);
-        }
-
-        return FileSystem.sanitizePath(result.toString(), true);
-    }
-
-    /**
-     * Returns the file name portion of a path.
-     *
-     * @param path The path to get the name from.
-     * @return The final part of the path (the file name).
-     * @cc.since 1.2
-     * @cc.usage Get the file name of {@code rom/startup.js}
-     * <pre>{@code
-     * fs.getName("rom/startup.js")
-     * -- => startup.js
-     * }</pre>
-     */
-    @ScriptFunction
-    public final String getName(String path) {
-        return FileSystem.getName(path);
-    }
-
-    /**
-     * Returns the parent directory portion of a path.
-     *
-     * @param path The path to get the directory from.
-     * @return The path with the final part removed (the parent directory).
-     * @cc.since 1.63
-     * @cc.usage Get the directory name of {@code rom/startup.js}
-     * <pre>{@code
-     * fs.getDir("rom/startup.js")
-     * -- => rom
-     * }</pre>
-     */
-    @ScriptFunction
-    public final String getDir(String path) {
-        return FileSystem.getDirectory(path);
-    }
-
-    /**
-     * Returns the size of the specified file.
-     *
-     * @param path The file to get the file size of.
-     * @return The size of the file, in bytes.
-     * @throws ScriptException If the path doesn't exist.
-     * @cc.since 1.3
-     */
-    @ScriptFunction
-    public final long getSize(String path) throws ScriptException {
+    public final void readdir(String path, Object callback) throws ScriptException {
+        var fn = extractCallback(callback);
         try (var ignored = environment.time(Metrics.FS_OPS)) {
-            return getFileSystem().getSize(path);
+            callResult(fn, getFileSystem().list(path));
         } catch (FileSystemException e) {
-            throw new ScriptException(e.getMessage());
+            callError(fn, e.getMessage());
         }
     }
 
     /**
-     * Returns whether the specified path exists.
+     * Create a directory (and any missing parents) at {@code path}.
      *
-     * @param path The path to check the existence of.
-     * @return Whether the path exists.
+     * @param path The directory path.
+     * @throws ScriptException If the directory could not be created.
      */
     @ScriptFunction
-    public final boolean exists(String path) {
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            return getFileSystem().exists(path);
-        } catch (FileSystemException e) {
-            return false;
-        }
-    }
-
-    /**
-     * Returns whether the specified path is a directory.
-     *
-     * @param path The path to check.
-     * @return Whether the path is a directory.
-     */
-    @ScriptFunction
-    public final boolean isDir(String path) {
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            return getFileSystem().isDir(path);
-        } catch (FileSystemException e) {
-            return false;
-        }
-    }
-
-    /**
-     * Returns whether a path is read-only.
-     *
-     * @param path The path to check.
-     * @return Whether the path cannot be written to.
-     */
-    @ScriptFunction
-    public final boolean isReadOnly(String path) {
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            return getFileSystem().isReadOnly(path);
-        } catch (FileSystemException e) {
-            return false;
-        }
-    }
-
-    /**
-     * Creates a directory, and any missing parents, at the specified path.
-     *
-     * @param path The path to the directory to create.
-     * @throws ScriptException If the directory couldn't be created.
-     */
-    @ScriptFunction
-    public final void makeDir(String path) throws ScriptException {
+    public final void mkdirSync(String path) throws ScriptException {
         try (var ignored = environment.time(Metrics.FS_OPS)) {
             getFileSystem().makeDir(path);
         } catch (FileSystemException e) {
@@ -251,52 +268,35 @@ public class FSAPI implements IComputerAPI {
     }
 
     /**
-     * Moves a file or directory from one path to another.
-     * <p>
-     * Any parent directories are created as needed.
+     * Create a directory, calling {@code callback(err)} when done.
+     * Accepts an optional {@code options} object (ignored; parents are always created).
      *
-     * @param path The current file or directory to move from.
-     * @param dest The destination path for the file or directory.
-     * @throws ScriptException If the file or directory couldn't be moved.
+     * @param args {@code (path, callback)} or {@code (path, options, callback)}.
+     * @throws ScriptException On argument errors.
      */
     @ScriptFunction
-    public final void move(String path, String dest) throws ScriptException {
+    public final void mkdir(IArguments args) throws ScriptException {
+        if (args.count() < 2) throw new ScriptException("Expected (path, [options,] callback)");
+        var path = args.getString(0);
+        var callback = extractCallback(args.get(args.count() - 1));
         try (var ignored = environment.time(Metrics.FS_OPS)) {
-            getFileSystem().move(path, dest);
+            getFileSystem().makeDir(path);
+            callResult(callback, null);
         } catch (FileSystemException e) {
-            throw new ScriptException(e.getMessage());
+            callError(callback, e.getMessage());
         }
     }
 
-    /**
-     * Copies a file or directory to a new path.
-     * <p>
-     * Any parent directories are created as needed.
-     *
-     * @param path The file or directory to copy.
-     * @param dest The path to the destination file or directory.
-     * @throws ScriptException If the file or directory couldn't be copied.
-     */
-    @ScriptFunction
-    public final void copy(String path, String dest) throws ScriptException {
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            getFileSystem().copy(path, dest);
-        } catch (FileSystemException e) {
-            throw new ScriptException(e.getMessage());
-        }
-    }
+    // ── File manipulation ─────────────────────────────────────────────────────
 
     /**
-     * Deletes a file or directory.
-     * <p>
-     * If the path points to a directory, all of the enclosed files and
-     * subdirectories are also deleted.
+     * Delete a file or directory (and all its contents).
      *
-     * @param path The path to the file or directory to delete.
-     * @throws ScriptException If the file or directory couldn't be deleted.
+     * @param path The path to delete.
+     * @throws ScriptException If the path could not be deleted.
      */
     @ScriptFunction
-    public final void delete(String path) throws ScriptException {
+    public final void rmSync(String path) throws ScriptException {
         try (var ignored = environment.time(Metrics.FS_OPS)) {
             getFileSystem().delete(path);
         } catch (FileSystemException e) {
@@ -305,130 +305,229 @@ public class FSAPI implements IComputerAPI {
     }
 
     /**
-     * Opens a file for reading or writing at a path.
-     * <p>
-     * The {@code mode} string can be any of the following:
-     * <ul>
-     * <li><strong>"r"</strong>: Read mode.</li>
-     * <li><strong>"w"</strong>: Write mode.</li>
-     * <li><strong>"a"</strong>: Append mode.</li>
-     * <li><strong>"r+"</strong>: Update mode (allows reading and writing), all data is preserved.</li>
-     * <li><strong>"w+"</strong>: Update mode, all data is erased.</li>
-     * </ul>
-     * <p>
-     * The mode may also have a "b" at the end, which opens the file in "binary
-     * mode". This changes {@link ReadHandle#read(Optional)} and {@link WriteHandle#write(IArguments)}
-     * to read/write single bytes as numbers rather than strings.
+     * Delete a file or directory, calling {@code callback(err)} when done.
+     * Accepts an optional {@code options} object; {@code {force:true}} suppresses
+     * errors for non-existent paths.
      *
-     * @param path The path to the file to open.
-     * @param mode The mode to open the file with.
-     * @return A file handle object for the file, or {@code nil} + an error message on error.
-     * @throws ScriptException If an invalid mode was specified.
-     * @cc.treturn [1] table A file handle object for the file.
-     * @cc.treturn [2] nil If the file does not exist, or cannot be opened.
-     * @cc.treturn string|nil A message explaining why the file cannot be opened.
-     * @cc.usage Read the contents of a file.
-     * <pre>{@code
-     * local file = fs.open("/rom/help/intro.txt", "r")
-     * local contents = file.readAll()
-     * file.close()
-     *
-     * print(contents)
-     * }</pre>
-     * @cc.usage Open a file and read all lines into a table. [`io.lines`] offers an alternative way to do this.
-     * <pre>{@code
-     * local file = fs.open("/rom/motd.txt", "r")
-     * local lines = {}
-     * while true do
-     *   local line = file.readLine()
-     *
-     *   -- If line is nil then we've reached the end of the file and should stop
-     *   if not line then break end
-     *
-     *   lines[#lines + 1] = line
-     * end
-     *
-     * file.close()
-     *
-     * print(lines[math.random(#lines)]) -- Pick a random line and print it.
-     * }</pre>
-     * @cc.usage Open a file and write some text to it. You can run {@code edit out.txt} to see the written text.
-     * <pre>{@code
-     * local file = fs.open("out.txt", "w")
-     * file.write("Just testing some code")
-     * file.close() -- Remember to call close, otherwise changes may not be written!
-     * }</pre>
-     * @cc.changed 1.109.0 Add support for update modes ({@code r+} and {@code w+}).
-     * @cc.changed 1.109.0 Opening a file in non-binary mode now uses the raw bytes of the file rather than encoding to
-     * UTF-8.
+     * @param args {@code (path, callback)} or {@code (path, options, callback)}.
+     * @throws ScriptException On argument errors.
      */
     @ScriptFunction
-    public final Object[] open(String path, String mode) throws ScriptException {
-        if (mode.isEmpty()) throw new ScriptException(MountConstants.UNSUPPORTED_MODE);
-
-        var binary = mode.indexOf('b') >= 0;
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            switch (mode) {
-                case "r", "rb" -> {
-                    var reader = getFileSystem().openForRead(path);
-                    return new Object[]{ new ReadHandle(reader.get(), reader, binary) };
-                }
-                case "w", "wb" -> {
-                    var writer = getFileSystem().openForWrite(path, MountConstants.WRITE_OPTIONS);
-                    return new Object[]{ WriteHandle.of(writer.get(), writer, binary, true) };
-                }
-                case "a", "ab" -> {
-                    var writer = getFileSystem().openForWrite(path, MountConstants.APPEND_OPTIONS);
-                    return new Object[]{ WriteHandle.of(writer.get(), writer, binary, false) };
-                }
-                case "r+", "r+b" -> {
-                    var reader = getFileSystem().openForWrite(path, READ_EXTENDED);
-                    return new Object[]{ new ReadWriteHandle(reader.get(), reader, binary) };
-                }
-                case "w+", "w+b" -> {
-                    var writer = getFileSystem().openForWrite(path, WRITE_EXTENDED);
-                    return new Object[]{ new ReadWriteHandle(writer.get(), writer, binary) };
-                }
-                default -> throw new ScriptException(MountConstants.UNSUPPORTED_MODE);
+    public final void rm(IArguments args) throws ScriptException {
+        if (args.count() < 2) throw new ScriptException("Expected (path, [options,] callback)");
+        var path = args.getString(0);
+        var callback = extractCallback(args.get(args.count() - 1));
+        var force = false;
+        if (args.count() >= 3) {
+            var opts = args.get(1);
+            if (opts instanceof Map<?, ?> map) {
+                force = Boolean.TRUE.equals(map.get("force"));
             }
+        }
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            getFileSystem().delete(path);
+            callResult(callback, null);
         } catch (FileSystemException e) {
-            return new Object[]{ null, e.getMessage() };
+            if (force) {
+                callResult(callback, null);
+            } else {
+                callError(callback, e.getMessage());
+            }
         }
     }
 
     /**
-     * Returns the name of the mount that the specified path is located on.
+     * Move/rename a file or directory.
      *
-     * @param path The path to get the drive of.
-     * @return The name of the drive that the file is on; e.g. {@code hdd} for local files, or {@code rom} for ROM files.
-     * @throws ScriptException If the path doesn't exist.
-     * @cc.treturn string|nil The name of the drive that the file is on; e.g. {@code hdd} for local files, or {@code rom} for ROM files.
-     * @cc.usage Print the drives of a couple of mounts:
-     *
-     * <pre>{@code
-     * print("/: " .. fs.getDrive("/"))
-     * print("/rom/: " .. fs.getDrive("rom"))
-     * }</pre>
+     * @param src  Source path.
+     * @param dest Destination path.
+     * @throws ScriptException If the operation fails.
      */
     @ScriptFunction
-    public final Object @Nullable [] getDrive(String path) throws ScriptException {
-        try {
-            return getFileSystem().exists(path) ? new Object[]{ getFileSystem().getMountLabel(path) } : null;
+    public final void renameSync(String src, String dest) throws ScriptException {
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            getFileSystem().move(src, dest);
         } catch (FileSystemException e) {
             throw new ScriptException(e.getMessage());
         }
     }
 
     /**
-     * Returns the amount of free space available on the drive the path is
-     * located on.
+     * Move/rename a file or directory, calling {@code callback(err)} when done.
      *
-     * @param path The path to check the free space for.
-     * @return The amount of free space available, in bytes.
-     * @throws ScriptException If the path doesn't exist.
-     * @cc.treturn number|"unlimited" The amount of free space available, in bytes, or "unlimited".
-     * @cc.since 1.4
-     * @see #getCapacity To get the capacity of this drive.
+     * @param src      Source path.
+     * @param dest     Destination path.
+     * @param callback Called with {@code (err)}.
+     * @throws ScriptException On argument errors.
+     */
+    @ScriptFunction
+    public final void rename(String src, String dest, Object callback) throws ScriptException {
+        var fn = extractCallback(callback);
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            getFileSystem().move(src, dest);
+            callResult(fn, null);
+        } catch (FileSystemException e) {
+            callError(fn, e.getMessage());
+        }
+    }
+
+    /**
+     * Copy a file or directory to {@code dest}. Parent directories are created as needed.
+     *
+     * @param src  Source path.
+     * @param dest Destination path.
+     * @throws ScriptException If the copy fails.
+     */
+    @ScriptFunction
+    public final void cpSync(String src, String dest) throws ScriptException {
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            getFileSystem().copy(src, dest);
+        } catch (FileSystemException e) {
+            throw new ScriptException(e.getMessage());
+        }
+    }
+
+    /**
+     * Copy a file or directory, calling {@code callback(err)} when done.
+     * Accepts an optional {@code options} object (ignored; copy is always recursive).
+     *
+     * @param args {@code (src, dest, callback)} or {@code (src, dest, options, callback)}.
+     * @throws ScriptException On argument errors.
+     */
+    @ScriptFunction
+    public final void cp(IArguments args) throws ScriptException {
+        if (args.count() < 3) throw new ScriptException("Expected (src, dest, [options,] callback)");
+        var src = args.getString(0);
+        var dest = args.getString(1);
+        var callback = extractCallback(args.get(args.count() - 1));
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            getFileSystem().copy(src, dest);
+            callResult(callback, null);
+        } catch (FileSystemException e) {
+            callError(callback, e.getMessage());
+        }
+    }
+
+    /**
+     * Copy a single file to {@code dest}. Delegates to {@link #cpSync} (CC has no file-only copy).
+     *
+     * @param src  Source file path.
+     * @param dest Destination path.
+     * @throws ScriptException If the copy fails.
+     */
+    @ScriptFunction
+    public final void copyFileSync(String src, String dest) throws ScriptException {
+        cpSync(src, dest);
+    }
+
+    /**
+     * Copy a single file, calling {@code callback(err)} when done.
+     *
+     * @param src      Source file path.
+     * @param dest     Destination path.
+     * @param callback Called with {@code (err)}.
+     * @throws ScriptException On argument errors.
+     */
+    @ScriptFunction
+    public final void copyFile(String src, String dest, Object callback) throws ScriptException {
+        var fn = extractCallback(callback);
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            getFileSystem().copy(src, dest);
+            callResult(fn, null);
+        } catch (FileSystemException e) {
+            callError(fn, e.getMessage());
+        }
+    }
+
+    // ── Querying ──────────────────────────────────────────────────────────────
+
+    /**
+     * Returns {@code true} if the path exists.
+     *
+     * @param path The path to check.
+     * @return Whether the path exists.
+     */
+    @ScriptFunction
+    public boolean existsSync(String path) {
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            return getFileSystem().exists(path);
+        } catch (FileSystemException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Returns a {@link Stats}-shaped object for the given path.
+     * Fields: {@code size}, {@code mtimeMs}, {@code ctimeMs}, {@code birthtimeMs},
+     * {@code isDirectory} (boolean), {@code isFile} (boolean), {@code isReadOnly} (boolean).
+     *
+     * @param path The path to stat.
+     * @return The stats object.
+     * @throws ScriptException If the path does not exist.
+     */
+    @ScriptFunction
+    public Map<String, Object> statSync(String path) throws ScriptException {
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            return buildStats(path);
+        } catch (FileSystemException e) {
+            throw new ScriptException(e.getMessage());
+        }
+    }
+
+    /**
+     * Stat a path, calling {@code callback(err, stats)} when done.
+     *
+     * @param path     The path to stat.
+     * @param callback Called with {@code (err, Stats)}.
+     * @throws ScriptException On argument errors.
+     */
+    @ScriptFunction
+    public final void stat(String path, Object callback) throws ScriptException {
+        var fn = extractCallback(callback);
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            callResult(fn, buildStats(path));
+        } catch (FileSystemException e) {
+            callError(fn, e.getMessage());
+        }
+    }
+
+    /**
+     * Resolve and normalise a path (removes {@code .} and {@code ..} components).
+     * CC has no symlinks, so this is purely lexical.
+     *
+     * @param path The path to normalise.
+     * @return The normalised absolute path.
+     */
+    @ScriptFunction
+    public String realpathSync(String path) {
+        return FileSystem.sanitizePath(path, true);
+    }
+
+    // ── CC-specific extensions (no Node equivalent) ───────────────────────────
+
+    /**
+     * Returns the name of the mount a path lives on (e.g. {@code "hdd"}, {@code "rom"}),
+     * or {@code null} if the path does not exist.
+     *
+     * @param path The path to query.
+     * @return The mount name, or {@code null}.
+     * @throws ScriptException If the path cannot be resolved.
+     */
+    @ScriptFunction
+    public final @Nullable String getDrive(String path) throws ScriptException {
+        try {
+            return getFileSystem().exists(path) ? getFileSystem().getMountLabel(path) : null;
+        } catch (FileSystemException e) {
+            throw new ScriptException(e.getMessage());
+        }
+    }
+
+    /**
+     * Returns the free space on the mount a path lives on, in bytes, or {@code "unlimited"}.
+     *
+     * @param path The path to query.
+     * @return Free bytes, or {@code "unlimited"}.
+     * @throws ScriptException If the path does not exist.
      */
     @ScriptFunction
     public final Object getFreeSpace(String path) throws ScriptException {
@@ -441,15 +540,12 @@ public class FSAPI implements IComputerAPI {
     }
 
     /**
-     * Returns the capacity of the drive the path is located on.
+     * Returns the total capacity of the mount a path lives on, in bytes,
+     * or {@code null} for read-only mounts (ROM, treasure disks).
      *
-     * @param path The path of the drive to get.
-     * @return The drive's capacity.
-     * @throws ScriptException If the capacity cannot be determined.
-     * @cc.treturn number|nil This drive's capacity. This will be nil for "read-only" drives, such as the ROM or
-     * treasure disks.
-     * @cc.since 1.87.0
-     * @see #getFreeSpace To get the free space available on this drive.
+     * @param path The path to query.
+     * @return Capacity in bytes, or {@code null}.
+     * @throws ScriptException If the path cannot be resolved.
      */
     @Nullable
     @ScriptFunction
@@ -463,45 +559,96 @@ public class FSAPI implements IComputerAPI {
     }
 
     /**
-     * Get attributes about a specific file or folder.
-     * <p>
-     * The returned attributes table contains information about the size of the file, whether it is a directory,
-     * when it was created and last modified, and whether it is read only.
-     * <p>
-     * The creation and modification times are given as the number of milliseconds since the UNIX epoch. This may be
-     * given to {@link SystemAPI#date} in order to convert it to more usable form.
+     * Returns {@code true} if the path lives on a read-only mount.
      *
-     * @param path The path to get attributes for.
-     * @return The resulting attributes.
-     * @throws ScriptException If the path does not exist.
-     * @cc.treturn { size = number, isDir = boolean, isReadOnly = boolean, created = number, modified = number } The resulting attributes.
-     * @cc.since 1.87.0
-     * @cc.changed 1.91.0 Renamed `modification` field to `modified`.
-     * @cc.changed 1.95.2 Added `isReadOnly` to attributes.
-     * @see #getSize If you only care about the file's size.
-     * @see #isDir If you only care whether a path is a directory or not.
+     * @param path The path to check.
+     * @return Whether the path is read-only.
      */
     @ScriptFunction
-    public final Map<String, Object> attributes(String path) throws ScriptException {
+    public final boolean isReadOnly(String path) {
         try (var ignored = environment.time(Metrics.FS_OPS)) {
-            var attributes = getFileSystem().getAttributes(path);
-            Map<String, Object> result = new HashMap<>();
-            result.put("modification", attributes.lastModifiedTime().toMillis());
-            result.put("modified", attributes.lastModifiedTime().toMillis());
-            result.put("created", attributes.creationTime().toMillis());
-            result.put("size", attributes.isDirectory() ? 0 : attributes.size());
-            result.put("isDir", attributes.isDirectory());
-            result.put("isReadOnly", getFileSystem().isReadOnly(path));
-            return result;
+            return getFileSystem().isReadOnly(path);
         } catch (FileSystemException e) {
-            throw new ScriptException(e.getMessage());
+            return false;
         }
     }
 
-    private static Set<OpenOption> union(Set<OpenOption> a, Set<OpenOption> b) {
-        Set<OpenOption> union = new HashSet<>();
-        union.addAll(a);
-        union.addAll(b);
-        return Set.copyOf(union);
+    // open / openSync: deferred — file handles require a dedicated bridge phase.
+
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    private byte[] doReadBytes(String path) throws FileSystemException, IOException {
+        var wrapper = getFileSystem().openForRead(path);
+        try (wrapper) {
+            var channel = wrapper.get();
+            int expectedSize;
+            try { expectedSize = Math.max(32, (int) channel.size()); } catch (IOException e) { expectedSize = 32; }
+            var stream = new ByteArrayOutputStream(expectedSize);
+            var buf = ByteBuffer.allocate(8192);
+            while (channel.read(buf) != -1) {
+                buf.flip();
+                stream.write(buf.array(), 0, buf.limit());
+                buf.clear();
+            }
+            return stream.toByteArray();
+        }
+    }
+
+    private void doWriteBytes(String path, byte[] bytes, Set<OpenOption> options)
+            throws FileSystemException, IOException {
+        var wrapper = getFileSystem().openForWrite(path, options);
+        try (wrapper) {
+            var buf = ByteBuffer.wrap(bytes);
+            var channel = wrapper.get();
+            while (buf.hasRemaining()) channel.write(buf);
+        }
+    }
+
+    private Map<String, Object> buildStats(String path) throws FileSystemException {
+        var attrs = getFileSystem().getAttributes(path);
+        var stats = new HashMap<String, Object>(8);
+        stats.put("size",        attrs.isDirectory() ? 0L : attrs.size());
+        stats.put("mtimeMs",     attrs.lastModifiedTime().toMillis());
+        stats.put("ctimeMs",     attrs.lastModifiedTime().toMillis());
+        stats.put("birthtimeMs", attrs.creationTime().toMillis());
+        stats.put("isDirectory", attrs.isDirectory());
+        stats.put("isFile",      !attrs.isDirectory());
+        stats.put("isReadOnly",  getFileSystem().isReadOnly(path));
+        return stats;
+    }
+
+    private static byte[] toBytesFromArg(@Nullable Object data, @Nullable String encoding) throws ScriptException {
+        if (data instanceof byte[] bytes) return bytes;
+        Charset charset = isBinary(encoding) ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8;
+        if (data instanceof String s) return s.getBytes(charset);
+        if (data == null) throw new ScriptException("Expected string or Buffer, got nil");
+        return data.toString().getBytes(charset);
+    }
+
+    private static boolean isBinary(@Nullable String encoding) {
+        if (encoding == null) return false;
+        return switch (encoding.toLowerCase(Locale.ROOT)) {
+            case "binary", "latin1", "ascii" -> true;
+            default -> false;
+        };
+    }
+
+    private static Function extractCallback(@Nullable Object raw) throws ScriptException {
+        if (!(raw instanceof Function fn)) throw new ScriptException("Expected a function");
+        return fn;
+    }
+
+    private static void callResult(Function fn, @Nullable Object javaResult) {
+        var cx = Context.getCurrentContext();
+        var scope = fn.getParentScope();
+        var jsResult = JSValues.toJs(cx, scope, javaResult);
+        fn.call(cx, scope, scope, new Object[]{ null, jsResult });
+    }
+
+    private static void callError(Function fn, @Nullable String message) {
+        var cx = Context.getCurrentContext();
+        var scope = fn.getParentScope();
+        var err = cx.newObject(scope, "Error", new Object[]{ message != null ? message : "Unknown error" });
+        fn.call(cx, scope, scope, new Object[]{ err, null });
     }
 }

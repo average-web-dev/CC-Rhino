@@ -357,13 +357,13 @@ public class SystemAPI implements IComputerAPI {
      * }</pre>
      */
     @ScriptFunction("sleep")
-    public MethodResult doSleep(int ticks) {
+    public final MethodResult doSleep(int ticks) {
         var timerId = apiEnvironment.startTimer(Math.max(1, ticks));
         return MethodResult.timer(timerId);
     }
 
     @ScriptFunction("yield")
-    public MethodResult doYield() {
+    public final MethodResult doYield() {
         return MethodResult.yield();
     }
 
