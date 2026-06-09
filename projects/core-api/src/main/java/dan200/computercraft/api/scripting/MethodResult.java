@@ -62,7 +62,7 @@ public final class MethodResult {
         adjust = 0;
     }
 
-    /** Continuation without a callback (TIMER / YIELD buckets). Used by {@link #awaitTimer}, {@link #awaitYield}. */
+    /** Continuation without a callback (TIMER / YIELD buckets). Used by {@link #timer}, {@link #yield}. */
     private MethodResult(Bucket destination, @Nullable Object @Nullable [] arguments) {
         this.destination = destination;
         result = arguments;
@@ -150,7 +150,7 @@ public final class MethodResult {
      * Suspend execution until the CC timer with the given ID fires (Phase 1 — timers).
      * The continuation is resumed with {@code undefined}; no callback is needed.
      *
-     * @param timerId The CC timer ID returned by {@link dan200.computercraft.core.apis.IAPIEnvironment#startTimer}.
+     * @param timerId The CC timer ID returned by {@code IAPIEnvironment#startTimer}.
      * @return A method result that captures a continuation routed to the timer bucket.
      */
     public static MethodResult timer(int timerId) {

@@ -448,7 +448,7 @@ public class FSAPI implements IComputerAPI {
      * @return Whether the path exists.
      */
     @ScriptFunction
-    public boolean existsSync(String path) {
+    public final boolean existsSync(String path) {
         try (var ignored = environment.time(Metrics.FS_OPS)) {
             return getFileSystem().exists(path);
         } catch (FileSystemException e) {
@@ -466,7 +466,7 @@ public class FSAPI implements IComputerAPI {
      * @throws ScriptException If the path does not exist.
      */
     @ScriptFunction
-    public Map<String, Object> statSync(String path) throws ScriptException {
+    public final Map<String, Object> statSync(String path) throws ScriptException {
         try (var ignored = environment.time(Metrics.FS_OPS)) {
             return buildStats(path);
         } catch (FileSystemException e) {
@@ -499,7 +499,7 @@ public class FSAPI implements IComputerAPI {
      * @return The normalised absolute path.
      */
     @ScriptFunction
-    public String realpathSync(String path) {
+    public final String realpathSync(String path) {
         return FileSystem.sanitizePath(path, true);
     }
 

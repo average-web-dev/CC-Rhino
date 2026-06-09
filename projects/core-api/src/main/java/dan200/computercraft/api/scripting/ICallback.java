@@ -9,7 +9,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * A continuation which is called when this coroutine is resumed.
  *
- * @see MethodResult#yield(Object[], ICallback)
+ * @see MethodResult#pullEvent(String, ICallback)
  */
 public interface ICallback {
     /**

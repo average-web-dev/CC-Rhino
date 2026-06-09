@@ -6,7 +6,7 @@ package dan200.computercraft.shared.computer.blocks;
 
 import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.peripheral.IPeripheral;
-import dan200.computercraft.core.apis.OSAPI;
+import dan200.computercraft.core.apis.SystemAPI;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -74,7 +74,7 @@ public class ComputerPeripheral implements IPeripheral {
      * Get the other computer's ID.
      *
      * @return The computer's ID.
-     * @see OSAPI#getComputerID() To get your computer's ID.
+     * @see SystemAPI#getComputerID() To get your computer's ID.
      */
     @ScriptFunction
     public final int getID() {
@@ -97,7 +97,7 @@ public class ComputerPeripheral implements IPeripheral {
      * Get the other computer's label.
      *
      * @return The computer's label.
-     * @see OSAPI#getComputerLabel() To get your label.
+     * @see SystemAPI#getComputerLabel() To get your label.
      */
     @Nullable
     @ScriptFunction
