@@ -6,7 +6,8 @@
 
 (sources
   /doc/
-  /projects/common/build/docs/luaJavadoc/
+  ; TODO(rhino): /projects/common/build/docs/luaJavadoc/ removed — the cct-javadoc doclet does not yet
+  ; understand this fork's @ScriptFunction / api.scripting rename, so luaJavadoc is disabled.
   /projects/core/src/main/resources/data/computercraft/lua/bios.lua
   /projects/core/src/main/resources/data/computercraft/lua/rom/
   /projects/core/src/test/resources/test-rom
@@ -36,8 +37,7 @@
 
   (library-path
     /doc/stub/
-    /projects/common/build/docs/luaJavadoc/
-
+    ; TODO(rhino): luaJavadoc output removed (see note above). Java-defined API docs will not resolve.
     /projects/core/src/main/resources/data/computercraft/lua/rom/apis/
     /projects/core/src/main/resources/data/computercraft/lua/rom/apis/command/
     /projects/core/src/main/resources/data/computercraft/lua/rom/apis/turtle/
@@ -87,8 +87,7 @@
 (at
   (/doc/stub/
    /projects/core/src/main/resources/data/computercraft/lua/bios.lua
-   /projects/core/src/main/resources/data/computercraft/lua/rom/apis/
-   /projects/common/build/docs/luaJavadoc/)
+   /projects/core/src/main/resources/data/computercraft/lua/rom/apis/)
   (linters -var:unused-global)
   (lint (allow-toplevel-global true)))
 

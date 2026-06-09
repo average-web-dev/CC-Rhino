@@ -95,7 +95,10 @@ val illuaminateDocs by tasks.registering(cc.tweaked.gradle.IlluaminateExecToDir:
     // Sources
     inputs.files(rootProject.fileTree("doc")).withPropertyName("docs")
     inputs.files(project(":core").fileTree("src/main/resources/data/computercraft/lua")).withPropertyName("lua rom")
-    inputs.dir(project(":common").tasks.named<Javadoc>("luaJavadoc").map { it.destinationDir!! }).withPropertyName("luaJavadoc")
+    // TODO(rhino): luaJavadoc is disabled because the external cct-javadoc doclet still expects the upstream
+    //  @LuaFunction / api.lua API, which this fork renamed to @ScriptFunction / api.scripting. Until a doclet
+    //  that understands the new API is available, the Java-defined Lua API docs are omitted from the website.
+    //  Re-add this input (and the /projects/common/build/docs/luaJavadoc/ entries in illuaminate.sexp) once fixed.
     // Assets
     inputs.files(rollup)
 
