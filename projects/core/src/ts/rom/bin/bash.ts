@@ -73,6 +73,63 @@ function run(path: string, ...args: string[]): boolean {
     }
 }
 
+// ── Tab completion ───────────────────────────────────────────────────────────
+
+const BUILTINS = ['cd', 'exit', 'export', 'unset', 'env'];
+
+interface Completion {
+    word: string;     // full replacement for the token being completed
+    display: string;  // label shown when several matches are listed
+    isDir: boolean;   // directories complete with a trailing '/', everything else ' '
+}
+
+/** Longest common prefix shared by every string. */
+function commonPrefix(items: string[]): string {
+    if (items.length === 0) return '';
+    let prefix = items[0] as string;
+    for (let s of items) {
+        let i = 0;
+        while (i < prefix.length && prefix[i] === s[i]) i++;
+        prefix = prefix.slice(0, i);
+        if (prefix === '') break;
+    }
+    return prefix;
+}
+
+/** Complete a command name from the builtins and the programs on require.paths. */
+function completeCommand(prefix: string): Completion[] {
+    const names: Record<string, true> = {};
+    for (let b of BUILTINS) names[b] = true;
+    for (let dir of require.paths) {
+        let entries: string[];
+        try { entries = fs.readdirSync(dir) as string[]; } catch { continue; }
+        for (let e of entries) names[e.endsWith('.js') ? e.slice(0, -3) : e] = true;
+    }
+    const out: Completion[] = [];
+    for (let name of Object.keys(names)) {
+        if (name.startsWith(prefix)) out.push({ word: name, display: name, isDir: false });
+    }
+    return out.sort((a, b) => (a.word < b.word ? -1 : 1));
+}
+
+/** Complete a filesystem path (relative to cwd) for the token being typed. */
+function completePath(word: string): Completion[] {
+    const slash = word.lastIndexOf('/');
+    const dirPart = slash >= 0 ? word.slice(0, slash + 1) : '';
+    const basePart = slash >= 0 ? word.slice(slash + 1) : word;
+    let entries: string[];
+    try { entries = fs.readdirSync(resolvePath(dirPart === '' ? '.' : dirPart)) as string[]; }
+    catch { return []; }
+    const out: Completion[] = [];
+    for (let e of entries) {
+        if (!e.startsWith(basePart)) continue;
+        let isDir = false;
+        try { isDir = fs.statSync(resolvePath(dirPart + e)).isDirectory; } catch { /* unreadable */ }
+        out.push({ word: dirPart + e, display: isDir ? e + '/' : e, isDir });
+    }
+    return out.sort((a, b) => (a.word < b.word ? -1 : 1));
+}
+
 /**
  * Enter the interactive REPL loop.
  * Registers `char` + `key` event listeners and shows a prompt.
@@ -123,6 +180,47 @@ function start(): void {
         buffer = next;
         cursor = next.length;
         term.write(buffer);
+    }
+
+    /** Replace the token under the cursor (text since the last space) with `text`. */
+    function replaceWord(wordStart: number, text: string): void {
+        buffer = buffer.slice(0, wordStart) + text + buffer.slice(cursor);
+        cursor = wordStart + text.length;
+        render();
+    }
+
+    /** Print the candidate labels below the input, then redraw the prompt + buffer. */
+    function listMatches(labels: string[]): void {
+        print('');
+        print(labels.join('  '));
+        showPrompt();
+        term.write(buffer);
+        term.setCursorPos({ x: inputStartX + cursor, y: inputY });
+    }
+
+    /** Tab — complete the command (first word) or a path argument under the cursor. */
+    function handleTab(): void {
+        const before = buffer.slice(0, cursor);
+        const wordStart = before.lastIndexOf(' ') + 1;
+        const word = before.slice(wordStart);
+        const atCommand = before.slice(0, wordStart).trim() === '';
+
+        const matches = atCommand && !word.includes('/')
+            ? completeCommand(word)
+            : completePath(word);
+        if (matches.length === 0) return;
+
+        if (matches.length === 1) {
+            const m = matches[0] as Completion;
+            replaceWord(wordStart, m.word + (m.isDir ? '/' : ' '));
+            return;
+        }
+
+        // Several matches: extend to their common prefix, or list them if we are
+        // already at it (the classic "first Tab completes, second Tab lists").
+        const prefix = commonPrefix(matches.map(m => m.word));
+        if (prefix.length > word.length) replaceWord(wordStart, prefix);
+        else listMatches(matches.map(m => m.display));
     }
 
     function onChar(ch: string): void {
@@ -193,6 +291,10 @@ function start(): void {
                     cursor--;
                     render();
                 }
+                break;
+            }
+            case 258: {             // Tab — autocomplete the command or path
+                handleTab();
                 break;
             }
         }
