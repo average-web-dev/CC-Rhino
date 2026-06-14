@@ -70,6 +70,19 @@ function run(path: string, ...args: string[]): boolean {
  */
 function start(): void {
     let buffer = '';
+    let cursor = 0;             // edit position within `buffer` (0..buffer.length)
+
+    // Where the editable input begins on screen, captured each time the prompt is
+    // drawn. Editing assumes the line does not wrap (matching the rest of the shell).
+    let inputStartX = 0;
+    let inputY = 0;
+
+    // Command history. `history` holds past lines (oldest first); `historyIndex`
+    // is the cursor into it while browsing — history.length means "the current,
+    // not-yet-submitted line", whose in-progress text is stashed in `savedBuffer`.
+    const history: string[] = [];
+    let historyIndex = 0;
+    let savedBuffer = '';
 
     function showPrompt(): void {
         if (canColor) term.setTextColor(32);   // lime — directory
@@ -77,11 +90,42 @@ function start(): void {
         if (canColor) term.setTextColor(256);  // lightGrey — sigil
         term.write('$ ');
         if (canColor) term.setTextColor(1);    // white — user input
+        const pos = term.getCursorPos();
+        inputStartX = pos.x;
+        inputY = pos.y;
+        term.setCursorBlink(true);             // blinking underscore at the edit position
+    }
+
+    /** Redraw `buffer` from the input origin and park the terminal cursor at `cursor`. */
+    function render(): void {
+        term.setCursorPos({ x: inputStartX, y: inputY });
+        term.write(buffer + ' ');   // trailing space erases the cell freed by a deletion
+        term.setCursorPos({ x: inputStartX + cursor, y: inputY });
+    }
+
+    /** Replace the whole input line on screen (and in `buffer`) with `next`. */
+    function replaceLine(next: string): void {
+        const { y } = term.getCursorPos();
+        term.setCursorPos({ x: 0, y });
+        term.clearLine();
+        showPrompt();
+        buffer = next;
+        cursor = next.length;
+        term.write(buffer);
     }
 
     function onChar(ch: string): void {
-        buffer += ch;
-        term.write(ch);
+        if (cursor === buffer.length) {
+            // Fast path: appending at the end, just echo the character.
+            buffer += ch;
+            cursor++;
+            term.write(ch);
+        } else {
+            // Insert mid-line and redraw the shifted tail.
+            buffer = buffer.slice(0, cursor) + ch + buffer.slice(cursor);
+            cursor++;
+            render();
+        }
     }
 
     function onKey(key: number, held: boolean): void {
@@ -91,19 +135,52 @@ function start(): void {
                 print('');          // move to next line
                 const line = buffer.trim();
                 buffer = '';
-                if (line) processLine(line);
+                cursor = 0;
+                if (line) {
+                    // Record in history, collapsing consecutive duplicates.
+                    if (history[history.length - 1] !== line) history.push(line);
+                    term.setCursorBlink(false);   // hide the cursor while the command runs
+                    processLine(line);
+                }
+                historyIndex = history.length;
+                savedBuffer = '';
                 showPrompt();
                 break;
             }
-            case 259: {             // Backspace
-                if (buffer.length > 0) {
-                    buffer = buffer.slice(0, -1);
-                    const { x, y } = term.getCursorPos();
-                    if (x > 0) {
-                        term.setCursorPos({ x: x - 1, y });
-                        term.write(' ');
-                        term.setCursorPos({ x: x - 1, y });
-                    }
+            case 265: {             // Up — recall older history entry
+                if (historyIndex > 0) {
+                    if (historyIndex === history.length) savedBuffer = buffer;
+                    historyIndex--;
+                    replaceLine(history[historyIndex] as string);
+                }
+                break;
+            }
+            case 264: {             // Down — recall newer entry / restore the in-progress line
+                if (historyIndex < history.length) {
+                    historyIndex++;
+                    replaceLine(historyIndex === history.length ? savedBuffer : history[historyIndex] as string);
+                }
+                break;
+            }
+            case 263: {             // Left — move the cursor toward the start of the line
+                if (cursor > 0) {
+                    cursor--;
+                    term.setCursorPos({ x: inputStartX + cursor, y: inputY });
+                }
+                break;
+            }
+            case 262: {             // Right — move the cursor toward the end of the line
+                if (cursor < buffer.length) {
+                    cursor++;
+                    term.setCursorPos({ x: inputStartX + cursor, y: inputY });
+                }
+                break;
+            }
+            case 259: {             // Backspace — delete the char before the cursor
+                if (cursor > 0) {
+                    buffer = buffer.slice(0, cursor - 1) + buffer.slice(cursor);
+                    cursor--;
+                    render();
                 }
                 break;
             }
@@ -140,6 +217,7 @@ function start(): void {
         if (cmd === 'exit') {
             events.off('char', onChar);
             events.off('key',  onKey);
+            term.setCursorBlink(false);
             return;
         }
 
