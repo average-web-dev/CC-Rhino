@@ -25,13 +25,15 @@
   const system = require('system');
   const peripheral = require('peripheral');
 
-  // ── Global print ───────────────────────────────────────────────────────────
-  // Defined here in global scope so it is available to all subsequent code
+  // ── Global print / write ───────────────────────────────────────────────────
+  // Defined here in global scope so they are available to all subsequent code
   // (bios.ts is eval'd directly in the Rhino global scope, not as a module).
+  //
+  // `term.write` is a non-wrapping primitive — it clips at the right edge. write()
+  // and print() layer wrapping on top: text wider than the terminal continues on
+  // the next row (scrolling at the bottom), matching CC's write()/print() helpers.
 
-  function print(...args: unknown[]): void {
-      const text = args.map(String).join('\t');
-      term.write(text);
+  function newLine(): void {
       const { y } = term.getCursorPos();
       const { height } = term.getSize();
       if (y + 1 >= height) {
@@ -42,7 +44,31 @@
       }
   }
 
+  /** Write text at the cursor, wrapping to the next row at the terminal edge. */
+  function write(text: string): void {
+      const { width } = term.getSize();
+      const segments = text.split('\n');
+      for (let i = 0; i < segments.length; i++) {
+          let segment = segments[i] as string;
+          while (segment.length > 0) {
+              const room = width - term.getCursorPos().x;
+              if (room <= 0) { newLine(); continue; }          // cursor sat at the edge
+              if (segment.length <= room) { term.write(segment); break; }
+              term.write(segment.slice(0, room));               // fill the row, then wrap
+              segment = segment.slice(room);
+              newLine();
+          }
+          if (i < segments.length - 1) newLine();               // honour embedded "\n"
+      }
+  }
+
+  function print(...args: unknown[]): void {
+      write(args.map(String).join('\t'));
+      newLine();
+  }
+
   globalThis.print = print;
+  globalThis.write = write;
 
   // ── Boot entry ─────────────────────────────────────────────────────────────
 
