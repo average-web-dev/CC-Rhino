@@ -41,13 +41,13 @@ class JSConcurrentEventTest {
         var machine = new JSMachineBuilder()
             .context(ctx)
             .api("turtle", turtle)
-            .api("os", Map.of())
+            .api("events", Map.of())
             .api(rec, rec.methods())
             .bios("""
                 var turtle = require('turtle');
-                var os = require('os');
+                var events = require('events');
                 var probe = require('probe');
-                os.on("redstone", function () { probe.record("redstone"); });
+                events.on("redstone", function () { probe.record("redstone"); });
                 var ok = turtle.dig();
                 probe.record("after:" + ok);
                 """)

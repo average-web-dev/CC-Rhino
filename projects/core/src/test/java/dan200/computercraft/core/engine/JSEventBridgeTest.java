@@ -22,12 +22,12 @@ class JSEventBridgeTest {
     void on_listener_receives_event_argument() throws Exception {
         var rec = new JSMachineBuilder.Recorder();
         var machine = new JSMachineBuilder()
-            .api("os", java.util.Map.of())
+            .api("events", java.util.Map.of())
             .api(rec, rec.methods())
             .bios("""
-                var os = require('os');
+                var events = require('events');
                 var probe = require('probe');
-                os.on("foo", function (v) { probe.record(v); });
+                events.on("foo", function (v) { probe.record(v); });
                 """)
             .build();
         try {
@@ -47,12 +47,12 @@ class JSEventBridgeTest {
     void once_listener_fires_only_once() throws Exception {
         var rec = new JSMachineBuilder.Recorder();
         var machine = new JSMachineBuilder()
-            .api("os", java.util.Map.of())
+            .api("events", java.util.Map.of())
             .api(rec, rec.methods())
             .bios("""
-                var os = require('os');
+                var events = require('events');
                 var probe = require('probe');
-                os.once("tick", function (v) { probe.record(v); });
+                events.once("tick", function (v) { probe.record(v); });
                 """)
             .build();
         try {
@@ -73,11 +73,11 @@ class JSEventBridgeTest {
             .api("os", java.util.Map.of())
             .api(rec, rec.methods())
             .bios("""
-                var os = require('os');
+                var events = require('events');
                 var probe = require('probe');
                 function cb(v) { probe.record(v); }
-                os.on("ping", cb);
-                os.off("ping", cb);
+                events.on("ping", cb);
+                events.off("ping", cb);
                 """)
             .build();
         try {
