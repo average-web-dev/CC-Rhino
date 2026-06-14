@@ -11,6 +11,7 @@
 declare function require(id: "fs"): FsModule;
 declare function require(id: "path"): PathModule;
 declare function require(id: "system"): SystemModule;
+declare function require(id: "env"): EnvModule;
 declare function require(id: "events"): EventsModule;
 declare function require(id: "http"): HttpModule;
 declare function require(id: "term"): TermModule;

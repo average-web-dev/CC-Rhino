@@ -1,8 +1,9 @@
 const fs   = require('fs')   as FsModule;
 const term = require('term') as TermModule;
+import resolve = require('/rom/lib/resolve');
 
 function main(args: string[], cwd: string): void {
-    const path = args[0] ?? cwd;
+    const path = args[0] ? resolve(cwd, args[0]) : cwd;
     try {
         const entries = (fs.readdirSync(path) as string[]).slice().sort();
         const canColor = term.isColor();

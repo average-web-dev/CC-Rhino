@@ -8,6 +8,7 @@
 declare module "fs" { const fs: FsModule; export = fs; }
 declare module "path" { const path: PathModule; export = path; }
 declare module "process" { const process: SystemModule; export = process; }
+declare module "env" { const env: EnvModule; export = env; }
 declare module "events" { const events: EventsModule; export = events; }
 declare module "http" { const http: HttpModule; export = http; }
 declare module "term" { const term: TermModule; export = term; }

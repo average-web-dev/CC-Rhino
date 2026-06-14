@@ -1,10 +1,11 @@
 const fs = require('fs') as FsModule;
+import resolve = require('/rom/lib/resolve');
 
-function main(args: string[]): void {
+function main(args: string[], cwd: string): void {
     const paths = args.filter(a => !a.startsWith('-'));
     if (paths.length < 2) { print('mv: missing operand'); return; }
-    const src = paths[0];
-    const dst = paths[paths.length - 1];
+    const src = resolve(cwd, paths[0]);
+    const dst = resolve(cwd, paths[paths.length - 1]);
     try {
         fs.renameSync(src, dst);
     } catch (e: unknown) {

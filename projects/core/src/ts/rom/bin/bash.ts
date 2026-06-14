@@ -12,7 +12,18 @@
 const events   = require('events');
 const term     = require('term');
 const fs       = require('fs');
+const env      = require('env');
 const canColor = term.isColor();
+
+// Names that may follow `$` / `${...}` during variable expansion.
+const VAR_RE = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g;
+// A leading `NAME=` assignment token.
+const ASSIGN_RE = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/;
+
+/** Expand `$NAME` / `${NAME}` against the environment; unknown vars become "". */
+function expandVars(text: string): string {
+    return text.replace(VAR_RE, (_m, braced, bare) => env.get(braced ?? bare) ?? '');
+}
 
 // ── State ──────────────────────────────────────────────────────────────────────
 
@@ -188,28 +199,33 @@ function start(): void {
     }
 
     function processLine(line: string): void {
-        const parts = line.match(/\S+/g) ?? [];
+        // Expand $VAR / ${VAR} first, then split into words. Programs receive these
+        // words verbatim — each program resolves its own paths against cwd.
+        const parts = expandVars(line).match(/\S+/g) ?? [];
         if (parts.length === 0) return;
         const cmd = parts[0] as string;
-        const rawArgs = parts.slice(1)
+        const args = parts.slice(1);
 
-        // Resolve args: flags (-x) and absolute paths keep as-is; the rest are CWD-relative.
-        const args = rawArgs.map(a =>
-            (a.startsWith('-') || a.startsWith('/')) ? a : resolvePath(a)
-        );
+        // ── Variable assignment (`NAME=value`) ───────────────────────────────
+        const assign = ASSIGN_RE.exec(cmd);
+        if (assign) {
+            env.set(assign[1] as string, assign[2] as string);
+            return;
+        }
 
         // ── Built-ins ────────────────────────────────────────────────────────
         if (cmd === 'cd') {
-            const target = args[0] ?? '/';
+            const raw = args[0];
+            const target = raw ? resolvePath(raw) : '/';
             try {
                 const stat = fs.statSync(target);
                 if (stat.isDirectory) {
                     cwd = target === '/' ? '/' : target.replace(/\/+$/, '');
                 } else {
-                    print(`bash: cd: not a directory: ${rawArgs[0] ?? '/'}`);
+                    print(`bash: cd: not a directory: ${raw ?? '/'}`);
                 }
             } catch {
-                print(`bash: cd: no such file or directory: ${rawArgs[0] ?? '/'}`);
+                print(`bash: cd: no such file or directory: ${raw ?? '/'}`);
             }
             return;
         }
@@ -218,6 +234,26 @@ function start(): void {
             events.off('char', onChar);
             events.off('key',  onKey);
             term.setCursorBlink(false);
+            return;
+        }
+
+        if (cmd === 'export') {
+            for (let a of args) {
+                let m = ASSIGN_RE.exec(a);
+                if (m) env.set(m[1] as string, m[2] as string);
+                else if (!env.has(a)) env.set(a, '');   // `export NAME` declares an empty var
+            }
+            return;
+        }
+
+        if (cmd === 'unset') {
+            for (let a of args) env.unset(a);
+            return;
+        }
+
+        if (cmd === 'env') {
+            const all = env.all();
+            for (let name of Object.keys(all).sort()) print(`${name}=${all[name]}`);
             return;
         }
 

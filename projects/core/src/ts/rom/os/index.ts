@@ -53,6 +53,8 @@ klog('ok', `Computer ${system.getComputerID()} - ${device}`);
 const label = system.getComputerLabel();
 if (label) klog('info', `Label: ${label}`);
 
+// Setting the module search path also defines PATH: the env module exposes PATH
+// as a live alias of require.paths, so `echo $PATH` and `export PATH=...` just work.
 require.paths = ['/rom/os/bin', '/rom/bin', '/rom/lib'];
 klog('ok', 'Module paths: ' + require.paths.join(', '));
 

@@ -1,11 +1,12 @@
 const fs = require('fs') as FsModule;
+import resolve = require('/rom/lib/resolve');
 
-function main(args: string[]): void {
+function main(args: string[], cwd: string): void {
     const flags = args.filter(a => a.startsWith('-'));
     const paths = args.filter(a => !a.startsWith('-'));
     if (paths.length < 2) { print('cp: missing destination operand'); return; }
-    const src = paths[0];
-    const dst = paths[paths.length - 1];
+    const src = resolve(cwd, paths[0]);
+    const dst = resolve(cwd, paths[paths.length - 1]);
     const recursive = flags.some(f => /r/i.test(f));
     try {
         fs.cpSync(src, dst, { recursive });
