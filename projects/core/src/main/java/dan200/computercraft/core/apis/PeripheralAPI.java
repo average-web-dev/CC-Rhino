@@ -15,7 +15,6 @@ import dan200.computercraft.core.computer.GuardedContext;
 import dan200.computercraft.core.methods.MethodSupplier;
 import dan200.computercraft.core.methods.PeripheralMethod;
 import dan200.computercraft.core.metrics.Metrics;
-import dan200.computercraft.core.util.ScriptUtil;
 import org.jspecify.annotations.Nullable;
 
 import java.util.*;
@@ -274,13 +273,19 @@ public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralC
     }
 
     @ScriptFunction
-    public final Object @Nullable [] getType(String sideName) {
+    public final @Nullable List<String> getType(String sideName) {
         var side = ComputerSide.valueOfInsensitive(sideName);
         if (side == null) return null;
 
         synchronized (peripherals) {
             var p = peripherals[side.ordinal()];
-            return p == null ? null : ScriptUtil.consArray(p.getType(), p.getAdditionalTypes());
+            if (p == null) return null;
+            // Return a single List (rendered as one JS array) rather than an Object[], which the bridge
+            // would treat as multiple return values and collapse to a bare string when there is only one type.
+            var types = new ArrayList<String>();
+            types.add(p.getType());
+            types.addAll(p.getAdditionalTypes());
+            return types;
         }
     }
 
