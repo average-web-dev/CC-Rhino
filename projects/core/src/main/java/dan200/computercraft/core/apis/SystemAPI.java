@@ -222,13 +222,11 @@ public class SystemAPI implements IComputerAPI {
      * Returns the label of the computer, or {@code nil} if none is set.
      *
      * @return The label of the computer.
-     * @cc.treturn string|nil The label of the computer.
      * @cc.since 1.3
      */
     @ScriptFunction({ "getComputerLabel", "computerLabel" })
-    public final Object @Nullable [] getComputerLabel() {
-        var label = apiEnvironment.getLabel();
-        return label == null ? null : new Object[]{ label };
+    public final @Nullable String getComputerLabel() {
+        return apiEnvironment.getLabel();
     }
 
     /**

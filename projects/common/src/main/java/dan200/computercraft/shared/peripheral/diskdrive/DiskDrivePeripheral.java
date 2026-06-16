@@ -57,24 +57,23 @@ public class DiskDrivePeripheral implements IPeripheral {
     /**
      * Returns the label of the disk in the drive if available.
      *
-     * @return The label of the disk, or {@code nil} if either no disk is inserted or the disk doesn't have a label.
-     * @cc.treturn string|nil The label of the disk, or {@code nil} if either no disk is inserted or the disk doesn't have a label.
+     * @return The label of the disk, or {@code null} if either no disk is inserted or the disk doesn't have a label.
      */
     @ScriptFunction
-    public final @Nullable Object @Nullable [] getDiskLabel() {
+    public final @Nullable String getDiskLabel() {
         var media = diskDrive.getMedia();
-        return media.media() == null ? null : new Object[]{ media.media().getLabel(diskDrive.getLevel().registryAccess(), media.stack()) };
+        return media.media() == null ? null : media.media().getLabel(diskDrive.getLevel().registryAccess(), media.stack());
     }
 
     /**
      * Sets or clears the label for a disk.
      * <p>
-     * If no label or {@code nil} is passed, the label will be cleared.
+     * If no label or {@code null} is passed, the label will be cleared.
      * <p>
      * If the inserted disk's label can't be changed (for example, a record),
      * an error will be thrown.
      *
-     * @param label The new label of the disk, or {@code nil} to clear.
+     * @param label The new label of the disk, or {@code null} to clear.
      * @throws ScriptException If the disk's label can't be changed.
      */
     @ScriptFunction(mainThread = true)
@@ -101,7 +100,7 @@ public class DiskDrivePeripheral implements IPeripheral {
      * Returns the mount path for the inserted disk.
      *
      * @param computer The computer object
-     * @return The mount path for the disk, or {@code nil} if no data disk is inserted.
+     * @return The mount path for the disk, or {@code null} if no data disk is inserted.
      */
     @ScriptFunction
     @Nullable
@@ -122,14 +121,13 @@ public class DiskDrivePeripheral implements IPeripheral {
     /**
      * Returns the title of the inserted audio disk.
      *
-     * @return The title of the audio, or {@code false} if no audio disk is inserted.
-     * @cc.treturn string|nil|false The title of the audio, {@code false} if no disk is inserted, or {@code nil} if the disk has no audio.
+     * @return The title of the audio, {@code false} if no disk is inserted, or {@code null} if the disk has no audio.
      */
     @ScriptFunction
     @Nullable
-    public final Object getAudioTitle() {
+    public final String getAudioTitle() {
         var stack = diskDrive.getMedia();
-        if (stack.media() == null) return false;
+        if (stack.media() == null) return null;
 
         var audio = stack.getAudio(diskDrive.getLevel().registryAccess());
         return audio == null ? null : audio.value().description().getString();
@@ -164,14 +162,14 @@ public class DiskDrivePeripheral implements IPeripheral {
     /**
      * Returns the ID of the disk inserted in the drive.
      *
-     * @return The ID of the disk in the drive, or {@code nil} if no disk with an ID is inserted.
-     * @cc.treturn number|nil The ID of the disk in the drive, or {@code nil} if no disk with an ID is inserted.
+     * @return The ID of the disk in the drive, or {@code null} if no disk with an ID is inserted.
      * @cc.since 1.4
      */
     @ScriptFunction
-    public final @Nullable Object @Nullable [] getDiskID() {
+    public final @Nullable Integer getDiskID() {
         var id = diskDrive.getMedia().stack().get(ModRegistry.DataComponents.DISK_ID.get());
-        return id != null ? new Object[]{ id.id() } : null;
+        if (id == null) return null;
+        return id.id();
     }
 
     @Override

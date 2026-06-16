@@ -31,7 +31,7 @@ public class ReadHandle extends AbstractHandle {
      */
     @Override
     @ScriptFunction
-    public final Object @Nullable [] read(Optional<Integer> countArg) throws ScriptException {
+    public final @Nullable Object read(Optional<Integer> countArg) throws ScriptException {
         return super.read(countArg);
     }
 
@@ -40,7 +40,7 @@ public class ReadHandle extends AbstractHandle {
      */
     @Override
     @ScriptFunction
-    public final Object @Nullable [] readAll() throws ScriptException {
+    public final @Nullable String readAll() throws ScriptException {
         return super.readAll();
     }
 
@@ -49,7 +49,7 @@ public class ReadHandle extends AbstractHandle {
      */
     @Override
     @ScriptFunction
-    public final Object @Nullable [] readLine(Optional<Boolean> withTrailingArg) throws ScriptException {
+    public final @Nullable String readLine(Optional<Boolean> withTrailingArg) throws ScriptException {
         return super.readLine(withTrailingArg);
     }
 
@@ -58,7 +58,7 @@ public class ReadHandle extends AbstractHandle {
      */
     @Override
     @ScriptFunction
-    public final Object @Nullable [] seek(Optional<String> whence, Optional<Long> offset) throws ScriptException {
+    public final @Nullable Object seek(Optional<String> whence, Optional<Long> offset) throws ScriptException {
         return super.seek(whence, offset);
     }
 }

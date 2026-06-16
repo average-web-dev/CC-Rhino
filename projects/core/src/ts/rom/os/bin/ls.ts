@@ -1,5 +1,5 @@
-const fs   = require('fs')   as FsModule;
-const term = require('term') as TermModule;
+const fs   = require('fs');
+const term = require('term');
 import resolve = require('/rom/lib/resolve');
 
 function main(args: string[], cwd: string): void {

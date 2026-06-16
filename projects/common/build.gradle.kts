@@ -19,7 +19,7 @@ minecraft {
 }
 
 configurations {
-    register("cctJavadoc")
+    register("tsDoclet")
 }
 
 repositories {
@@ -59,15 +59,15 @@ dependencies {
 
     testFixturesImplementation(testFixtures(project(":core")))
 
-    "cctJavadoc"(libs.cctJavadoc)
+    "tsDoclet"(project(":tsdoclet"))
 }
 
 illuaminate {
     version = libs.versions.illuaminate
 }
 
-val luaJavadoc by tasks.registering(Javadoc::class) {
-    description = "Generates documentation for Java-side Lua functions."
+val generateTsTypes by tasks.registering(Javadoc::class) {
+    description = "Generate TypeScript .d.ts declarations from @ScriptFunction methods."
     group = JavaBasePlugin.DOCUMENTATION_GROUP
 
     val sourceSets = listOf(sourceSets.main.get(), project(":core").sourceSets.main.get())
@@ -76,12 +76,17 @@ val luaJavadoc by tasks.registering(Javadoc::class) {
         classpath += sourceSet.compileClasspath
     }
 
-    destinationDir = layout.buildDirectory.dir("docs/luaJavadoc").get().asFile
+    val tsTypesDir = layout.buildDirectory.dir("tsTypes").get().asFile
+    destinationDir = tsTypesDir
+    doFirst { delete(tsTypesDir) } // remove stale outputs so renamed/removed types don't linger
+
+    // Build the doclet (a project dependency) before running, and put it on the doclet path.
+    val tsDoclet = configurations["tsDoclet"]
+    dependsOn(tsDoclet)
 
     val options = options as StandardJavadocDocletOptions
-    options.docletpath = configurations["cctJavadoc"].files.toList()
-    options.doclet = "cc.tweaked.javadoc.LuaDoclet"
-    options.addStringOption("project-root", rootProject.file(".").absolutePath)
+    options.docletpath = tsDoclet.files.toList()
+    options.doclet = "cc.tweaked.tsdoclet.TypeScriptDoclet"
     options.noTimestamp(false)
 
     javadocTool = javaToolchains.javadocToolFor { languageVersion = CCTweakedPlugin.JDK_VERSION }
@@ -96,7 +101,6 @@ val lintLua by tasks.registering(IlluaminateExec::class) {
     // Sources
     inputs.files(rootProject.fileTree("doc")).withPropertyName("docs")
     inputs.files(project(":core").fileTree("src/main/resources/data/computercraft/lua")).withPropertyName("lua rom")
-    inputs.files(luaJavadoc)
 
     args = listOf("lint")
     workingDir = rootProject.projectDir

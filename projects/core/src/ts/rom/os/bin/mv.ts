@@ -1,4 +1,4 @@
-const fs = require('fs') as FsModule;
+const fs = require('fs');
 import resolve = require('/rom/lib/resolve');
 
 function main(args: string[], cwd: string): void {

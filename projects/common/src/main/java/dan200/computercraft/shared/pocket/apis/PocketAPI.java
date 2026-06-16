@@ -51,6 +51,7 @@ public class PocketAPI implements IComputerAPI {
         return new String[]{ "pocket" };
     }
 
+    // TODO: change cc.treturn
     /**
      * Search the player's inventory for another upgrade, replacing the existing one with that item if found.
      * <p>
@@ -61,7 +62,7 @@ public class PocketAPI implements IComputerAPI {
      * @cc.treturn string|nil The reason an item was not equipped.
      */
     @ScriptFunction(mainThread = true)
-    public final Object[] equipBack() {
+    public final Object equipBack() {
         var entity = pocket.getEntity();
         if (!(entity instanceof Player player)) return new Object[]{ false, "Cannot find player" };
         var inventory = player.getInventory();
@@ -81,9 +82,10 @@ public class PocketAPI implements IComputerAPI {
         // Set the new upgrade
         pocket.setUpgrade(newUpgrade);
 
-        return new Object[]{ true };
+        return true;
     }
 
+    // TODO: change cc.treturn
     /**
      * Remove the pocket computer's current upgrade.
      *
@@ -92,7 +94,7 @@ public class PocketAPI implements IComputerAPI {
      * @cc.treturn string|nil The reason an upgrade was not unequipped.
      */
     @ScriptFunction(mainThread = true)
-    public final Object[] unequipBack() {
+    public final Object unequipBack() {
         var entity = pocket.getEntity();
         if (!(entity instanceof Player player)) return new Object[]{ false, "Cannot find player" };
         var previousUpgrade = pocket.getUpgrade();
@@ -103,7 +105,7 @@ public class PocketAPI implements IComputerAPI {
 
         storeItem(player, previousUpgrade.getUpgradeItem());
 
-        return new Object[]{ true };
+        return true;
     }
 
     private static void storeItem(Player player, ItemStack stack) {

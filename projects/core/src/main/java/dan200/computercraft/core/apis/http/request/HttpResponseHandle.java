@@ -38,8 +38,7 @@ public class HttpResponseHandle implements ObjectSource {
      * Returns the response code and response message returned by the server.
      *
      * @return The response code and message.
-     * @cc.treturn number The response code (i.e. 200)
-     * @cc.treturn string The response message (i.e. "OK")
+     * @cc-r.return [ responseCode: number, responseStatus: string ]
      * @cc.changed 1.80pr1.13 Added response message return value.
      */
     @ScriptFunction

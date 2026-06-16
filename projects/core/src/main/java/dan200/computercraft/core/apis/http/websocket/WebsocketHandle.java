@@ -158,11 +158,11 @@ public class WebsocketHandle {
             } else if (event.length >= 2 && Objects.equals(event[0], CLOSE_EVENT) && Objects.equals(event[1], address) && websocket.isClosed()) {
                 // If the socket is closed abort.
                 environment.cancelTimer(timeoutId);
-                return MethodResult.of(null, event.length > 2 ? event[2] : "Connection closed");
+                return MethodResult.of(new Object[]{ null, event.length > 2 ? event[2] : "Connection closed" });
             } else if (event.length >= 2 && timeoutId != -1 && Objects.equals(event[0], TIMER_EVENT)
                 && event[1] instanceof Number id && id.intValue() == timeoutId) {
                 // If we received a matching timer event then abort.
-                return MethodResult.of(null, "Timed out");
+                return MethodResult.of(new Object[]{ null, "Timed out" });
             }
 
             return pull;

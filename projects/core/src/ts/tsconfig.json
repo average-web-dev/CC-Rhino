@@ -13,6 +13,6 @@
             "/rom/*": ["./rom/*"]
         }
     },
-    "include": ["."],
+    "include": [".", "./../../../common/build/tsTypes"],
     "exclude": ["node_modules"]
 }

@@ -290,27 +290,27 @@ public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralC
     }
 
     @ScriptFunction
-    public final Object @Nullable [] hasType(String sideName, String type) {
+    public final @Nullable Object hasType(String sideName, String type) {
         var side = ComputerSide.valueOfInsensitive(sideName);
         if (side == null) return null;
 
         synchronized (peripherals) {
             var p = peripherals[side.ordinal()];
             if (p != null) {
-                return new Object[]{ p.getType().equals(type) || p.getAdditionalTypes().contains(type) };
+                return p.getType().equals(type) || p.getAdditionalTypes().contains(type);
             }
         }
         return null;
     }
 
     @ScriptFunction
-    public final Object @Nullable [] getMethods(String sideName) {
+    public final @Nullable Object getMethods(String sideName) {
         var side = ComputerSide.valueOfInsensitive(sideName);
         if (side == null) return null;
 
         synchronized (peripherals) {
             var p = peripherals[side.ordinal()];
-            if (p != null) return new Object[]{ p.getMethods() };
+            if (p != null) return p.getMethods();
         }
         return null;
     }

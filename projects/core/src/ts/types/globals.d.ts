@@ -8,20 +8,10 @@
 // --- CommonJS ---
 
 /** Load a built-in API module by name, returning its typed surface. */
-declare function require(id: "fs"): FsModule;
 declare function require(id: "path"): PathModule;
-declare function require(id: "system"): SystemModule;
 declare function require(id: "env"): EnvModule;
 declare function require(id: "parallel"): ParallelModule;
-declare function require(id: "events"): EventsModule;
-declare function require(id: "http"): HttpModule;
-declare function require(id: "term"): TermModule;
-declare function require(id: "redstone"): RedstoneModule;
-declare function require(id: "rs"): RedstoneModule;
-declare function require(id: "peripheral"): PeripheralModule;
-declare function require(id: "turtle"): TurtleModule;
-declare function require(id: "commands"): CommandsModule;
-declare function require(id: "pocket"): PocketModule;
+declare function require(id: "events"): EventsAPI;
 /** Load a user/ROM module (e.g. `require("/startup")`). */
 declare function require(id: string): unknown;
 

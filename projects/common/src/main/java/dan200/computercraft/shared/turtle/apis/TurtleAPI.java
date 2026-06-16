@@ -17,6 +17,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.Map;
 import java.util.Optional;
 
+// TODO: change cc.treturn
 /**
  * Turtles are a robotic device, which can break and place blocks, attack mobs, and move about the world. They have
  * an internal inventory of 16 slots, allowing them to store blocks they have broken or would like to place.
@@ -320,7 +321,7 @@ public class TurtleAPI implements IComputerAPI {
      * @param slot The slot to select.
      * @return The turtle command result.
      * @throws ScriptException If the slot is out of range.
-     * @cc.treturn true When the slot has been selected.
+     * @cc-r.return boolean
      * @see #getSelectedSlot
      */
 
@@ -367,7 +368,7 @@ public class TurtleAPI implements IComputerAPI {
      * block.
      *
      * @return The turtle command result.
-     * @cc.treturn boolean If there is a solid block in front.
+     * @cc-r.return boolean
      */
     @ScriptFunction
     public final MethodResult detect() {
@@ -378,7 +379,7 @@ public class TurtleAPI implements IComputerAPI {
      * Check if there is a solid block above the turtle. In this case, solid refers to any non-air or liquid block.
      *
      * @return The turtle command result.
-     * @cc.treturn boolean If there is a solid block above.
+     * @cc-r.return boolean
      */
     @ScriptFunction
     public final MethodResult detectUp() {
@@ -389,7 +390,7 @@ public class TurtleAPI implements IComputerAPI {
      * Check if there is a solid block below the turtle. In this case, solid refers to any non-air or liquid block.
      *
      * @return The turtle command result.
-     * @cc.treturn boolean If there is a solid block below.
+     * @cc-r.return boolean
      */
     @ScriptFunction
     public final MethodResult detectDown() {
@@ -400,7 +401,7 @@ public class TurtleAPI implements IComputerAPI {
      * Check if the block in front of the turtle is equal to the item in the currently selected slot.
      *
      * @return If the block and item are equal.
-     * @cc.treturn boolean If the block and item are equal.
+     * @cc-r.return boolean
      * @cc.since 1.31
      */
     @ScriptFunction
@@ -412,7 +413,7 @@ public class TurtleAPI implements IComputerAPI {
      * Check if the block above the turtle is equal to the item in the currently selected slot.
      *
      * @return If the block and item are equal.
-     * @cc.treturn boolean If the block and item are equal.
+     * @cc-r.return boolean
      * @cc.since 1.31
      */
     @ScriptFunction
@@ -424,7 +425,7 @@ public class TurtleAPI implements IComputerAPI {
      * Check if the block below the turtle is equal to the item in the currently selected slot.
      *
      * @return If the block and item are equal.
-     * @cc.treturn boolean If the block and item are equal.
+     * @cc-r.return boolean
      * @cc.since 1.31
      */
     @ScriptFunction
@@ -531,8 +532,7 @@ public class TurtleAPI implements IComputerAPI {
      * Get the maximum amount of fuel this turtle currently holds.
      *
      * @return The fuel level, or "unlimited".
-     * @cc.treturn [1] number The current amount of fuel a turtle this turtle has.
-     * @cc.treturn [2] "unlimited" If turtles do not consume fuel when moving.
+     * @cc-r.return number | "unlimited"
      * @cc.since 1.4
      * @see #getFuelLimit()
      * @see #refuel(Optional)
@@ -592,7 +592,7 @@ public class TurtleAPI implements IComputerAPI {
      * @param slot The slot to compare to.
      * @return If the items are the same.
      * @throws ScriptException If the slot is out of range.
-     * @cc.treturn boolean If the two items are equal.
+     * @cc-r.return boolean
      * @cc.since 1.4
      */
     @ScriptFunction
@@ -608,7 +608,7 @@ public class TurtleAPI implements IComputerAPI {
      * @return If the item was moved or not.
      * @throws ScriptException If the slot is out of range.
      * @throws ScriptException If the number of items is out of range.
-     * @cc.treturn boolean If some items were successfully moved.
+     * @cc-r.return boolean
      * @cc.since 1.45
      */
     @ScriptFunction
@@ -636,8 +636,7 @@ public class TurtleAPI implements IComputerAPI {
      * By default, normal turtles have a limit of 20,000 and advanced turtles of 100,000.
      *
      * @return The limit, or "unlimited".
-     * @cc.treturn [1] number The maximum amount of fuel a turtle can hold.
-     * @cc.treturn [2] "unlimited" If turtles do not consume fuel when moving.
+     * @cc-r.return number | "unlimited"
      * @cc.since 1.6
      * @see #getFuelLevel()
      * @see #refuel(Optional)
@@ -774,6 +773,7 @@ public class TurtleAPI implements IComputerAPI {
         return trackCommand(new TurtleInspectCommand(InteractDirection.DOWN));
     }
 
+    // TODO: correct return type
     /**
      * Get [information about the items][`item_details`] in the given slot.
      *
@@ -783,7 +783,7 @@ public class TurtleAPI implements IComputerAPI {
      *                 more information about the item at the cost of taking longer to run.
      * @return The command result.
      * @throws ScriptException If the slot is out of range.
-     * @cc.treturn nil|table Information about the item in this slot, or {@code nil} if it is empty.
+     * @cc-r.return Record<string, unknown>
      * @cc.since 1.64
      * @cc.changed 1.90.0 Added detailed parameter.
      * @cc.usage Print the current slot, assuming it contains 13 dirt.
@@ -803,7 +803,7 @@ public class TurtleAPI implements IComputerAPI {
         if (detailed.orElse(false)) {
             return context.executeMainThreadTask(() -> {
                 var stack = turtle.getInventory().getItem(actualSlot);
-                return new Object[]{ stack.isEmpty() ? null : VanillaDetailRegistries.ITEM_STACK.getDetails(stack) };
+                return stack.isEmpty() ? null : VanillaDetailRegistries.ITEM_STACK.getDetails(stack);
             });
         } else {
             var stack = turtle.getItemSnapshot(actualSlot);

@@ -80,16 +80,11 @@ public final class JSValues {
      * Zero results → undefined, one result → that value, two or more → JS Array.
      */
     static Object toJsResult(Context cx, Scriptable scope, @Nullable Object @Nullable [] results) {
+        // A MethodResult now carries exactly one value (arrays/collections are themselves single JS-array values),
+        // so there is never more than one element to convert.
         if (results == null || results.length == 0) return Undefined.instance;
-        if (results.length == 1) {
-            var v = toJs(cx, scope, results[0]);
-            return v != null ? v : Undefined.instance;
-        }
-        var arr = cx.newArray(scope, results.length);
-        for (int i = 0; i < results.length; i++) {
-            ScriptableObject.putProperty(arr, i, toJs(cx, scope, results[i]));
-        }
-        return arr;
+        var v = toJs(cx, scope, results[0]);
+        return v != null ? v : Undefined.instance;
     }
 
     /** Convert a Rhino JS value to a Java/CC value. */

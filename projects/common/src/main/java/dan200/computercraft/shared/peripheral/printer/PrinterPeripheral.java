@@ -91,8 +91,7 @@ public class PrinterPeripheral implements IPeripheral {
      *
      * @return The position of the cursor.
      * @throws ScriptException If a page isn't being printed.
-     * @cc.treturn number The X position of the cursor.
-     * @cc.treturn number The Y position of the cursor.
+     * @cc-r.return [ x: number, y: number ]
      */
     @ScriptFunction
     public final Object[] getCursorPos() throws ScriptException {
@@ -120,8 +119,7 @@ public class PrinterPeripheral implements IPeripheral {
      *
      * @return The size of the page.
      * @throws ScriptException If a page isn't being printed.
-     * @cc.treturn number The width of the page.
-     * @cc.treturn number The height of the page.
+     * @cc-r.return [ width: number, height: number].
      */
     @ScriptFunction
     public final Object[] getPageSize() throws ScriptException {

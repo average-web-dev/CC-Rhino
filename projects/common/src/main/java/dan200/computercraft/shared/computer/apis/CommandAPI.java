@@ -177,13 +177,12 @@ public class CommandAPI implements IComputerAPI {
         return computer.getLevel().dimension().location().toString();
     }
 
+    // TODO: gps TYPE
     /**
      * Get the position of the current command computer.
      *
      * @return The block's position.
-     * @cc.treturn number This computer's x position.
-     * @cc.treturn number This computer's y position.
-     * @cc.treturn number This computer's z position.
+     * @cc-r.return [ x: number, y: number, z: number ]
      * @cc.see gps.locate To get the position of a non-command computer.
      * @see #getDimension()
      */

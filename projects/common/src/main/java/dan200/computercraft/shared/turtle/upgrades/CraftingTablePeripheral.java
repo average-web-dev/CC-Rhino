@@ -33,6 +33,11 @@ public class CraftingTablePeripheral implements IPeripheral {
         return "workbench";
     }
 
+    /**
+     * @param count
+     * @cc-r.return {@code [success: true] | [success: false, msg: string]}
+     * @throws ScriptException
+     */
     @ScriptFunction
     public final MethodResult craft(Optional<Integer> count) throws ScriptException {
         int limit = count.orElse(64);

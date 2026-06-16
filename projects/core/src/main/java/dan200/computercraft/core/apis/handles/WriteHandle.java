@@ -66,7 +66,7 @@ public class WriteHandle extends AbstractHandle {
          */
         @Override
         @ScriptFunction
-        public final Object @Nullable [] seek(Optional<String> whence, Optional<Long> offset) throws ScriptException {
+        public final @Nullable Object seek(Optional<String> whence, Optional<Long> offset) throws ScriptException {
             return super.seek(whence, offset);
         }
     }

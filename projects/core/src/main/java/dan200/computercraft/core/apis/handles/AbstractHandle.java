@@ -78,7 +78,7 @@ public abstract class AbstractHandle {
      * @cc.since 1.80pr1.9
      * @cc.changed 1.109.0 Now available on all file handles, not just binary-mode handles.
      */
-    public Object @Nullable [] seek(Optional<String> whence, Optional<Long> offset) throws ScriptException {
+    public @Nullable Object seek(Optional<String> whence, Optional<Long> offset) throws ScriptException {
         checkOpen();
         long actualOffset = offset.orElse(0L);
         try {
@@ -89,7 +89,7 @@ public abstract class AbstractHandle {
                 default -> throw new ScriptException("bad argument #1 to 'seek' (invalid option '" + whence + "'");
             }
 
-            return new Object[]{ channel.position() };
+            return channel.position();
         } catch (IllegalArgumentException e) {
             return new Object[]{ null, "Position is negative" };
         } catch (IOException e) {
@@ -111,17 +111,17 @@ public abstract class AbstractHandle {
      * @cc.treturn [3] string The bytes read as a string. This is returned when the {@code count} is given.
      * @cc.changed 1.80pr1 Now accepts an integer argument to read multiple bytes, returning a string instead of a number.
      */
-    public Object @Nullable [] read(Optional<Integer> countArg) throws ScriptException {
+    public @Nullable Object read(Optional<Integer> countArg) throws ScriptException {
         checkOpen();
         try {
             if (binary && countArg.isEmpty()) {
                 single.clear();
                 var b = channel.read(single);
-                return b == -1 ? null : new Object[]{ single.get(0) & 0xFF };
+                return b == -1 ? null : single.get(0) & 0xFF;
             } else {
                 int count = countArg.orElse(1);
                 if (count < 0) throw new ScriptException("Cannot read a negative number of bytes");
-                if (count == 0) return channel.position() >= channel.size() ? null : new Object[]{ "" };
+                if (count == 0) return channel.position() >= channel.size() ? null : "";
 
                 if (count <= BUFFER_SIZE) {
                     var buffer = ByteBuffer.allocate(count);
@@ -129,7 +129,7 @@ public abstract class AbstractHandle {
                     var read = channel.read(buffer);
                     if (read < 0) return null;
                     buffer.flip();
-                    return new Object[]{ buffer };
+                    return buffer;
                 } else {
                     // Read the initial set of characters, failing if none are read.
                     var buffer = ByteBuffer.allocate(BUFFER_SIZE);
@@ -138,7 +138,7 @@ public abstract class AbstractHandle {
                     buffer.flip();
 
                     // If we failed to read "enough" here, let's just abort
-                    if (read >= count || read < BUFFER_SIZE) return new Object[]{ buffer };
+                    if (read >= count || read < BUFFER_SIZE) return buffer;
 
                     // Build up an array of ByteBuffers. Hopefully this means we can perform less allocation
                     // than doubling up the buffer each time.
@@ -165,7 +165,7 @@ public abstract class AbstractHandle {
                         pos += length;
                     }
                     assert pos == totalRead;
-                    return new Object[]{ bytes };
+                    return bytes;
                 }
             }
         } catch (IOException e) {
@@ -178,12 +178,11 @@ public abstract class AbstractHandle {
      *
      * @return The remaining contents of the file, or {@code null} in the event of an error.
      * @throws ScriptException If the file has been closed.
-     * @cc.treturn string|nil The remaining contents of the file, or {@code nil} in the event of an error.
      * @cc.since 1.80pr1
      * @cc.changed 1.109.0 Binary-mode handles are now consistent with non-binary files, and return an empty string at
      * the end of the file, rather than {@code nil}.
      */
-    public Object @Nullable [] readAll() throws ScriptException {
+    public @Nullable String readAll() throws ScriptException {
         checkOpen();
         try {
             var expected = 32;
@@ -198,7 +197,7 @@ public abstract class AbstractHandle {
 
                 stream.write(buf.array(), 0, r);
             }
-            return new Object[]{ stream.toByteArray() };
+            return stream.toString();
         } catch (IOException e) {
             return null;
         }
@@ -210,11 +209,10 @@ public abstract class AbstractHandle {
      * @param withTrailingArg Whether to include the newline characters with the returned string. Defaults to {@code false}.
      * @return The read string.
      * @throws ScriptException If the file has been closed.
-     * @cc.treturn string|nil The read line or {@code nil} if at the end of the file.
      * @cc.since 1.80pr1.9
      * @cc.changed 1.81.0 `\r` is now stripped.
      */
-    public Object @Nullable [] readLine(Optional<Boolean> withTrailingArg) throws ScriptException {
+    public @Nullable String readLine(Optional<Boolean> withTrailingArg) throws ScriptException {
         checkOpen();
         boolean withTrailing = withTrailingArg.orElse(false);
         try {
@@ -228,7 +226,7 @@ public abstract class AbstractHandle {
                     // Nothing else to read, and we saw no \n. Return the array. If we saw a \r, then add it
                     // back.
                     if (readRc) stream.write('\r');
-                    return readAnything ? new Object[]{ stream.toByteArray() } : null;
+                    return readAnything ? stream.toString() : null;
                 }
 
                 readAnything = true;
@@ -239,7 +237,7 @@ public abstract class AbstractHandle {
                         if (readRc) stream.write('\r');
                         stream.write(chr);
                     }
-                    return new Object[]{ stream.toByteArray() };
+                    return stream.toString();
                 } else {
                     // We want to skip \r\n, but obviously need to include cases where \r is not followed by \n.
                     // Note, this behaviour is non-standard compliant (strictly speaking we should have no

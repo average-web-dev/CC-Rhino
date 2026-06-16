@@ -1,4 +1,4 @@
-const term = require('term') as TermModule;
+const term = require('term');
 
 function main(): void {
     term.clear();

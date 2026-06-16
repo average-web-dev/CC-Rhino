@@ -479,6 +479,7 @@ public class FSAPI implements IComputerAPI {
      *
      * @param path     The path to stat.
      * @param callback Called with {@code (err, Stats)}.
+     * @cc-r.param callback {@code (err: string | null, stats: Stats) => void}
      * @throws ScriptException On argument errors.
      */
     @ScriptFunction

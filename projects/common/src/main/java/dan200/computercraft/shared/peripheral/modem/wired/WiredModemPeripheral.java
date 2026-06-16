@@ -17,7 +17,6 @@ import dan200.computercraft.api.peripheral.WorkMonitor;
 import dan200.computercraft.core.apis.PeripheralAPI;
 import dan200.computercraft.core.computer.GuardedContext;
 import dan200.computercraft.core.methods.PeripheralMethod;
-import dan200.computercraft.core.util.ScriptUtil;
 import dan200.computercraft.shared.computer.core.ServerContext;
 import dan200.computercraft.shared.peripheral.modem.ModemPeripheral;
 import dan200.computercraft.shared.peripheral.modem.ModemState;
@@ -125,14 +124,19 @@ public abstract class WiredModemPeripheral extends ModemPeripheral implements Wi
      * @param computer The calling computer.
      * @param name     The peripheral's name.
      * @return The peripheral's name.
-     * @cc.treturn string|nil The peripheral's type, or {@code nil} if it is not present.
      * @cc.changed 1.99 Peripherals can have multiple types - this function returns multiple values.
      * @see PeripheralAPI#getType
      */
     @ScriptFunction
-    public final Object @Nullable [] getTypeRemote(IComputerAccess computer, String name) {
+    public final @Nullable List<String> getTypeRemote(IComputerAccess computer, String name) {
         var wrapper = getWrapper(computer, name);
-        return wrapper == null ? null : ScriptUtil.consArray(wrapper.getType(), wrapper.getAdditionalTypes());
+        if (wrapper == null) return null;
+        // Return a single List (one JS array) rather than an Object[], which would collapse to a bare
+        // string when a peripheral has only one type. Mirrors PeripheralAPI#getType.
+        var types = new ArrayList<String>();
+        types.add(wrapper.getType());
+        types.addAll(wrapper.getAdditionalTypes());
+        return types;
     }
 
     /**
@@ -145,14 +149,14 @@ public abstract class WiredModemPeripheral extends ModemPeripheral implements Wi
      * @param name     The peripheral's name.
      * @param type     The type to check.
      * @return The peripheral's name.
-     * @cc.treturn boolean|nil If a peripheral has a particular type, or {@literal nil} if it is not present.
      * @cc.since 1.99
      * @see PeripheralAPI#getType
      */
     @ScriptFunction
-    public final Object @Nullable [] hasTypeRemote(IComputerAccess computer, String name, String type) {
+    public final @Nullable Boolean hasTypeRemote(IComputerAccess computer, String name, String type) {
         var wrapper = getWrapper(computer, name);
-        return wrapper == null ? null : new Object[]{ wrapper.getType().equals(type) || wrapper.getAdditionalTypes().contains(type) };
+        if (wrapper == null) return null;
+        return wrapper.getType().equals(type) || wrapper.getAdditionalTypes().contains(type);
     }
 
     /**
@@ -164,15 +168,14 @@ public abstract class WiredModemPeripheral extends ModemPeripheral implements Wi
      * @param computer The calling computer.
      * @param name     The peripheral's name.
      * @return A list of methods provided by this peripheral, or {@code nil} if it is not present.
-     * @cc.treturn { string... }|nil A list of methods provided by this peripheral, or {@code nil} if it is not present.
      * @see PeripheralAPI#getMethods
      */
     @ScriptFunction
-    public final Object @Nullable [] getMethodsRemote(IComputerAccess computer, String name) {
+    public final @Nullable Collection<String> getMethodsRemote(IComputerAccess computer, String name) {
         var wrapper = getWrapper(computer, name);
         if (wrapper == null) return null;
 
-        return new Object[]{ wrapper.getMethodNames() };
+        return wrapper.getMethodNames();
     }
 
     /**
@@ -190,6 +193,7 @@ public abstract class WiredModemPeripheral extends ModemPeripheral implements Wi
      * @cc.tparam string method The name of the method
      * @cc.param ...      Additional arguments to pass to the method
      * @cc.treturn string The return values of the peripheral method.
+     * @cc-r.return unknown
      * @see PeripheralAPI#call
      */
     @ScriptFunction
@@ -211,13 +215,12 @@ public abstract class WiredModemPeripheral extends ModemPeripheral implements Wi
      * > This function only appears on wired modems. Check {@link #isWireless} returns false before calling it.
      *
      * @return The current computer's name.
-     * @cc.treturn string|nil The current computer's name on the wired network.
      * @cc.since 1.80pr1.7
      */
     @ScriptFunction
-    public final Object @Nullable [] getNameLocal() {
+    public final @Nullable String getNameLocal() {
         var local = localPeripheral.getConnectedName();
-        return local == null ? null : new Object[]{ local };
+        return local;
     }
 
     @Override

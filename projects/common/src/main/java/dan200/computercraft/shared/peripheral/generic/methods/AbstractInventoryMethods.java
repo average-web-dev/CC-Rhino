@@ -38,6 +38,7 @@ public abstract class AbstractInventoryMethods<T> implements GenericPeripheral {
      *
      * @param inventory The current inventory.
      * @return The number of slots in this inventory.
+     * @cc-r.hide inventory
      */
     @ScriptFunction(mainThread = true)
     public abstract int size(T inventory);
@@ -55,6 +56,7 @@ public abstract class AbstractInventoryMethods<T> implements GenericPeripheral {
      *
      * @param inventory The current inventory.
      * @return Basic information about all items in this inventory.
+     * @cc-r.hide inventory
      * @cc.treturn { (table|nil)... } Basic information about all items in this inventory.
      * @cc.usage Find an adjacent chest and print all items in it.
      *
@@ -77,6 +79,7 @@ public abstract class AbstractInventoryMethods<T> implements GenericPeripheral {
      * @return Information about the item in this slot, or {@code nil} if it is empty.
      * @throws ScriptException If the slot is out of range.
      * @cc.usage Print some information about the first in a chest.
+     * @cc-r.hide inventory
      *
      * <pre>{@code
      * local chest = peripheral.find("minecraft:chest")
@@ -106,6 +109,7 @@ public abstract class AbstractInventoryMethods<T> implements GenericPeripheral {
      * @param slot      The slot
      * @return The maximum number of items in this slot.
      * @throws ScriptException If the slot is out of range.
+     * @cc-r.hide inventory
      * @cc.usage Count the maximum number of items an adjacent chest can hold.
      * <pre>{@code
      * local chest = peripheral.find("minecraft:chest")
@@ -138,6 +142,7 @@ public abstract class AbstractInventoryMethods<T> implements GenericPeripheral {
      * @throws ScriptException If either source or destination slot is out of range.
      * @cc.see peripheral.getName Allows you to get the name of a [wrapped][`peripheral.wrap`] peripheral.
      * @cc.usage Wrap two chests, and push an item from one to another.
+     * @cc-r.hide from
      * <pre>{@code
      * local chest_a = peripheral.wrap("minecraft:chest_0")
      * local chest_b = peripheral.wrap("minecraft:chest_1")
@@ -168,6 +173,7 @@ public abstract class AbstractInventoryMethods<T> implements GenericPeripheral {
      * @throws ScriptException If either source or destination slot is out of range.
      * @cc.see peripheral.getName Allows you to get the name of a [wrapped][`peripheral.wrap`] peripheral.
      * @cc.usage Wrap two chests, and push an item from one to another.
+     * @cc-r.hide to
      * <pre>{@code
      * local chest_a = peripheral.wrap("minecraft:chest_0")
      * local chest_b = peripheral.wrap("minecraft:chest_1")

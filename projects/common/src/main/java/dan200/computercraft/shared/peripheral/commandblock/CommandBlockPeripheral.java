@@ -57,14 +57,12 @@ public class CommandBlockPeripheral implements IPeripheral {
      * Execute the command block once.
      *
      * @return The result of executing.
-     * @cc.treturn boolean If the command completed successfully.
-     * @cc.treturn string|nil A failure message.
      */
     @ScriptFunction(mainThread = true)
-    public final Object[] runCommand() {
+    public final boolean runCommand() {
         commandBlock.getCommandBlock().performCommand(commandBlock.getLevel());
         var result = commandBlock.getCommandBlock().getSuccessCount();
-        return result > 0 ? new Object[]{ true } : new Object[]{ false, "Command failed" };
+        return result > 0;
     }
 
     @Override

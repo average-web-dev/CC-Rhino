@@ -4,12 +4,14 @@
 
 package dan200.computercraft.core.computer;
 
+import dan200.computercraft.api.scripting.Events;
 import dan200.computercraft.api.scripting.IComputerAPI;
 import dan200.computercraft.api.scripting.IContext;
 import dan200.computercraft.api.scripting.ScriptTask;
 import dan200.computercraft.api.peripheral.WorkMonitor;
 import dan200.computercraft.core.ComputerContext;
 import dan200.computercraft.core.apis.IAPIEnvironment;
+import dan200.computercraft.core.apis.events.RedstoneEvent;
 import dan200.computercraft.core.computer.mainthread.MainThreadScheduler;
 import dan200.computercraft.core.filesystem.FileSystem;
 import dan200.computercraft.core.redstone.RedstoneState;
@@ -119,6 +121,17 @@ public class Computer {
     }
 
     /**
+     * Queue an event described by an {@link Event}-annotated record: the event name and arguments are
+     * derived from the record's annotation and components. This is a typed convenience over
+     * {@link #queueEvent(String, Object[])}, which remains available for dynamic events.
+     *
+     * @param event An {@code @Event} record, e.g. {@code new RedstoneEvent(side.getName(), strength)}.
+     */
+    public void queueEvent(Record event) {
+        queueEvent(Events.name(event), Events.arguments(event));
+    }
+
+    /**
      * Queue a task to be run on the main thread, using {@link MainThreadScheduler}.
      *
      * @param runnable The task to run
@@ -164,7 +177,7 @@ public class Computer {
         var changedSides = redstone.pollInputChanges();
         for (var side : ComputerSide.values()) {
             if ((changedSides & (1 << side.ordinal())) != 0) {
-                queueEvent("redstone", new Object[]{ side.getName(), redstone.getInput(side) });
+                queueEvent(new RedstoneEvent(side.getName(), redstone.getInput(side)));
             }
         }
         internalEnvironment.tick();

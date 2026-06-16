@@ -41,7 +41,7 @@ final class Generator<T> {
     private static final Logger LOG = LoggerFactory.getLogger(Generator.class);
     private static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();
 
-    private static final MethodHandle METHOD_RESULT_OF_VOID, METHOD_RESULT_OF_ONE, METHOD_RESULT_OF_MANY;
+    private static final MethodHandle METHOD_RESULT_OF_VOID, METHOD_RESULT_OF_ONE;
 
     private static final Map<Class<?>, ArgMethods> argMethods;
     private static final ArgMethods ARG_TABLE_UNSAFE;
@@ -65,7 +65,6 @@ final class Generator<T> {
         try {
             METHOD_RESULT_OF_VOID = LOOKUP.findStatic(MethodResult.class, "of", MethodType.methodType(MethodResult.class));
             METHOD_RESULT_OF_ONE = LOOKUP.findStatic(MethodResult.class, "of", MethodType.methodType(MethodResult.class, Object.class));
-            METHOD_RESULT_OF_MANY = LOOKUP.findStatic(MethodResult.class, "of", MethodType.methodType(MethodResult.class, Object[].class));
 
             Map<Class<?>, ArgMethods> argMethodMap = new HashMap<>();
             addArgType(argMethodMap, int.class, "Int");
@@ -305,9 +304,9 @@ final class Generator<T> {
             return handle;
         } else if (ret == void.class) {
             return MethodHandles.filterReturnValue(handle, METHOD_RESULT_OF_VOID);
-        } else if (ret == Object[].class) {
-            return MethodHandles.filterReturnValue(handle, METHOD_RESULT_OF_MANY);
         } else {
+            // Every other return — including Object[], List and Map — is a single value. toJs renders arrays and
+            // collections as one JS array, so there is no "multiple return values" collapse.
             return MethodHandles.filterReturnValue(handle.asType(type.changeReturnType(Object.class)), METHOD_RESULT_OF_ONE);
         }
     }

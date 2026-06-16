@@ -397,7 +397,7 @@ public class TurtleBrain implements TurtleAccessInternal {
     @Override
     public MethodResult executeCommand(TurtleCommand command) {
         if (getLevel().isClientSide) throw new UnsupportedOperationException("Cannot run commands on the client");
-        if (commandQueue.size() > 16) return MethodResult.of(false, "Too many ongoing turtle commands");
+        if (commandQueue.size() > 16) return MethodResult.of(new Object[]{ false, "Too many ongoing turtle commands" });
 
         commandQueue.offer(new TurtleCommandQueueEntry(++commandsIssued, command));
         var commandID = commandsIssued;

@@ -18,11 +18,11 @@ public interface ScriptTask {
     /**
      * Execute this task.
      *
-     * @return The arguments to add to the {@code task_completed} event.
-     * @throws ScriptException If you throw any exception from this function, a lua error will be raised with the
+     * @return The single value to return from the task (added to the {@code task_complete} event). To return several
+     *         things, return an array/{@link java.util.Collection}/{@link java.util.Map}.
+     * @throws ScriptException If you throw any exception from this function, a script error will be raised with the
      *                      same message as your exception. Use this to throw appropriate errors if the wrong
      *                      arguments are supplied to your method.
      */
-    @Nullable
-    Object @Nullable [] execute() throws ScriptException;
+    @Nullable Object execute() throws ScriptException;
 }

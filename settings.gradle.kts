@@ -44,6 +44,7 @@ include(":forge-api")
 include(":forge")
 
 include(":lints")
+include(":tsdoclet")
 include(":standalone")
 include(":web")
 

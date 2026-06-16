@@ -5,7 +5,7 @@
 package dan200.computercraft.core.engine;
 
 import dan200.computercraft.core.CoreConfig;
-import dan200.computercraft.core.computer.EventsAPI;
+import dan200.computercraft.core.apis.EventsAPI;
 import dan200.computercraft.core.computer.TimeoutState;
 import org.jspecify.annotations.Nullable;
 import org.mozilla.javascript.*;

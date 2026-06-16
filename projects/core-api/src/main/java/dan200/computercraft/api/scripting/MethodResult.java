@@ -89,27 +89,14 @@ public final class MethodResult {
      * In order to provide a custom object with methods, one may return a {@link IDynamicObject}, or an arbitrary
      * class with {@link ScriptFunction} annotations. Anything else will be converted to {@code nil}.
      * <p>
-     * Shared objects in a {@link MethodResult} will preserve their sharing when converted to Lua values. For instance,
-     * {@code Map<?, ?> m = new HashMap(); return MethodResult.of(m, m); } will return two values {@code a}, {@code b}
-     * where {@code a == b}. The one exception to this is Java's singleton collections ({@link List#of()},
-     * {@link Set#of()} and {@link Map#of()}), which are always converted to new table. This is not true for other
-     * singleton collections, such as those provided by {@link Collections} or Guava.
+     * A method returns exactly one value. To return several things, return an array, {@link Collection} or {@link Map}
+     * — they are converted to a single JS array/object.
      *
-     * @param value The value to return to the calling Lua function.
+     * @param value The value to return to the calling function.
      * @return A method result which returns immediately with the given value.
      */
     public static MethodResult of(@Nullable Object value) {
         return new MethodResult(new Object[]{ value }, null);
-    }
-
-    /**
-     * Return any number of values immediately.
-     *
-     * @param values The values to return. See {@link #of(Object)} for acceptable values.
-     * @return A method result which returns immediately with the given values.
-     */
-    public static MethodResult of(@Nullable Object @Nullable ... values) {
-        return values == null || values.length == 0 ? empty : new MethodResult(values, null);
     }
 
     /**

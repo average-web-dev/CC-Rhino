@@ -58,7 +58,6 @@ junitPlatform = "6.0.3"
 jmh = "1.37"
 
 # Build tools
-cctJavadoc = "1.9.0"
 checkstyle = "13.4.1"
 errorProne-core = "2.49.0"
 errorProne-plugin = "4.3.0"
@@ -144,7 +143,6 @@ lwjgl-opengl = { module = "org.lwjgl:lwjgl-opengl" }
 lwjgl-glfw = { module = "org.lwjgl:lwjgl-glfw" }
 
 # Build tools
-cctJavadoc = { module = "cc.tweaked:cct-javadoc", version.ref = "cctJavadoc" }
 checkstyle = { module = "com.puppycrawl.tools:checkstyle", version.ref = "checkstyle" }
 errorProne-annotations = { module = "com.google.errorprone:error_prone_annotations", version.ref = "errorProne-core" }
 errorProne-api = { module = "com.google.errorprone:error_prone_check_api", version.ref = "errorProne-core" }

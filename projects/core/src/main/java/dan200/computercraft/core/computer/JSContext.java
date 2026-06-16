@@ -29,13 +29,9 @@ class JSContext implements IContext {
         final var taskID = computer.getUniqueTaskId();
         final Runnable iTask = () -> {
             try {
-                var results = task.execute();
-                if (results != null) {
-                    var eventArguments = new Object[results.length + 2];
-                    eventArguments[0] = taskID;
-                    eventArguments[1] = true;
-                    System.arraycopy(results, 0, eventArguments, 2, results.length);
-                    computer.queueEvent("task_complete", eventArguments);
+                var result = task.execute();
+                if (result != null) {
+                    computer.queueEvent("task_complete", new Object[]{ taskID, true, result });
                 } else {
                     computer.queueEvent("task_complete", new Object[]{ taskID, true });
                 }

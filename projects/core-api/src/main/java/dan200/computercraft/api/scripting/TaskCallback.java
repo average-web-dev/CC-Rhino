@@ -10,7 +10,7 @@ import org.jspecify.annotations.Nullable;
 final class TaskCallback implements ICallback, ScriptTask {
     private final ScriptTask task;
 
-    private volatile @Nullable Object @Nullable [] result;
+    private volatile @Nullable Object result;
     private volatile @MonotonicNonNull ScriptException failure;
 
     private final long taskId;
@@ -22,7 +22,7 @@ final class TaskCallback implements ICallback, ScriptTask {
     }
 
     @Override
-    public @Nullable Object @Nullable [] execute() throws ScriptException {
+    public @Nullable Object execute() throws ScriptException {
         // Store the result/exception: we read these back when receiving the task_complete event.
         try {
             result = task.execute();

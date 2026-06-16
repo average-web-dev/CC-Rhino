@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-package dan200.computercraft.core.computer;
+package dan200.computercraft.core.apis;
 
 import dan200.computercraft.api.scripting.IComputerAPI;
 import dan200.computercraft.api.scripting.ScriptFunction;
@@ -19,6 +19,7 @@ import org.mozilla.javascript.Callable;
  * <p>Callback parameters are typed as {@code Object} so the annotation processor extracts them via
  * {@link dan200.computercraft.core.engine.JSArguments#get}, which passes Rhino {@link Callable}
  * instances through without nulling them out (see {@code JSValues.toJava}).
+ * @cc.module events
  */
 public final class EventsAPI implements IComputerAPI {
     private final JSEventEmitter emitter;
@@ -34,16 +35,31 @@ public final class EventsAPI implements IComputerAPI {
         return new String[]{ "events" };
     }
 
+    /**
+     * Register a listener invoked every time {@code event} is fired.
+     *
+     * @cc-r.eventlistener
+     */
     @ScriptFunction
     public void on(String event, Object callback) {
         if (callback instanceof Callable fn) emitter.on(event, fn);
     }
 
+    /**
+     * Register a listener invoked the next time {@code event} is fired, then removed.
+     *
+     * @cc-r.eventlistener
+     */
     @ScriptFunction
     public void once(String event, Object callback) {
         if (callback instanceof Callable fn) emitter.once(event, fn);
     }
 
+    /**
+     * Remove a previously registered listener for {@code event}.
+     *
+     * @cc-r.eventlistener
+     */
     @ScriptFunction
     public void off(String event, Object callback) {
         if (callback instanceof Callable fn) emitter.off(event, fn);

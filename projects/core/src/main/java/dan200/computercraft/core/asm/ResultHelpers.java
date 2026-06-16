@@ -11,14 +11,16 @@ final class ResultHelpers {
     private ResultHelpers() {
     }
 
-    static @Nullable Object @Nullable [] checkNormalResult(MethodResult result) {
+    static @Nullable Object checkNormalResult(MethodResult result) {
         if (result.getCallback() != null) {
             // Due to how tasks are implemented, we can't currently return a MethodResult. This is an
             // entirely artificial limitation - we can remove it if it ever becomes an issue.
             throw new IllegalStateException("Must return MethodResult.of from mainThread function.");
         }
 
-        return result.getResult();
+        // A MethodResult now carries exactly one value; hand that lone value back to the task.
+        var values = result.getResult();
+        return values == null || values.length == 0 ? null : values[0];
     }
 
     static RuntimeException throwUnchecked(Throwable t) {
