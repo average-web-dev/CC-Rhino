@@ -190,11 +190,15 @@ public class TypeScriptDoclet implements Doclet {
         out.append("}\n");
 
         // A non-peripheral API tagged `@cc.module <id>` is loadable via require(): emit its overload
+        // plus an ambient `declare module` (so `import x = require("x")` / `import * as x` also resolve)
         // alongside the interface. Skip peripherals and GenericPeripheral method mixins (attached/
         // wrapped, not required), sub-handles like `fs.ReadHandle`, and `[kind=…]` event modules —
         // only a bare lowercase id (no dot, no bracket) on a standalone API names a require-able module.
         if (!isPeripheral && !isAssignableTo(type, "GenericPeripheral") && module.matches("[a-z_]+")) {
             out.append("declare function require(id: \"").append(module).append("\"): ").append(name).append(";\n");
+            // `module` matches [a-z_]+, so it is a valid JS identifier for the const binding.
+            out.append("declare module \"").append(module).append("\" { const ").append(module)
+                .append(": ").append(name).append("; export = ").append(module).append("; }\n");
         }
 
         Files.writeString(outputDir.resolve(name + ".d.ts"), out.toString());

@@ -11,7 +11,6 @@
 declare function require(id: "path"): PathModule;
 declare function require(id: "env"): EnvModule;
 declare function require(id: "parallel"): ParallelModule;
-declare function require(id: "events"): EventsAPI;
 /** Load a user/ROM module (e.g. `require("/startup")`). */
 declare function require(id: string): unknown;
 
