@@ -5,6 +5,7 @@
 package dan200.computercraft.shared.pocket.apis;
 
 import dan200.computercraft.api.scripting.IComputerAPI;
+import dan200.computercraft.api.scripting.Result;
 import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.pocket.IPocketAccess;
 import dan200.computercraft.api.pocket.IPocketUpgrade;
@@ -51,20 +52,17 @@ public class PocketAPI implements IComputerAPI {
         return new String[]{ "pocket" };
     }
 
-    // TODO: change cc.treturn
     /**
      * Search the player's inventory for another upgrade, replacing the existing one with that item if found.
      * <p>
      * This inventory search starts from the player's currently selected slot, allowing you to prioritise upgrades.
      *
-     * @return The result of equipping.
-     * @cc.treturn boolean If an item was equipped.
-     * @cc.treturn string|nil The reason an item was not equipped.
+     * @return Whether an item was equipped, and if not, why.
      */
     @ScriptFunction(mainThread = true)
-    public final Object equipBack() {
+    public final Result equipBack() {
         var entity = pocket.getEntity();
-        if (!(entity instanceof Player player)) return new Object[]{ false, "Cannot find player" };
+        if (!(entity instanceof Player player)) return Result.fail("Cannot find player");
         var inventory = player.getInventory();
         var previousUpgrade = pocket.getUpgrade();
 
@@ -74,7 +72,7 @@ public class PocketAPI implements IComputerAPI {
         if (newUpgrade == null) {
             newUpgrade = findUpgrade(inventory.offhand, 0, previousUpgrade);
         }
-        if (newUpgrade == null) return new Object[]{ false, "Cannot find a valid upgrade" };
+        if (newUpgrade == null) return Result.fail("Cannot find a valid upgrade");
 
         // Remove the current upgrade
         if (previousUpgrade != null) storeItem(player, previousUpgrade.getUpgradeItem());
@@ -82,30 +80,27 @@ public class PocketAPI implements IComputerAPI {
         // Set the new upgrade
         pocket.setUpgrade(newUpgrade);
 
-        return true;
+        return Result.succeed();
     }
 
-    // TODO: change cc.treturn
     /**
      * Remove the pocket computer's current upgrade.
      *
-     * @return The result of unequipping.
-     * @cc.treturn boolean If the upgrade was unequipped.
-     * @cc.treturn string|nil The reason an upgrade was not unequipped.
+     * @return Whether the upgrade was unequipped, and if not, why.
      */
     @ScriptFunction(mainThread = true)
-    public final Object unequipBack() {
+    public final Result unequipBack() {
         var entity = pocket.getEntity();
-        if (!(entity instanceof Player player)) return new Object[]{ false, "Cannot find player" };
+        if (!(entity instanceof Player player)) return Result.fail("Cannot find player");
         var previousUpgrade = pocket.getUpgrade();
 
-        if (previousUpgrade == null) return new Object[]{ false, "Nothing to unequip" };
+        if (previousUpgrade == null) return Result.fail("Nothing to unequip");
 
         pocket.setUpgrade(null);
 
         storeItem(player, previousUpgrade.getUpgradeItem());
 
-        return true;
+        return Result.succeed();
     }
 
     private static void storeItem(Player player, ItemStack stack) {

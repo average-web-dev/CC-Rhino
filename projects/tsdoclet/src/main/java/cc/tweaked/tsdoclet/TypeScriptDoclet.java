@@ -273,7 +273,9 @@ public class TypeScriptDoclet implements Doclet {
         if (summary != null) out.append("/** ").append(summary).append(" */\n");
         out.append("interface ").append(name).append(" {\n");
         for (var comp : rec.getRecordComponents()) {
-            out.append("    ").append(comp.getSimpleName()).append(": ").append(tsType(comp.asType())).append(";\n");
+            var type = tsType(comp.asType());
+            if (isNullableComponent(comp) && !type.contains("null")) type += " | null";
+            out.append("    ").append(comp.getSimpleName()).append(": ").append(type).append(";\n");
         }
         out.append("}\n");
         Files.writeString(outputDir.resolve(name + ".d.ts"), out.toString());
@@ -432,6 +434,12 @@ public class TypeScriptDoclet implements Doclet {
                 if (item instanceof javax.lang.model.element.AnnotationValue av) collectStrings(av.getValue(), into);
             }
         }
+    }
+
+    /** Whether a record component is {@code @Nullable} (annotation on the component or its type). */
+    private boolean isNullableComponent(javax.lang.model.element.RecordComponentElement comp) {
+        return hasAnnotation(comp.getAnnotationMirrors(), "Nullable")
+            || hasAnnotation(comp.asType().getAnnotationMirrors(), "Nullable");
     }
 
     private boolean isNullable(ExecutableElement method) {

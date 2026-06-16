@@ -23,14 +23,5 @@ type Callback<T> = (err: Error | null, result: T) => void;
 /** Node-style error-first callback with no result value. */
 type ErrorCallback = (err: Error | null) => void;
 
-/**
- * Result of an action that can fail in an expected way (e.g. a turtle moving into a wall).
- * Real/unexpected errors are thrown instead.
- */
-interface Result {
-    ok: boolean;
-    reason?: string;
-}
-
 /** Free-form detail tables returned by inspection/detail functions. */
 type Details = Record<string, unknown>;
