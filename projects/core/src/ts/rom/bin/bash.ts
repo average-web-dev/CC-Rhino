@@ -124,6 +124,7 @@ function completePath(word: string): Completion[] {
     for (let e of entries) {
         if (!e.startsWith(basePart)) continue;
         let isDir = false;
+        // @ts-ignore TODO: correct type for fs.statSync
         try { isDir = fs.statSync(resolvePath(dirPart + e)).isDirectory; } catch { /* unreadable */ }
         out.push({ word: dirPart + e, display: isDir ? e + '/' : e, isDir });
     }

@@ -9,7 +9,8 @@ function main(args: string[], cwd: string): void {
     const dst = resolve(cwd, paths[paths.length - 1]);
     const recursive = flags.some(f => /r/i.test(f));
     try {
-        fs.cpSync(src, dst, { recursive });
+        // TODO: fix the recursive flag in java
+        fs.cpSync(src, dst, /*{ recursive }*/);
     } catch (e: unknown) {
         print(`cp: ${(e as any)?.message ?? 'error'}`);
     }

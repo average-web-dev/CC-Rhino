@@ -9,7 +9,8 @@ function main(args: string[], cwd: string): void {
     for (let arg of paths) {
         let path = resolve(cwd, arg);
         try {
-            fs.rmSync(path, { recursive, force: true });
+            // TODO: fix the flags in java
+            fs.rmSync(path, /*{ recursive, force: true }*/);
         } catch (e: unknown) {
             print(`rm: ${arg}: ${(e as any)?.message ?? 'error'}`);
         }
