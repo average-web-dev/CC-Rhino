@@ -142,6 +142,16 @@ public class TypeScriptDoclet implements Doclet {
                 emitType(type, docTrees);
             }
             emitEventMap(env);
+            // Force-emit any record/enum explicitly marked `@cc-r.interface`, even if nothing references it
+            // (e.g. a shape returned only through an opaque Object / @cc-r.return, or used purely in TS).
+            // Records are commonly nested inside an API class, so recurse into enclosed types too.
+            var allTypes = new ArrayList<TypeElement>();
+            for (var type : ElementFilter.typesIn(env.getIncludedElements())) collectNestedTypes(type, allTypes);
+            for (var type : allTypes) {
+                if (blockTags(docTrees.getDocCommentTree(type), "cc-r.interface").isEmpty()) continue;
+                if (type.getKind() == ElementKind.RECORD) referencedRecords.add(type);
+                else if (type.getKind() == ElementKind.ENUM) referencedEnums.add(type);
+            }
             // Emit an interface for each referenced record (and any records they reference, transitively).
             var emitted = new java.util.HashSet<String>();
             for (boolean more = true; more; ) {
@@ -218,6 +228,12 @@ public class TypeScriptDoclet implements Doclet {
             out.add(method);
         }
         for (var supertype : supertypes(type)) collectScriptMethods(supertype, seen, out);
+    }
+
+    /** A type and every type nested within it (transitively). */
+    private void collectNestedTypes(TypeElement type, List<TypeElement> out) {
+        out.add(type);
+        for (var nested : ElementFilter.typesIn(type.getEnclosedElements())) collectNestedTypes(nested, out);
     }
 
     /** The directly-extended class (unless {@code Object}/{@code Record}) and implemented interfaces, as elements. */

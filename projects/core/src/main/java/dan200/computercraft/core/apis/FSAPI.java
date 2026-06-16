@@ -16,8 +16,6 @@ import org.jspecify.annotations.Nullable;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 
-import com.google.common.math.Stats;
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -466,7 +464,7 @@ public class FSAPI implements IComputerAPI {
      * @throws ScriptException If the path does not exist.
      */
     @ScriptFunction
-    public final Map<String, Object> statSync(String path) throws ScriptException {
+    public final Stats statSync(String path) throws ScriptException {
         try (var ignored = environment.time(Metrics.FS_OPS)) {
             return buildStats(path);
         } catch (FileSystemException e) {
@@ -605,17 +603,28 @@ public class FSAPI implements IComputerAPI {
         }
     }
 
-    private Map<String, Object> buildStats(String path) throws FileSystemException {
+    /**
+     * Node-style {@code fs.Stats} for a path; times are epoch milliseconds.
+     *
+     * @cc-r.interface
+     */
+    public record Stats(
+        long size, long mtimeMs, long ctimeMs, long birthtimeMs,
+        boolean isDirectory, boolean isFile, boolean isReadOnly
+    ) {
+    }
+
+    private Stats buildStats(String path) throws FileSystemException {
         var attrs = getFileSystem().getAttributes(path);
-        var stats = new HashMap<String, Object>(8);
-        stats.put("size",        attrs.isDirectory() ? 0L : attrs.size());
-        stats.put("mtimeMs",     attrs.lastModifiedTime().toMillis());
-        stats.put("ctimeMs",     attrs.lastModifiedTime().toMillis());
-        stats.put("birthtimeMs", attrs.creationTime().toMillis());
-        stats.put("isDirectory", attrs.isDirectory());
-        stats.put("isFile",      !attrs.isDirectory());
-        stats.put("isReadOnly",  getFileSystem().isReadOnly(path));
-        return stats;
+        var modified = attrs.lastModifiedTime().toMillis();
+        return new Stats(
+            attrs.isDirectory() ? 0L : attrs.size(),
+            modified,
+            modified,
+            attrs.creationTime().toMillis(),
+            attrs.isDirectory(),
+            !attrs.isDirectory(),
+            getFileSystem().isReadOnly(path));
     }
 
     private static byte[] toBytesFromArg(@Nullable Object data, @Nullable String encoding) throws ScriptException {
