@@ -614,3 +614,90 @@ Unified model:
 - [ ] **13.4** Audit all `apiEnvironment.queueEvent()` call sites across all API classes; annotate each as `// cross-thread: must stay` or migrate to `fireNow`
 - [ ] **13.5** Verify: a peripheral that calls `fireNow()` from inside a `@ScriptFunction` invocation fires `events.on()` listeners synchronously in the same tick; cross-thread calls still deliver on the next tick
 - [ ] **Commit** — stage Phase 13 files; propose commit message; wait for user approval
+
+---
+
+## Phase 14 — Unify turtle commands with the task-completion continuation
+
+Turtle functions (`turtle.forward()`, `dig()`, `place()`, …) resume through a **bespoke
+event** instead of the normal continuation buckets. They re-implement, in parallel, the
+exact pattern the standard main-thread-task path already provides:
+
+```text
+Standard blocking call (everything except turtles):
+  IContext.executeMainThreadTask(task)
+    → TaskCallback: MethodResult.pullEvent("task_complete", cb)   ← IO bucket, keyed by taskId
+    → scheduler runs task, queueEvent("task_complete", [taskId, ok, result])
+    → EventLoop Phase 2 (drainIO) resumes the continuation with `result`
+
+Turtle call (the odd one out):
+  TurtleBrain.executeCommand(command)
+    → CommandCallback: MethodResult.pullEvent("turtle_response", cb)  ← IO bucket, but custom event
+    → command is queued on the turtle's own commandQueue
+    → turtle's update tick runs it, queueEvent("turtle_response", [callbackID, ok, …results])
+    → CommandCallback.resume re-matches callbackID, returns the (ok, …) tuple
+```
+
+`CommandCallback` ([TurtleBrain.java](projects/common/src/main/java/dan200/computercraft/shared/turtle/core/TurtleBrain.java))
+is a near-duplicate of `TaskCallback`
+([core-api](projects/core-api/src/main/java/dan200/computercraft/api/scripting/TaskCallback.java)):
+both park an IO-bucket `pullEvent` keyed by an id. The only real difference is that a turtle
+command does not complete on the main-thread scheduler — it completes on the **turtle's own
+update tick** (after any movement animation). So it cannot literally call
+`issueMainThreadTask` (which runs the task and fires `task_complete` immediately), and it grew
+its own event + id scheme instead.
+
+### Goal
+
+Fold turtle completion into the standard `task_complete` continuation: one IO-bucket path, one
+id space (`computer.getUniqueTaskId()`), no `turtle_response` event and no `CommandCallback`.
+The turtle keeps its `commandQueue` (per-tick serialisation + animation gating are inherent);
+only the *completion signalling* changes.
+
+```text
+Unified turtle call:
+  TurtleBrain.executeCommand(command)
+    → taskId = computer.getUniqueTaskId()
+    → commandQueue.add({ taskId, command })
+    → return MethodResult.pullEvent("task_complete", resume-by-taskId)   ← same bucket as tasks
+    → turtle update tick: result = command.execute(this)
+        → queueEvent("task_complete", [taskId, true, shapedValue])
+    → EventLoop Phase 2 resumes the continuation with `shapedValue`
+```
+
+### Implementation approach
+
+- **`TurtleBrain.executeCommand`** — allocate `computer.getUniqueTaskId()`, enqueue `{taskId,
+  command}` on `commandQueue`, return a `task_complete` pull keyed by `taskId` (reuse a small
+  shared helper rather than a turtle-specific callback class — see below).
+- **`TurtleBrain.dispatchCommand`** — replace `queueEvent("turtle_response", [callbackID, …])`
+  with `queueEvent("task_complete", [taskId, true, shapedValue])`.
+- **Result shaping** — the single resumed value is built per command/method (`Result` for
+  can-fail actions, `boolean` for predicates like `detect`/`compare`, the data table for
+  `inspect`/`getItemDetail`). This is the same shaping decision tracked for the `Result`
+  migration; it lands here at the completion site.
+- **Delete** `CommandCallback`, the `turtle_response` event, and the `[callbackID, success,
+  …results]` packing/re-matching.
+- **Shared helper** — optionally add `MethodResult awaitTaskCompletion(long taskId)` next to
+  `TaskCallback` (it is `TaskCallback` minus `issueMainThreadTask`, for an externally-completed
+  id), so the turtle and any future tick-driven API reuse one resume/match implementation.
+
+### Important nuance — completion vs. action success
+
+Standard `task_complete` semantics **throw** on `[taskId, false, message]` (a real Java/script
+error). A turtle *action failure* ("Cannot break this block") is a **value**, not an error.
+So the turtle always emits `[taskId, true, shapedValue]` — "the tick ran the command" — and the
+action's success/failure lives inside `shapedValue` (the `Result`). Only a genuine exception
+thrown from `command.execute` should emit `[taskId, false, message]` and surface as a thrown
+error. This split must be explicit in `dispatchCommand`.
+
+Behaviour is otherwise unchanged: the continuation stays parked across animation ticks, and the
+computer keeps processing other events meanwhile — exactly as today, just on the unified path.
+
+- [ ] **14.1** Add `MethodResult awaitTaskCompletion(long taskId)` helper alongside `TaskCallback` (park a `task_complete` IO pull for an externally-completed id; return the value, do not auto-throw on action-level results)
+- [ ] **14.2** `TurtleBrain.executeCommand` — allocate `getUniqueTaskId()`, enqueue `{taskId, command}`, return the `task_complete` pull keyed by `taskId`
+- [ ] **14.3** `TurtleBrain.dispatchCommand` — emit `task_complete` `[taskId, true, shapedValue]`; emit `[taskId, false, message]` only for a thrown `command.execute` exception
+- [ ] **14.4** Move result shaping (Result / boolean / data) to the completion site; remove `@cc.treturn` tuples in favour of the shaped single value
+- [ ] **14.5** Delete `CommandCallback`, the `turtle_response` event, and its `callbackID` plumbing
+- [ ] **14.6** Verify: `turtle.forward()` halts and resumes via the standard continuation; multi-tick movement still lets other events dispatch; failures return a `Result` rather than throwing
+- [ ] **Commit** — stage Phase 14 files; propose commit message; wait for user approval
