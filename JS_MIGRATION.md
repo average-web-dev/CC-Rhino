@@ -694,10 +694,10 @@ error. This split must be explicit in `dispatchCommand`.
 Behaviour is otherwise unchanged: the continuation stays parked across animation ticks, and the
 computer keeps processing other events meanwhile — exactly as today, just on the unified path.
 
-- [ ] **14.1** Add `MethodResult awaitTaskCompletion(long taskId)` helper alongside `TaskCallback` (park a `task_complete` IO pull for an externally-completed id; return the value, do not auto-throw on action-level results)
-- [ ] **14.2** `TurtleBrain.executeCommand` — allocate `getUniqueTaskId()`, enqueue `{taskId, command}`, return the `task_complete` pull keyed by `taskId`
-- [ ] **14.3** `TurtleBrain.dispatchCommand` — emit `task_complete` `[taskId, true, shapedValue]`; emit `[taskId, false, message]` only for a thrown `command.execute` exception
-- [ ] **14.4** Move result shaping (Result / boolean / data) to the completion site; remove `@cc.treturn` tuples in favour of the shaped single value
-- [ ] **14.5** Delete `CommandCallback`, the `turtle_response` event, and its `callbackID` plumbing
-- [ ] **14.6** Verify: `turtle.forward()` halts and resumes via the standard continuation; multi-tick movement still lets other events dispatch; failures return a `Result` rather than throwing
+- [x] **14.1** Add `TaskCompletion.await(long taskId)` helper alongside `TaskCallback` (park a `task_complete` IO pull for an externally-completed id; resume with the carried value, rethrow only on `[id, false, message]`)
+- [x] **14.2** `TurtleBrain.executeCommand` — allocate `ServerComputer.getUniqueTaskId()` (delegates to `Computer`, now public), enqueue `{taskId, command}`, return `TaskCompletion.await(taskId)`
+- [x] **14.3** `TurtleBrain.dispatchCommand` — emit `task_complete` `[taskId, true, value]`; emit `[taskId, false, message]` only for a thrown `command.execute` exception (also fixes the previously-hung continuation on such a throw)
+- [ ] **14.4** Move result shaping (Result / boolean / data) to the completion site; remove `@cc.treturn` tuples in favour of the shaped single value — **deferred**; 14.1–14.3 preserve the existing `[ok, …results]` value exactly, so shaping is an independent follow-up
+- [x] **14.5** Delete `CommandCallback`, the `turtle_response` event, the `commandsIssued` counter, and its `callbackID` plumbing (`TurtleCommandQueueEntry.callbackID:int` → `taskId:long`); refresh the `ITurtleAccess.executeCommand` javadoc
+- [ ] **14.6** Verify at runtime: `turtle.forward()` halts and resumes via the standard continuation; multi-tick movement still lets other events dispatch — *Java compiles; value-equivalence reasoned through (`JSValues.toJs` deep-converts the nested array); no turtle integration test exists yet*
 - [ ] **Commit** — stage Phase 14 files; propose commit message; wait for user approval

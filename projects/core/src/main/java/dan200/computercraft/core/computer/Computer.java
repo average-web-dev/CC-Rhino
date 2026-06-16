@@ -208,7 +208,7 @@ public class Computer {
         executor.addApi(api, lifecycleHooks);
     }
 
-    long getUniqueTaskId() {
+    public long getUniqueTaskId() {
         return lastTaskId.incrementAndGet();
     }
 }

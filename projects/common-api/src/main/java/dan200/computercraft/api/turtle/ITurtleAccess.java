@@ -199,9 +199,9 @@ public interface ITurtleAccess {
     /**
      * Adds a custom command to the turtles command queue. Unlike peripheral methods, these custom commands will be executed
      * on the main thread, so are guaranteed to be able to access Minecraft objects safely, and will be queued up
-     * with the turtles standard movement and tool commands. An issued command will return an unique integer, which will
-     * be supplied as a parameter to a "turtle_response" event issued to the turtle after the command has completed. Look at the
-     * lua source code for "rom/apis/turtle" for how to build a lua wrapper around this functionality.
+     * with the turtles standard movement and tool commands. The returned {@link MethodResult} parks the calling
+     * coroutine until the command completes on the turtle's update tick, then resumes it with the command's result —
+     * this rides the same {@code task_complete} continuation as a regular main-thread task.
      *
      * @param command An object which will execute the custom command when its point in the queue is reached
      * @return The objects the command returned when executed. you should probably return these to the player

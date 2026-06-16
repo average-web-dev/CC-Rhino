@@ -221,6 +221,11 @@ public class ServerComputer implements ComputerEnvironment {
         queueEvent(event, null);
     }
 
+    /** A task id unique to this computer, shared with main-thread tasks so {@code task_complete} ids never collide. */
+    public final long getUniqueTaskId() {
+        return computer.getUniqueTaskId();
+    }
+
     public final UserComputerInput createComputerInput() {
         return new UserComputerInput(new EventComputerInput(computer), terminal);
     }

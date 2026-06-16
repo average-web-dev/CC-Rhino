@@ -5,8 +5,9 @@
 package dan200.computercraft.shared.turtle.core;
 
 import com.mojang.authlib.GameProfile;
-import dan200.computercraft.api.scripting.ICallback;
 import dan200.computercraft.api.scripting.MethodResult;
+import dan200.computercraft.api.scripting.TaskCompletion;
+import dan200.computercraft.api.turtle.TurtleCommandResult;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.api.turtle.ITurtleUpgrade;
 import dan200.computercraft.api.turtle.TurtleAnimation;
@@ -68,7 +69,6 @@ public class TurtleBrain implements TurtleAccessInternal {
     private final Container inventory = (InventoryDelegate) () -> owner;
 
     private final Queue<TurtleCommandQueueEntry> commandQueue = new ArrayDeque<>();
-    private int commandsIssued = 0;
 
     private final UpgradeInstance[] upgrades = { new UpgradeInstance(), new UpgradeInstance() };
 
@@ -397,11 +397,16 @@ public class TurtleBrain implements TurtleAccessInternal {
     @Override
     public MethodResult executeCommand(TurtleCommand command) {
         if (getLevel().isClientSide) throw new UnsupportedOperationException("Cannot run commands on the client");
+
+        var computer = owner.getServerComputer();
+        if (computer == null) return MethodResult.of(new Object[]{ false, "Turtle is not running" });
         if (commandQueue.size() > 16) return MethodResult.of(new Object[]{ false, "Too many ongoing turtle commands" });
 
-        commandQueue.offer(new TurtleCommandQueueEntry(++commandsIssued, command));
-        var commandID = commandsIssued;
-        return new CommandCallback(commandID).pull;
+        // Queue the command and await its completion through the standard task_complete continuation: the
+        // turtle's update tick runs the command and fires task_complete for this id (see dispatchCommand).
+        var taskId = computer.getUniqueTaskId();
+        commandQueue.offer(new TurtleCommandQueueEntry(taskId, command));
+        return TaskCompletion.await(taskId);
     }
 
     @Override
@@ -594,33 +599,42 @@ public class TurtleBrain implements TurtleAccessInternal {
 
         // Execute the command
         var start = System.nanoTime();
-        var result = nextCommand.command().execute(this);
+        TurtleCommandResult result;
+        try {
+            result = nextCommand.command().execute(this);
+        } catch (RuntimeException e) {
+            // A genuine fault in the command (not an expected action failure): surface it to the script as a
+            // thrown error via task_complete, then rethrow so the server still sees it. Without this the
+            // awaiting continuation would hang, as no completion event would ever fire.
+            if (computer != null) {
+                computer.getMainThreadMonitor().trackWork(System.nanoTime() - start, TimeUnit.NANOSECONDS);
+                computer.queueEvent("task_complete", new Object[]{ nextCommand.taskId(), false, e.getMessage() });
+            }
+            throw e;
+        }
         var end = System.nanoTime();
 
-        // Dispatch the callback
+        // Resume the awaiting continuation through the standard task_complete event. The command always
+        // *completes* (task ok = true); the action's own success/failure is encoded in the returned value
+        // (the `[ok, …results]` array), matching the previous turtle_response payload exactly.
         if (computer == null) return;
         computer.getMainThreadMonitor().trackWork(end - start, TimeUnit.NANOSECONDS);
-        var callbackID = nextCommand.callbackID();
-        if (callbackID < 0) return;
 
+        Object value;
         if (result != null && result.isSuccess()) {
             var results = result.getResults();
             if (results != null) {
-                var arguments = new Object[results.length + 2];
-                arguments[0] = callbackID;
-                arguments[1] = true;
-                System.arraycopy(results, 0, arguments, 2, results.length);
-                computer.queueEvent("turtle_response", arguments);
+                var actionValue = new Object[results.length + 1];
+                actionValue[0] = true;
+                System.arraycopy(results, 0, actionValue, 1, results.length);
+                value = actionValue;
             } else {
-                computer.queueEvent("turtle_response", new Object[]{
-                    callbackID, true,
-                });
+                value = new Object[]{ true };
             }
         } else {
-            computer.queueEvent("turtle_response", new Object[]{
-                callbackID, false, result != null ? result.getErrorMessage() : null,
-            });
+            value = new Object[]{ false, result != null ? result.getErrorMessage() : null };
         }
+        computer.queueEvent("task_complete", new Object[]{ nextCommand.taskId(), true, value });
     }
 
     private void updateAnimation() {
@@ -726,26 +740,6 @@ public class TurtleBrain implements TurtleAccessInternal {
     @Override
     public ItemStack getItemSnapshot(int slot) {
         return owner.getItemSnapshot(slot);
-    }
-
-    private static final class CommandCallback implements ICallback {
-        final MethodResult pull = MethodResult.pullEvent("turtle_response", this);
-        private final int command;
-
-        CommandCallback(int command) {
-            this.command = command;
-        }
-
-        @Override
-        public MethodResult resume(Object[] response) {
-            if (response.length < 3 || !(response[1] instanceof Number id) || !(response[2] instanceof Boolean)) {
-                return pull;
-            }
-
-            if (id.intValue() != command) return pull;
-
-            return MethodResult.of(Arrays.copyOfRange(response, 2, response.length));
-        }
     }
 
     private static final class UpgradeInstance {
