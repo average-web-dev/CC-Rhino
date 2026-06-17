@@ -285,19 +285,28 @@ public class TypeScriptDoclet implements Doclet {
         return null;
     }
 
-    /** Emit a TS interface for a record, one field per record component. */
+    /** Emit a TS interface for a record, one field per record component.
+     *  If the record carries {@code @cc-r.union}, emit a {@code type} alias with the literal
+     *  content instead — use {@code {@code …}} to protect {@code <>} and {@code |} from javadoc. */
     private void emitRecord(TypeElement rec, DocTrees docTrees) throws IOException {
         var name = rec.getSimpleName().toString();
+        var doc = docTrees.getDocCommentTree(rec);
         var out = new StringBuilder();
-        var summary = firstSentence(docTrees.getDocCommentTree(rec));
+        var summary = firstSentence(doc);
         if (summary != null) out.append("/** ").append(summary).append(" */\n");
-        out.append("interface ").append(name).append(" {\n");
-        for (var comp : rec.getRecordComponents()) {
-            var type = tsType(comp.asType());
-            if (isNullableComponent(comp) && !type.contains("null")) type += " | null";
-            out.append("    ").append(comp.getSimpleName()).append(": ").append(type).append(";\n");
+
+        var unionType = blockTagText(doc, "cc-r.union");
+        if (unionType != null) {
+            out.append("type ").append(name).append(" =\n    | ").append(unionType.replace(" | ", "\n    | ")).append(";\n");
+        } else {
+            out.append("interface ").append(name).append(" {\n");
+            for (var comp : rec.getRecordComponents()) {
+                var type = tsType(comp.asType());
+                if (isNullableComponent(comp) && !type.contains("null")) type += " | null";
+                out.append("    ").append(comp.getSimpleName()).append(": ").append(type).append(";\n");
+            }
+            out.append("}\n");
         }
-        out.append("}\n");
         Files.writeString(outputDir.resolve(name + ".d.ts"), out.toString());
     }
 

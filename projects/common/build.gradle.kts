@@ -70,7 +70,7 @@ val generateTsTypes by tasks.registering(Javadoc::class) {
     description = "Generate TypeScript .d.ts declarations from @ScriptFunction methods."
     group = JavaBasePlugin.DOCUMENTATION_GROUP
 
-    val sourceSets = listOf(sourceSets.main.get(), project(":core").sourceSets.main.get())
+    val sourceSets = listOf(sourceSets.main.get(), project(":core").sourceSets.main.get(), project(":core-api").sourceSets.main.get())
     for (sourceSet in sourceSets) {
         source(sourceSet.java)
         classpath += sourceSet.compileClasspath

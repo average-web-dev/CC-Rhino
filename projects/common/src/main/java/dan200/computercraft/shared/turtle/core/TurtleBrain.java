@@ -6,6 +6,7 @@ package dan200.computercraft.shared.turtle.core;
 
 import com.mojang.authlib.GameProfile;
 import dan200.computercraft.api.scripting.MethodResult;
+import dan200.computercraft.api.scripting.Result;
 import dan200.computercraft.api.scripting.TaskCompletion;
 import dan200.computercraft.api.turtle.TurtleCommandResult;
 import dan200.computercraft.api.peripheral.IPeripheral;
@@ -620,20 +621,10 @@ public class TurtleBrain implements TurtleAccessInternal {
         if (computer == null) return;
         computer.getMainThreadMonitor().trackWork(end - start, TimeUnit.NANOSECONDS);
 
-        Object value;
-        if (result != null && result.isSuccess()) {
-            var results = result.getResults();
-            if (results != null) {
-                var actionValue = new Object[results.length + 1];
-                actionValue[0] = true;
-                System.arraycopy(results, 0, actionValue, 1, results.length);
-                value = actionValue;
-            } else {
-                value = new Object[]{ true };
-            }
-        } else {
-            value = new Object[]{ false, result != null ? result.getErrorMessage() : null };
-        }
+        var msg = result != null ? result.getErrorMessage() : null;
+        var value = result != null && result.isSuccess()
+            ? Result.succeed()
+            : Result.fail(msg != null ? msg : "error");
         computer.queueEvent("task_complete", new Object[]{ nextCommand.taskId(), true, value });
     }
 

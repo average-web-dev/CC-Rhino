@@ -90,6 +90,28 @@ public class TurtleAPI implements IComputerAPI {
         return turtle.executeCommand(command);
     }
 
+    /** detect/compare/compareTo: success = yes, failure = no — the boolean IS the result. */
+    private static boolean toBool(TurtleCommandResult r) {
+        return r.isSuccess();
+    }
+
+    /** Standard can-fail commands: wraps into {@link Result}. */
+    private static Result toResult(TurtleCommandResult r) {
+        if (r.isSuccess()) return Result.succeed();
+        var msg = r.getErrorMessage();
+        return Result.fail(msg != null ? msg : "error");
+    }
+
+    /** inspect commands: success carries block data, failure carries reason. */
+    private static InspectResult toInspectResult(TurtleCommandResult r) {
+        if (r.isSuccess()) {
+            var extra = r.getResults();
+            return InspectResult.found(extra != null && extra.length > 0 ? (Map<?, ?>) extra[0] : Map.of());
+        }
+        var msg = r.getErrorMessage();
+        return InspectResult.notFound(msg != null ? msg : "error");
+    }
+
     /**
      * Move the turtle forward one block.
      *
@@ -325,13 +347,10 @@ public class TurtleAPI implements IComputerAPI {
      * @see #getSelectedSlot
      */
 
-    @ScriptFunction
-    public final MethodResult select(int slot) throws ScriptException {
-        var actualSlot = checkSlot(slot);
-        return turtle.executeCommand(turtle -> {
-            turtle.setSelectedSlot(actualSlot);
-            return TurtleCommandResult.success();
-        });
+    @ScriptFunction(mainThread = true)
+    public final Object[] select(int slot) throws ScriptException {
+        turtle.setSelectedSlot(checkSlot(slot));
+        return new Object[]{ true };
     }
 
     /**
@@ -370,9 +389,10 @@ public class TurtleAPI implements IComputerAPI {
      * @return The turtle command result.
      * @cc-r.return boolean
      */
-    @ScriptFunction
-    public final MethodResult detect() {
-        return trackCommand(new TurtleDetectCommand(InteractDirection.FORWARD));
+    @ScriptFunction(mainThread = true)
+    public final boolean detect() {
+        metrics.observe(Metrics.TURTLE_OPS);
+        return toBool(new TurtleDetectCommand(InteractDirection.FORWARD).execute(turtle));
     }
 
     /**
@@ -381,9 +401,10 @@ public class TurtleAPI implements IComputerAPI {
      * @return The turtle command result.
      * @cc-r.return boolean
      */
-    @ScriptFunction
-    public final MethodResult detectUp() {
-        return trackCommand(new TurtleDetectCommand(InteractDirection.UP));
+    @ScriptFunction(mainThread = true)
+    public final boolean detectUp() {
+        metrics.observe(Metrics.TURTLE_OPS);
+        return toBool(new TurtleDetectCommand(InteractDirection.UP).execute(turtle));
     }
 
     /**
@@ -392,9 +413,10 @@ public class TurtleAPI implements IComputerAPI {
      * @return The turtle command result.
      * @cc-r.return boolean
      */
-    @ScriptFunction
-    public final MethodResult detectDown() {
-        return trackCommand(new TurtleDetectCommand(InteractDirection.DOWN));
+    @ScriptFunction(mainThread = true)
+    public final boolean detectDown() {
+        metrics.observe(Metrics.TURTLE_OPS);
+        return toBool(new TurtleDetectCommand(InteractDirection.DOWN).execute(turtle));
     }
 
     /**
@@ -404,9 +426,10 @@ public class TurtleAPI implements IComputerAPI {
      * @cc-r.return boolean
      * @cc.since 1.31
      */
-    @ScriptFunction
-    public final MethodResult compare() {
-        return trackCommand(new TurtleCompareCommand(InteractDirection.FORWARD));
+    @ScriptFunction(mainThread = true)
+    public final boolean compare() {
+        metrics.observe(Metrics.TURTLE_OPS);
+        return toBool(new TurtleCompareCommand(InteractDirection.FORWARD).execute(turtle));
     }
 
     /**
@@ -416,9 +439,10 @@ public class TurtleAPI implements IComputerAPI {
      * @cc-r.return boolean
      * @cc.since 1.31
      */
-    @ScriptFunction
-    public final MethodResult compareUp() {
-        return trackCommand(new TurtleCompareCommand(InteractDirection.UP));
+    @ScriptFunction(mainThread = true)
+    public final boolean compareUp() {
+        metrics.observe(Metrics.TURTLE_OPS);
+        return toBool(new TurtleCompareCommand(InteractDirection.UP).execute(turtle));
     }
 
     /**
@@ -428,9 +452,10 @@ public class TurtleAPI implements IComputerAPI {
      * @cc-r.return boolean
      * @cc.since 1.31
      */
-    @ScriptFunction
-    public final MethodResult compareDown() {
-        return trackCommand(new TurtleCompareCommand(InteractDirection.DOWN));
+    @ScriptFunction(mainThread = true)
+    public final boolean compareDown() {
+        metrics.observe(Metrics.TURTLE_OPS);
+        return toBool(new TurtleCompareCommand(InteractDirection.DOWN).execute(turtle));
     }
 
     /**
@@ -595,9 +620,10 @@ public class TurtleAPI implements IComputerAPI {
      * @cc-r.return boolean
      * @cc.since 1.4
      */
-    @ScriptFunction
-    public final MethodResult compareTo(int slot) throws ScriptException {
-        return trackCommand(new TurtleCompareToCommand(checkSlot(slot)));
+    @ScriptFunction(mainThread = true)
+    public final boolean compareTo(int slot) throws ScriptException {
+        metrics.observe(Metrics.TURTLE_OPS);
+        return toBool(new TurtleCompareToCommand(checkSlot(slot)).execute(turtle));
     }
 
     /**
@@ -611,11 +637,9 @@ public class TurtleAPI implements IComputerAPI {
      * @cc-r.return boolean
      * @cc.since 1.45
      */
-    @ScriptFunction
-    public final MethodResult transferTo(int slotArg, Optional<Integer> countArg) throws ScriptException {
-        var slot = checkSlot(slotArg);
-        var count = checkCount(countArg);
-        return trackCommand(new TurtleTransferToCommand(slot, count));
+    @ScriptFunction(mainThread = true)
+    public final Result transferTo(int slotArg, Optional<Integer> countArg) throws ScriptException {
+        return toResult(new TurtleTransferToCommand(checkSlot(slotArg), checkCount(countArg)).execute(turtle));
     }
 
     /**
@@ -740,37 +764,36 @@ public class TurtleAPI implements IComputerAPI {
      *   print("No block in front of the turtle")
      * end}</pre>
      */
-    @ScriptFunction
-    public final MethodResult inspect() {
-        return trackCommand(new TurtleInspectCommand(InteractDirection.FORWARD));
+    @ScriptFunction(mainThread = true)
+    public final InspectResult inspect() {
+        metrics.observe(Metrics.TURTLE_OPS);
+        return toInspectResult(new TurtleInspectCommand(InteractDirection.FORWARD).execute(turtle));
     }
 
     /**
      * Get [information about the block][`block_details`] above the turtle.
      *
      * @return The turtle command result.
-     * @cc.treturn boolean Whether there is a block above the turtle.
-     * @cc.treturn table|string Information about the block above, or a message explaining that there is no block.
      * @cc.since 1.64
      * @cc.see block_details
      */
-    @ScriptFunction
-    public final MethodResult inspectUp() {
-        return trackCommand(new TurtleInspectCommand(InteractDirection.UP));
+    @ScriptFunction(mainThread = true)
+    public final InspectResult inspectUp() {
+        metrics.observe(Metrics.TURTLE_OPS);
+        return toInspectResult(new TurtleInspectCommand(InteractDirection.UP).execute(turtle));
     }
 
     /**
      * Get [information about the block][`block_details`] below the turtle.
      *
      * @return The turtle command result.
-     * @cc.treturn boolean Whether there is a block below the turtle.
-     * @cc.treturn table|string Information about the block below, or a message explaining that there is no block.
      * @cc.since 1.64
      * @cc.see block_details
      */
-    @ScriptFunction
-    public final MethodResult inspectDown() {
-        return trackCommand(new TurtleInspectCommand(InteractDirection.DOWN));
+    @ScriptFunction(mainThread = true)
+    public final InspectResult inspectDown() {
+        metrics.observe(Metrics.TURTLE_OPS);
+        return toInspectResult(new TurtleInspectCommand(InteractDirection.DOWN).execute(turtle));
     }
 
     // TODO: correct return type
