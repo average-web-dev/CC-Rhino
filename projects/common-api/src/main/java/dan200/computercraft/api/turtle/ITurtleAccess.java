@@ -145,38 +145,38 @@ public interface ITurtleAccess {
      * Determine whether this turtle will require fuel when performing actions.
      *
      * @return Whether this turtle needs fuel.
-     * @see #getFuelLevel()
-     * @see #setFuelLevel(int)
+     * @see #getEnergyLevel()
+     * @see #setEnergyLevel(int)
      */
-    boolean isFuelNeeded();
+    boolean isEnergyNeeded();
 
     /**
      * Get the current fuel level of this turtle.
      *
      * @return The turtle's current fuel level.
-     * @see #isFuelNeeded()
-     * @see #setFuelLevel(int)
+     * @see #isEnergyNeeded()
+     * @see #setEnergyLevel(int)
      */
-    int getFuelLevel();
+    int getEnergyLevel();
 
     /**
-     * Set the fuel level to a new value. It is generally preferred to use {@link #consumeFuel(int)}} or {@link #addFuel(int)}
+     * Set the fuel level to a new value. It is generally preferred to use {@link #consumeEnergy(int)}} or {@link #addEnergy(int)}
      * instead.
      *
      * @param fuel The new amount of fuel. This must be between 0 and the fuel limit.
-     * @see #getFuelLevel()
-     * @see #getFuelLimit()
-     * @see #addFuel(int)
-     * @see #consumeFuel(int)
+     * @see #getEnergyLevel()
+     * @see #getEnergyCapacity()
+     * @see #addEnergy(int)
+     * @see #consumeEnergy(int)
      */
-    void setFuelLevel(int fuel);
+    void setEnergyLevel(int fuel);
 
     /**
      * Get the maximum amount of fuel a turtle can hold.
      *
      * @return The turtle's fuel limit.
      */
-    int getFuelLimit();
+    int getEnergyCapacity();
 
     /**
      * Removes some fuel from the turtles fuel supply. Negative numbers can be passed in to INCREASE the fuel level of the turtle.
@@ -186,7 +186,7 @@ public interface ITurtleAccess {
      * greater than the current fuel level of the turtle. No fuel will be consumed if {@code false} is returned.
      * @throws UnsupportedOperationException When attempting to consume fuel on the client side.
      */
-    boolean consumeFuel(int fuel);
+    boolean consumeEnergy(int fuel);
 
     /**
      * Increase the turtle's fuel level by the given amount.
@@ -194,7 +194,7 @@ public interface ITurtleAccess {
      * @param fuel The amount to refuel with.
      * @throws UnsupportedOperationException When attempting to refuel on the client side.
      */
-    void addFuel(int fuel);
+    void addEnergy(int fuel);
 
     /**
      * Adds a custom command to the turtles command queue. Unlike peripheral methods, these custom commands will be executed

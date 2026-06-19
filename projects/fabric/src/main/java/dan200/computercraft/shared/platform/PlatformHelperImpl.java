@@ -186,6 +186,12 @@ public class PlatformHelperImpl implements PlatformHelper {
     }
 
     @Override
+    public @Nullable EnergyHandle getEnergyStorage(Level level, BlockPos pos, Direction side) {
+        // Fabric has no Forge Energy; turtle energy transfer is a no-op here until a Fabric energy API is wired in.
+        return null;
+    }
+
+    @Override
     public CreativeModeTab.Builder newCreativeModeTab() {
         return FabricItemGroup.builder();
     }

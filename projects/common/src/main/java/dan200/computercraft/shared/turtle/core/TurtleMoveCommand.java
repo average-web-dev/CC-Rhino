@@ -52,13 +52,16 @@ public class TurtleMoveCommand implements TurtleCommand {
         }
 
         // Check fuel level
-        if (turtle.isFuelNeeded() && turtle.getFuelLevel() < 1) return TurtleCommandResult.failure("Out of fuel");
+        var energyPerMovement = Config.turtleEnergyPerMovement;
+        if (turtle.isEnergyNeeded() && turtle.getEnergyLevel() < energyPerMovement) {
+            return TurtleCommandResult.failure("Out of fuel");
+        }
 
         // Move
         if (!turtle.teleportTo(level, newPosition)) return TurtleCommandResult.failure("Movement failed");
 
         // Consume fuel
-        turtle.consumeFuel(1);
+        turtle.consumeEnergy(energyPerMovement);
 
         // Animate
         switch (this.direction) {

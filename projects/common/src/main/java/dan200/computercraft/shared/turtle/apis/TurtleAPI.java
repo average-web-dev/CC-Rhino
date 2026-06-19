@@ -9,9 +9,14 @@ import dan200.computercraft.api.scripting.*;
 import dan200.computercraft.api.turtle.TurtleCommand;
 import dan200.computercraft.api.turtle.TurtleCommandResult;
 import dan200.computercraft.api.turtle.TurtleSide;
+import dan200.computercraft.core.computer.ComputerSide;
 import dan200.computercraft.core.metrics.Metrics;
 import dan200.computercraft.core.metrics.MetricsObserver;
+import dan200.computercraft.shared.config.Config;
+import dan200.computercraft.shared.platform.EnergyHandle;
+import dan200.computercraft.shared.platform.PlatformHelper;
 import dan200.computercraft.shared.turtle.core.*;
+import dan200.computercraft.shared.util.DirectionUtil;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
@@ -529,17 +534,17 @@ public class TurtleAPI implements IComputerAPI {
     }
 
     /**
-     * Get the maximum amount of fuel this turtle currently holds.
+     * Get the amount of energy (Forge Energy) this turtle currently holds.
      *
-     * @return The fuel level, or "unlimited".
+     * @return The stored energy, or "unlimited".
      * @cc-r.return number | "unlimited"
      * @cc.since 1.4
-     * @see #getFuelLimit()
+     * @see #getEnergyCapacity()
      * @see #refuel(Optional)
      */
     @ScriptFunction
-    public final Object getFuelLevel() {
-        return turtle.isFuelNeeded() ? turtle.getFuelLevel() : "unlimited";
+    public final Object getEnergy() {
+        return turtle.isEnergyNeeded() ? turtle.getEnergyLevel() : "unlimited";
     }
 
     /**
@@ -560,12 +565,12 @@ public class TurtleAPI implements IComputerAPI {
      * @cc.treturn [2] string The reason the turtle was not refuelled.
      * @cc.usage Refuel a turtle from the currently selected slot.
      * <pre>{@code
-     * local level = turtle.getFuelLevel()
+     * local level = turtle.getEnergy()
      * if level == "unlimited" then error("Turtle does not need fuel", 0) end
      *
      * local ok, err = turtle.refuel()
      * if ok then
-     *   local new_level = turtle.getFuelLevel()
+     *   local new_level = turtle.getEnergy()
      *   print(("Refuelled %d, current level is %d"):format(new_level - level, new_level))
      * else
      *   printError(err)
@@ -576,8 +581,8 @@ public class TurtleAPI implements IComputerAPI {
      * if not is_fuel then printError(reason) end
      * }</pre>
      * @cc.since 1.4
-     * @see #getFuelLevel()
-     * @see #getFuelLimit()
+     * @see #getEnergy()
+     * @see #getEnergyCapacity()
      */
     @ScriptFunction
     public final MethodResult refuel(Optional<Integer> countA) throws ScriptException {
@@ -631,19 +636,120 @@ public class TurtleAPI implements IComputerAPI {
     }
 
     /**
-     * Get the maximum amount of fuel this turtle can hold.
+     * Get the maximum amount of energy (Forge Energy) this turtle can hold.
      * <p>
-     * By default, normal turtles have a limit of 20,000 and advanced turtles of 100,000.
+     * By default, normal turtles store 1,200,000 FE and advanced turtles 6,000,000 FE.
      *
-     * @return The limit, or "unlimited".
+     * @return The capacity, or "unlimited".
      * @cc-r.return number | "unlimited"
      * @cc.since 1.6
-     * @see #getFuelLevel()
+     * @see #getEnergy()
      * @see #refuel(Optional)
      */
     @ScriptFunction
-    public final Object getFuelLimit() {
-        return turtle.isFuelNeeded() ? turtle.getFuelLimit() : "unlimited";
+    public final Object getEnergyCapacity() {
+        return turtle.isEnergyNeeded() ? turtle.getEnergyCapacity() : "unlimited";
+    }
+
+    /**
+     * Get the amount of fuel (Forge Energy) a single movement consumes.
+     * <p>
+     * Fuel levels are measured in FE; divide a fuel level by this to get the number of moves it affords.
+     *
+     * @return The FE cost of one movement.
+     * @cc-r.return number
+     * @see #getEnergy()
+     * @see #getEnergyCapacity()
+     */
+    @ScriptFunction
+    public final int getEnergyPerMovement() {
+        return Config.turtleEnergyPerMovement;
+    }
+
+    /**
+     * Set how much Forge Energy (FE/t) this turtle accepts from the given side when charged by an adjacent block.
+     *
+     * @param side The turtle-relative side ("front", "back", "left", "right", "top", "bottom").
+     * @param rate The charge rate in FE/t; {@code 0} disables charging on that side.
+     */
+    @ScriptFunction
+    public final void setChargeRate(ComputerSide side, int rate) {
+        turtle.setChargeRate(side, rate);
+    }
+
+    /**
+     * Get how much Forge Energy (FE/t) this turtle accepts from the given side.
+     *
+     * @param side The turtle-relative side.
+     * @return The charge rate in FE/t ({@code 0} if charging is disabled there).
+     */
+    @ScriptFunction
+    public final int getChargeRate(ComputerSide side) {
+        return turtle.getChargeRate(side);
+    }
+
+    /**
+     * Set how much Forge Energy (FE/t) this turtle emits to the given side when discharged by an adjacent block.
+     *
+     * @param side The turtle-relative side.
+     * @param rate The discharge rate in FE/t; {@code 0} disables discharging on that side.
+     */
+    @ScriptFunction
+    public final void setDischargeRate(ComputerSide side, int rate) {
+        turtle.setDischargeRate(side, rate);
+    }
+
+    /**
+     * Get how much Forge Energy (FE/t) this turtle emits to the given side.
+     *
+     * @param side The turtle-relative side.
+     * @return The discharge rate in FE/t ({@code 0} if discharging is disabled there).
+     */
+    @ScriptFunction
+    public final int getDischargeRate(ComputerSide side) {
+        return turtle.getDischargeRate(side);
+    }
+
+    /**
+     * Push energy out of this turtle into the energy store of the block on the given side.
+     *
+     * @param amount The maximum FE to transfer.
+     * @param side   The turtle-relative side to push to.
+     * @return The amount of FE actually transferred.
+     */
+    @ScriptFunction(mainThread = true)
+    public final int transferEnergy(int amount, ComputerSide side) {
+        var available = Math.min(amount, turtle.getEnergyLevel());
+        if (available <= 0) return 0;
+        var handle = neighbourEnergy(side);
+        if (handle == null) return 0;
+        var moved = handle.receiveEnergy(available, false);
+        if (moved > 0) turtle.consumeEnergy(moved);
+        return moved;
+    }
+
+    /**
+     * Pull energy from the energy store of the block on the given side into this turtle.
+     *
+     * @param amount The maximum FE to absorb.
+     * @param side   The turtle-relative side to pull from.
+     * @return The amount of FE actually absorbed.
+     */
+    @ScriptFunction(mainThread = true)
+    public final int absorbEnergy(int amount, ComputerSide side) {
+        var space = Math.min(amount, turtle.getEnergyCapacity() - turtle.getEnergyLevel());
+        if (space <= 0) return 0;
+        var handle = neighbourEnergy(side);
+        if (handle == null) return 0;
+        var moved = handle.extractEnergy(space, false);
+        if (moved > 0) turtle.addEnergy(moved);
+        return moved;
+    }
+
+    /** The energy store of the block adjacent to {@code side}, or {@code null} if there is none. */
+    private @Nullable EnergyHandle neighbourEnergy(ComputerSide side) {
+        var dir = DirectionUtil.toWorld(turtle.getDirection(), side);
+        return PlatformHelper.get().getEnergyStorage(turtle.getLevel(), turtle.getPosition().relative(dir), dir.getOpposite());
     }
 
     /**

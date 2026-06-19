@@ -64,8 +64,10 @@ public final class ConfigSpec {
     public static final ConfigFile.Value<Integer> monitorBandwidth;
 
     public static final ConfigFile.Value<Boolean> turtlesNeedFuel;
-    public static final ConfigFile.Value<Integer> turtleFuelLimit;
-    public static final ConfigFile.Value<Integer> advancedTurtleFuelLimit;
+    public static final ConfigFile.Value<Integer> turtleEnergieLimit;
+    public static final ConfigFile.Value<Integer> advancedTurtleEnergieLimit;
+    public static final ConfigFile.Value<Integer> turtleEnergyPerMovement;
+    public static final ConfigFile.Value<Integer> turtleFuelToEnergyFactor;
     public static final ConfigFile.Value<Boolean> turtlesCanPush;
 
     public static final ConfigFile.Value<Integer> computerTermWidth;
@@ -320,13 +322,23 @@ public final class ConfigSpec {
                 .comment("Set whether Turtles require fuel to move.")
                 .define("need_fuel", Config.turtlesNeedFuel);
 
-            turtleFuelLimit = builder
-                .comment("The fuel limit for Turtles.")
-                .defineInRange("normal_fuel_limit", Config.turtleFuelLimit, 0, Integer.MAX_VALUE);
+            turtleEnergieLimit = builder
+                .comment("The Forge Energy (FE) storage capacity for Turtles.")
+                .defineInRange("normal_fuel_limit", Config.turtleEnergieLimit, 0, Integer.MAX_VALUE);
 
-            advancedTurtleFuelLimit = builder
-                .comment("The fuel limit for Advanced Turtles.")
-                .defineInRange("advanced_fuel_limit", Config.advancedTurtleFuelLimit, 0, Integer.MAX_VALUE);
+            advancedTurtleEnergieLimit = builder
+                .comment("The Forge Energy (FE) storage capacity for Advanced Turtles.")
+                .defineInRange("advanced_fuel_limit", Config.advancedTurtleEnergieLimit, 0, Integer.MAX_VALUE);
+
+            turtleEnergyPerMovement = builder
+                .comment("The Forge Energy (FE) a Turtle consumes per movement.")
+                .defineInRange("energy_per_movement", Config.turtleEnergyPerMovement, 0, Integer.MAX_VALUE);
+
+            turtleFuelToEnergyFactor = builder
+                .comment("""
+                    The Forge Energy (FE) produced per tick of an item's burn time when refuelling
+                    (FE = burnTime * factor). Independent of the per-movement cost.""")
+                .defineInRange("fuel_to_energy_factor", Config.turtleFuelToEnergyFactor, 0, Integer.MAX_VALUE);
 
             turtlesCanPush = builder
                 .comment("""
@@ -431,8 +443,10 @@ public final class ConfigSpec {
 
         // Turtles
         Config.turtlesNeedFuel = turtlesNeedFuel.get();
-        Config.turtleFuelLimit = turtleFuelLimit.get();
-        Config.advancedTurtleFuelLimit = advancedTurtleFuelLimit.get();
+        Config.turtleEnergieLimit = turtleEnergieLimit.get();
+        Config.advancedTurtleEnergieLimit = advancedTurtleEnergieLimit.get();
+        Config.turtleEnergyPerMovement = turtleEnergyPerMovement.get();
+        Config.turtleFuelToEnergyFactor = turtleFuelToEnergyFactor.get();
         Config.turtlesCanPush = turtlesCanPush.get();
 
         // Terminal size

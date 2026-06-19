@@ -29,6 +29,20 @@ public final class DirectionUtil {
         return ComputerSide.BOTTOM;
     }
 
+    /** Inverse of {@link #toLocal}: the world {@link Direction} a turtle-relative {@link ComputerSide} points at. */
+    public static Direction toWorld(Direction front, ComputerSide side) {
+        if (front.getAxis() == Direction.Axis.Y) front = Direction.NORTH;
+
+        return switch (side) {
+            case FRONT -> front;
+            case BACK -> front.getOpposite();
+            case LEFT -> front.getCounterClockWise();
+            case RIGHT -> front.getClockWise();
+            case TOP -> Direction.UP;
+            case BOTTOM -> Direction.DOWN;
+        };
+    }
+
     public static float toPitchAngle(Direction dir) {
         return switch (dir) {
             case DOWN -> 90.0f;

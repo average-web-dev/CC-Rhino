@@ -206,6 +206,17 @@ public interface PlatformHelper {
     int getBurnTime(ItemStack stack);
 
     /**
+     * Get the energy storage exposed by a block, for turtles to push/pull Forge Energy.
+     *
+     * @param level The level the block is in.
+     * @param pos   The block's position.
+     * @param side  The face being accessed.
+     * @return The block's energy storage, or {@code null} if it has none (or the loader lacks Forge Energy).
+     */
+    @Nullable
+    EnergyHandle getEnergyStorage(Level level, BlockPos pos, Direction side);
+
+    /**
      * Create a builder for a new creative tab.
      *
      * @return The creative tab builder.
