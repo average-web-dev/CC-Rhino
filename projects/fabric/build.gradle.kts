@@ -88,6 +88,9 @@ dependencies {
     "modTestWithIris"(libs.iris.fabric)
     "modTestWithIris"(libs.sodium.fabric)
 
+    // Rhino is the JS engine the computer runs on; bundle it (it is not provided by Minecraft) so
+    // `org.mozilla.javascript.*` is present at runtime.
+    "includeRuntimeOnly"(libs.rhino)
     "includeRuntimeOnly"(libs.jzlib)
     "includeRuntimeOnly"(libs.netty.http)
     "includeRuntimeOnly"(libs.netty.socks)
