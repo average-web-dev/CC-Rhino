@@ -31,7 +31,9 @@ import dan200.computercraft.shared.peripheral.generic.methods.FluidMethods;
 import dan200.computercraft.shared.peripheral.generic.methods.InventoryMethods;
 import dan200.computercraft.shared.platform.ForgeConfigFile;
 import dan200.computercraft.shared.recipe.function.RecipeFunction;
+import dan200.computercraft.shared.turtle.TurtleEnergyStorage;
 import dan200.computercraft.shared.turtle.TurtleOverlay;
+import dan200.computercraft.shared.turtle.core.TurtleAccessInternal;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -163,6 +165,15 @@ public final class ComputerCraft {
         );
         for (var inv : unsidedContainers) {
             event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, inv.get(), (be, side) -> new InvWrapper(be));
+        }
+
+        // Expose turtles' energy buffers as Forge Energy, so they can be charged/discharged from cables/generators.
+        // Charge/discharge per face is gated by the script-configured per-side rates (see TurtleEnergyStorage).
+        for (var turtle : List.of(ModRegistry.BlockEntities.TURTLE_NORMAL, ModRegistry.BlockEntities.TURTLE_ADVANCED)) {
+            event.registerBlockEntity(
+                Capabilities.EnergyStorage.BLOCK, turtle.get(),
+                (be, side) -> new TurtleEnergyStorage((TurtleAccessInternal) be.getAccess(), side)
+            );
         }
 
         event.registerBlockEntity(

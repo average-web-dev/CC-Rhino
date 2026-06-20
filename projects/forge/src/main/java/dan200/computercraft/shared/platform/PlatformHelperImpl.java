@@ -183,6 +183,23 @@ public class PlatformHelperImpl implements PlatformHelper {
     }
 
     @Override
+    public @Nullable EnergyHandle getEnergyStorage(Level level, BlockPos pos, Direction side) {
+        var storage = level.getCapability(Capabilities.EnergyStorage.BLOCK, pos, side);
+        if (storage == null) return null;
+        return new EnergyHandle() {
+            @Override
+            public int receiveEnergy(int amount, boolean simulate) {
+                return storage.receiveEnergy(amount, simulate);
+            }
+
+            @Override
+            public int extractEnergy(int amount, boolean simulate) {
+                return storage.extractEnergy(amount, simulate);
+            }
+        };
+    }
+
+    @Override
     public CreativeModeTab.Builder newCreativeModeTab() {
         return CreativeModeTab.builder();
     }

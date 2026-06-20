@@ -26,8 +26,18 @@ public final class Config {
     public static long monitorBandwidth = 1_000_000;
 
     public static boolean turtlesNeedFuel = true;
-    public static int turtleFuelLimit = 20000;
-    public static int advancedTurtleFuelLimit = 100000;
+    // Turtle power is measured in Forge Energy (FE); these are the FE storage capacities.
+    public static int turtleEnergieLimit = 1_200_000;
+    public static int advancedTurtleEnergieLimit = 6_000_000;
+    // FE drained per movement, and the FE produced per tick of an item's burn time when refuelling
+    // (FE = burnTime * factor). Independent: coal (1600 burn) -> 1600 * 30 = 48,000 FE, which at
+    // 600 FE/move buys 80 moves.
+    public static int turtleEnergyPerMovement = 600;
+    public static int turtleFuelToEnergyFactor = 30;
+    // Server caps (FE/t) on a turtle's passive charge and discharge, regardless of the per-side rate a script
+    // requests. Default unlimited; lower to throttle how fast turtles draw from / feed energy networks.
+    public static int turtleMaxChargeRate = Integer.MAX_VALUE;
+    public static int turtleMaxDischargeRate = Integer.MAX_VALUE;
     public static boolean turtlesCanPush = true;
 
     public static final int DEFAULT_COMPUTER_TERM_WIDTH = 51;

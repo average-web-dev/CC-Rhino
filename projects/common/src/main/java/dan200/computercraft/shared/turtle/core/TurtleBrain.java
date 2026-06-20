@@ -24,7 +24,9 @@ import dan200.computercraft.shared.config.Config;
 import dan200.computercraft.shared.container.InventoryDelegate;
 import dan200.computercraft.shared.turtle.TurtleOverlay;
 import dan200.computercraft.shared.turtle.blocks.TurtleBlockEntity;
+import dan200.computercraft.shared.platform.PlatformHelper;
 import dan200.computercraft.shared.util.BlockEntityHelpers;
+import dan200.computercraft.shared.util.DirectionUtil;
 import dan200.computercraft.shared.util.Holiday;
 import dan200.computercraft.shared.util.NBTUtil;
 import net.minecraft.core.BlockPos;
@@ -59,6 +61,8 @@ public class TurtleBrain implements TurtleAccessInternal {
     public static final String NBT_COLOUR = "Color";
     public static final String NBT_LEFT_UPGRADE = "LeftUpgrade";
     public static final String NBT_RIGHT_UPGRADE = "RightUpgrade";
+    private static final String NBT_CHARGE_RATES = "ChargeRates";
+    private static final String NBT_DISCHARGE_RATES = "DischargeRates";
 
     private static final String NBT_SLOT = "Slot";
 
@@ -75,6 +79,10 @@ public class TurtleBrain implements TurtleAccessInternal {
 
     private int selectedSlot = 0;
     private int fuelLevel = 0;
+    // Per-(turtle-relative-)side Forge Energy I/O rates in FE/t; 0 disables that direction on that side.
+    // Charging is unlimited by default (turtles accept energy out of the box), discharging is off.
+    private final int[] chargeRate = newRates(Integer.MAX_VALUE);
+    private final int[] dischargeRate = newRates(0);
     private int colourHex = -1;
     private @Nullable Holder<TurtleOverlay> overlay = null;
 
@@ -114,6 +122,9 @@ public class TurtleBrain implements TurtleAccessInternal {
             // The block may have been broken while the command was executing (for instance, if a block explodes
             // when being mined). If so, abort.
             if (owner.isRemoved()) return;
+
+            // Actively push energy out of any side with a discharge rate (FE doesn't flow on its own).
+            pushEnergy(world);
         }
 
         // Advance animation
@@ -136,6 +147,8 @@ public class TurtleBrain implements TurtleAccessInternal {
         // Read fields
         colourHex = nbt.contains(NBT_COLOUR) ? nbt.getInt(NBT_COLOUR) : -1;
         fuelLevel = nbt.contains(NBT_FUEL) ? nbt.getInt(NBT_FUEL) : 0;
+        readRates(nbt, NBT_CHARGE_RATES, chargeRate, Integer.MAX_VALUE);
+        readRates(nbt, NBT_DISCHARGE_RATES, dischargeRate, 0);
         overlay = nbt.contains(NBT_OVERLAY) ? NBTUtil.decodeFrom(TurtleOverlay.CODEC, registries, nbt, NBT_OVERLAY) : null;
 
         // Read upgrades
@@ -145,6 +158,8 @@ public class TurtleBrain implements TurtleAccessInternal {
 
     private void writeCommon(CompoundTag nbt, HolderLookup.Provider registries) {
         nbt.putInt(NBT_FUEL, fuelLevel);
+        nbt.putIntArray(NBT_CHARGE_RATES, chargeRate.clone());
+        nbt.putIntArray(NBT_DISCHARGE_RATES, dischargeRate.clone());
         if (colourHex != -1) nbt.putInt(NBT_COLOUR, colourHex);
         if (overlay != null) NBTUtil.encodeTo(TurtleOverlay.CODEC, registries, nbt, NBT_OVERLAY, overlay);
 
@@ -353,46 +368,98 @@ public class TurtleBrain implements TurtleAccessInternal {
     }
 
     @Override
-    public boolean isFuelNeeded() {
+    public boolean isEnergyNeeded() {
         return Config.turtlesNeedFuel;
     }
 
     @Override
-    public int getFuelLevel() {
-        return Math.min(fuelLevel, getFuelLimit());
+    public int getEnergyLevel() {
+        return Math.min(fuelLevel, getEnergyCapacity());
     }
 
     @Override
-    public void setFuelLevel(int level) {
-        fuelLevel = Math.min(level, getFuelLimit());
+    public void setEnergyLevel(int level) {
+        fuelLevel = Math.min(level, getEnergyCapacity());
         owner.onTileEntityChange();
     }
 
     @Override
-    public int getFuelLimit() {
-        return owner.getFuelLimit();
+    public int getEnergyCapacity() {
+        return owner.getEnergyCapacity();
     }
 
     @Override
-    public boolean consumeFuel(int fuel) {
+    public boolean consumeEnergy(int fuel) {
         if (getLevel().isClientSide) throw new UnsupportedOperationException("Cannot consume fuel on the client");
 
-        if (!isFuelNeeded()) return true;
+        if (!isEnergyNeeded()) return true;
 
         var consumption = Math.max(fuel, 0);
-        if (getFuelLevel() >= consumption) {
-            setFuelLevel(getFuelLevel() - consumption);
+        if (getEnergyLevel() >= consumption) {
+            setEnergyLevel(getEnergyLevel() - consumption);
             return true;
         }
         return false;
     }
 
     @Override
-    public void addFuel(int fuel) {
+    public void addEnergy(int fuel) {
         if (getLevel().isClientSide) throw new UnsupportedOperationException("Cannot add fuel on the client");
 
         var addition = Math.max(fuel, 0);
-        setFuelLevel(getFuelLevel() + addition);
+        setEnergyLevel(getEnergyLevel() + addition);
+    }
+
+    @Override
+    public int getChargeRate(ComputerSide side) {
+        return chargeRate[side.ordinal()];
+    }
+
+    @Override
+    public void setChargeRate(ComputerSide side, int rate) {
+        chargeRate[side.ordinal()] = Math.max(0, rate);
+        owner.onTileEntityChange();
+    }
+
+    @Override
+    public int getDischargeRate(ComputerSide side) {
+        return dischargeRate[side.ordinal()];
+    }
+
+    @Override
+    public void setDischargeRate(ComputerSide side, int rate) {
+        dischargeRate[side.ordinal()] = Math.max(0, rate);
+        owner.onTileEntityChange();
+    }
+
+    /** Push energy out of every side with a discharge rate into the neighbouring block, up to that side's FE/t. */
+    private void pushEnergy(Level world) {
+        if (!isEnergyNeeded()) return;
+        var facing = getDirection();
+        var pos = getPosition();
+        for (var side : ComputerSide.values()) {
+            var rate = Math.min(dischargeRate[side.ordinal()], Config.turtleMaxDischargeRate);
+            var available = Math.min(rate, getEnergyLevel());
+            if (available <= 0) continue;
+            var dir = DirectionUtil.toWorld(facing, side);
+            var handle = PlatformHelper.get().getEnergyStorage(world, pos.relative(dir), dir.getOpposite());
+            if (handle == null) continue;
+            var moved = handle.receiveEnergy(available, false);
+            if (moved > 0) consumeEnergy(moved);
+        }
+    }
+
+    private static int[] newRates(int value) {
+        var rates = new int[ComputerSide.COUNT];
+        Arrays.fill(rates, value);
+        return rates;
+    }
+
+    private static void readRates(CompoundTag nbt, String key, int[] into, int defaultRate) {
+        var stored = nbt.contains(key) ? nbt.getIntArray(key) : null;
+        for (var i = 0; i < into.length; i++) {
+            into[i] = stored != null && i < stored.length ? Math.max(0, stored[i]) : defaultRate;
+        }
     }
 
     @Override

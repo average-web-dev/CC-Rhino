@@ -88,6 +88,9 @@ dependencies {
     "modTestWithIris"(libs.iris.fabric)
     "modTestWithIris"(libs.sodium.fabric)
 
+    // Rhino is the JS engine the computer runs on; bundle it (it is not provided by Minecraft) so
+    // `org.mozilla.javascript.*` is present at runtime.
+    "includeRuntimeOnly"(libs.rhino)
     "includeRuntimeOnly"(libs.jzlib)
     "includeRuntimeOnly"(libs.netty.http)
     "includeRuntimeOnly"(libs.netty.socks)
@@ -95,6 +98,14 @@ dependencies {
 
     "includeImplementation"(libs.nightConfig.core)
     "includeImplementation"(libs.nightConfig.toml)
+
+    // Tech Reborn's "Energy" API — Fabric's de-facto Forge Energy equivalent. Bundled (jar-in-jar) so turtles
+    // can be charged/discharged without the player installing it separately.
+    modImplementation(libs.teamRebornEnergy) {
+        exclude("net.fabricmc", "fabric-loader")
+        exclude("net.fabricmc.fabric-api")
+    }
+    include(libs.teamRebornEnergy)
 
     // Pull in our other projects. See comments in MinecraftConfigurations on this nastiness.
     "localImplementation"(project(":core"))

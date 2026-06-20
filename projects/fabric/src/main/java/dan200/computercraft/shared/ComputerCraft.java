@@ -20,6 +20,9 @@ import dan200.computercraft.shared.details.FluidDetails;
 import dan200.computercraft.shared.network.NetworkMessages;
 import dan200.computercraft.shared.peripheral.generic.methods.InventoryMethods;
 import dan200.computercraft.shared.platform.FabricConfigFile;
+import dan200.computercraft.shared.turtle.TurtleEnergyStorage;
+import dan200.computercraft.shared.turtle.core.TurtleAccessInternal;
+import team.reborn.energy.api.EnergyStorage;
 import dan200.computercraft.shared.recipe.function.RecipeFunction;
 import dan200.computercraft.shared.turtle.TurtleOverlay;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
@@ -55,6 +58,7 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.storage.LevelResource;
 import org.jspecify.annotations.Nullable;
 
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.BiFunction;
@@ -82,6 +86,13 @@ public class ComputerCraft {
         ModRegistry.registerPeripherals(new BlockComponentImpl<>(PeripheralLookup.get()));
         ModRegistry.registerWiredElements(new BlockComponentImpl<>(WiredElementLookup.get()));
         ModRegistry.registerMedia(new ItemComponentImpl<>(MediaLookup.get()));
+
+        // Expose turtles' energy buffers as Tech Reborn Energy, so they can be charged/discharged on Fabric.
+        for (var turtle : List.of(ModRegistry.BlockEntities.TURTLE_NORMAL, ModRegistry.BlockEntities.TURTLE_ADVANCED)) {
+            EnergyStorage.SIDED.registerForBlockEntity(
+                (be, dir) -> new TurtleEnergyStorage((TurtleAccessInternal) be.getAccess(), dir), turtle.get()
+            );
+        }
 
         // Register commands
         CommandRegistrationCallback.EVENT.register((dispatcher, context, environment) -> CommandComputerCraft.register(dispatcher));

@@ -224,9 +224,9 @@ public final class ModRegistry {
             ofBlock(Blocks.COMPUTER_COMMAND, (p, s) -> new ComputerBlockEntity(BlockEntities.COMPUTER_COMMAND.get(), p, s, ComputerFamily.COMMAND));
 
         public static final RegistryEntry<BlockEntityType<TurtleBlockEntity>> TURTLE_NORMAL =
-            ofBlock(Blocks.TURTLE_NORMAL, (p, s) -> new TurtleBlockEntity(BlockEntities.TURTLE_NORMAL.get(), p, s, () -> Config.turtleFuelLimit, ComputerFamily.NORMAL));
+            ofBlock(Blocks.TURTLE_NORMAL, (p, s) -> new TurtleBlockEntity(BlockEntities.TURTLE_NORMAL.get(), p, s, () -> Config.turtleEnergieLimit, ComputerFamily.NORMAL));
         public static final RegistryEntry<BlockEntityType<TurtleBlockEntity>> TURTLE_ADVANCED =
-            ofBlock(Blocks.TURTLE_ADVANCED, (p, s) -> new TurtleBlockEntity(BlockEntities.TURTLE_ADVANCED.get(), p, s, () -> Config.advancedTurtleFuelLimit, ComputerFamily.ADVANCED));
+            ofBlock(Blocks.TURTLE_ADVANCED, (p, s) -> new TurtleBlockEntity(BlockEntities.TURTLE_ADVANCED.get(), p, s, () -> Config.advancedTurtleEnergieLimit, ComputerFamily.ADVANCED));
 
         public static final RegistryEntry<BlockEntityType<SpeakerBlockEntity>> SPEAKER =
             ofBlock(Blocks.SPEAKER, (p, s) -> new SpeakerBlockEntity(BlockEntities.SPEAKER.get(), p, s));

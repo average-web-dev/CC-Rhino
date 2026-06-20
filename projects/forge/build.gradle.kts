@@ -170,6 +170,9 @@ dependencies {
     clientImplementation(clientClasses(project(":forge-api")))
 
     jarJar(libs.jzlib)
+    // Rhino is the JS engine the computer runs on; jar-in-jar it (and so put it on the runtime classpath) as it
+    // is not provided by Minecraft. Without this `org.mozilla.javascript.*` is missing at runtime.
+    jarJar(libs.rhino)
     // We don't jar-in-jar our additional netty dependencies (see the tasks.jarJar configuration), but still want them
     // on the legacy classpath.
     additionalRuntimeClasspath(libs.netty.http) { isTransitive = false }

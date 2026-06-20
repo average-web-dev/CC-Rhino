@@ -5,6 +5,7 @@
 package dan200.computercraft.shared.turtle.core;
 
 import dan200.computercraft.api.turtle.ITurtleAccess;
+import dan200.computercraft.core.computer.ComputerSide;
 import net.minecraft.world.item.ItemStack;
 
 /**
@@ -23,4 +24,36 @@ public interface TurtleAccessInternal extends ITurtleAccess {
      * @see net.minecraft.world.Container#getItem(int)
      */
     ItemStack getItemSnapshot(int slot);
+
+    /**
+     * Get the maximum Forge Energy a turtle-relative {@code side} will accept per tick (passive charging).
+     *
+     * @param side The turtle-relative side.
+     * @return The charge rate in FE/t; {@code 0} means charging is disabled on that side.
+     */
+    int getChargeRate(ComputerSide side);
+
+    /**
+     * Set the maximum Forge Energy a turtle-relative {@code side} will accept per tick.
+     *
+     * @param side The turtle-relative side.
+     * @param rate The charge rate in FE/t; {@code 0} disables charging on that side.
+     */
+    void setChargeRate(ComputerSide side, int rate);
+
+    /**
+     * Get the maximum Forge Energy a turtle-relative {@code side} will emit per tick (passive discharging).
+     *
+     * @param side The turtle-relative side.
+     * @return The discharge rate in FE/t; {@code 0} means discharging is disabled on that side.
+     */
+    int getDischargeRate(ComputerSide side);
+
+    /**
+     * Set the maximum Forge Energy a turtle-relative {@code side} will emit per tick.
+     *
+     * @param side The turtle-relative side.
+     * @param rate The discharge rate in FE/t; {@code 0} disables discharging on that side.
+     */
+    void setDischargeRate(ComputerSide side, int rate);
 }

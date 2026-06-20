@@ -163,7 +163,7 @@ public class TurtleBlockEntity extends AbstractComputerBlockEntity implements Ba
         var colour = component.get(DataComponents.DYED_COLOR);
         if (colour != null) brain.setColour(colour.rgb());
 
-        brain.setFuelLevel(component.getOrDefault(ModRegistry.DataComponents.FUEL.get(), 0));
+        brain.setEnergyLevel(component.getOrDefault(ModRegistry.DataComponents.FUEL.get(), 0));
         brain.setOverlay(component.get(ModRegistry.DataComponents.OVERLAY.get()));
         brain.setUpgrade(TurtleSide.LEFT, component.get(ModRegistry.DataComponents.LEFT_TURTLE_UPGRADE.get()));
         brain.setUpgrade(TurtleSide.RIGHT, component.get(ModRegistry.DataComponents.RIGHT_TURTLE_UPGRADE.get()));
@@ -175,7 +175,7 @@ public class TurtleBlockEntity extends AbstractComputerBlockEntity implements Ba
 
         builder.set(DataComponents.DYED_COLOR, brain.getColour() == -1 ? null : new DyedItemColor(brain.getColour(), false));
         builder.set(ModRegistry.DataComponents.OVERLAY.get(), brain.getOverlay());
-        builder.set(ModRegistry.DataComponents.FUEL.get(), brain.getFuelLevel());
+        builder.set(ModRegistry.DataComponents.FUEL.get(), brain.getEnergyLevel());
         builder.set(ModRegistry.DataComponents.LEFT_TURTLE_UPGRADE.get(), withPersistedData(brain.getUpgradeWithData(TurtleSide.LEFT)));
         builder.set(ModRegistry.DataComponents.RIGHT_TURTLE_UPGRADE.get(), withPersistedData(brain.getUpgradeWithData(TurtleSide.RIGHT)));
     }
@@ -299,7 +299,7 @@ public class TurtleBlockEntity extends AbstractComputerBlockEntity implements Ba
 
     // Privates
 
-    public int getFuelLimit() {
+    public int getEnergyCapacity() {
         return fuelLimit.getAsInt();
     }
 

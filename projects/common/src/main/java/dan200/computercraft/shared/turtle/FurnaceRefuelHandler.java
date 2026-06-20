@@ -6,6 +6,7 @@ package dan200.computercraft.shared.turtle;
 
 import dan200.computercraft.api.turtle.ITurtleAccess;
 import dan200.computercraft.api.turtle.TurtleRefuelHandler;
+import dan200.computercraft.shared.config.Config;
 import dan200.computercraft.shared.platform.PlatformHelper;
 import net.minecraft.world.item.ItemStack;
 
@@ -18,7 +19,7 @@ public final class FurnaceRefuelHandler implements TurtleRefuelHandler {
         if (fuelPerItem <= 0) return OptionalInt.empty();
         if (limit == 0) return OptionalInt.of(0);
 
-        var fuelSpaceLeft = turtle.getFuelLimit() - turtle.getFuelLevel();
+        var fuelSpaceLeft = turtle.getEnergyCapacity() - turtle.getEnergyLevel();
         var fuelItemLimit = (int) Math.ceil(fuelSpaceLeft / (double) fuelPerItem);
         if (limit > fuelItemLimit) limit = fuelItemLimit;
 
@@ -34,6 +35,7 @@ public final class FurnaceRefuelHandler implements TurtleRefuelHandler {
     }
 
     private static int getFuelPerItem(ItemStack stack) {
-        return (PlatformHelper.get().getBurnTime(stack) * 5) / 100;
+        // FE = burnTime * factor (e.g. coal: 1600 * 30 = 48,000 FE).
+        return PlatformHelper.get().getBurnTime(stack) * Config.turtleFuelToEnergyFactor;
     }
 }

@@ -28,7 +28,7 @@ public class TurtleRefuelCommand implements TurtleCommand {
 
         var newFuel = refuelled.getAsInt();
         if (newFuel != 0) {
-            turtle.addFuel(newFuel);
+            turtle.addEnergy(newFuel);
             turtle.playAnimation(TurtleAnimation.WAIT);
         }
 
