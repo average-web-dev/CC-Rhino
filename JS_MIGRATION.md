@@ -701,3 +701,22 @@ computer keeps processing other events meanwhile — exactly as today, just on t
 - [x] **14.5** Delete `CommandCallback`, the `turtle_response` event, the `commandsIssued` counter, and its `callbackID` plumbing (`TurtleCommandQueueEntry.callbackID:int` → `taskId:long`); refresh the `ITurtleAccess.executeCommand` javadoc
 - [ ] **14.6** Verify at runtime: `turtle.forward()` halts and resumes via the standard continuation; multi-tick movement still lets other events dispatch — *Java compiles; value-equivalence reasoned through (`JSValues.toJs` deep-converts the nested array); no turtle integration test exists yet*
 - [ ] **Commit** — stage Phase 14 files; propose commit message; wait for user approval
+
+---
+
+## Phase 15 — ROM energy convenience helpers
+
+`turtle.transferEnergy`/`absorbEnergy` are deliberately one-shot, single-tick primitives (return what
+moved this tick, bounded by the source/sink's per-tick rate). The common "drain it fully / fill to N"
+case needs a multi-tick loop; rather than baking blocking semantics into the Java primitive, ship it as
+a thin TS helper in the turtle ROM library, built on the primitive + `sleep`:
+
+```ts
+// loops until `amount` moved or no further progress is possible (source dry / full / rate 0)
+function absorbUntil(side: string, amount: number): number { /* loop absorbEnergy + sleep, stop on 0 */ }
+function transferUntil(side: string, amount: number): number { /* loop transferEnergy + sleep, stop on 0 */ }
+```
+
+- [ ] **15.1** Add `absorbUntil`/`transferUntil` (and maybe `chargeToFull`/`drainEmpty`) helpers to the turtle ROM library
+- [ ] **15.2** Stop on `=== 0` (no progress) so they never hang when the neighbour can't supply/accept
+- [ ] **Commit** — stage Phase 15 files; propose commit message; wait for user approval

@@ -536,15 +536,31 @@ public class TurtleAPI implements IComputerAPI {
     /**
      * Get the amount of energy (Forge Energy) this turtle currently holds.
      *
-     * @return The stored energy, or "unlimited".
-     * @cc-r.return number | "unlimited"
+     * @return The stored energy.
+     * @cc-r.return number
      * @cc.since 1.4
      * @see #getEnergyCapacity()
+     * @see #isEnergyNeeded()
      * @see #refuel(Optional)
      */
     @ScriptFunction
-    public final Object getEnergy() {
-        return turtle.isEnergyNeeded() ? turtle.getEnergyLevel() : "unlimited";
+    public final int getEnergy() {
+        return turtle.getEnergyLevel();
+    }
+
+    /**
+     * Determine whether this turtle consumes energy to move.
+     * <p>
+     * When this is {@code false} (the {@code turtlesNeedFuel} config is disabled) movement is free, but the
+     * turtle still has a real energy level and may still transfer energy to or from neighbouring blocks.
+     *
+     * @return Whether this turtle needs energy to move.
+     * @cc-r.return boolean
+     * @see #getEnergy()
+     */
+    @ScriptFunction
+    public final boolean isEnergyNeeded() {
+        return turtle.isEnergyNeeded();
     }
 
     /**
@@ -640,15 +656,15 @@ public class TurtleAPI implements IComputerAPI {
      * <p>
      * By default, normal turtles store 1,200,000 FE and advanced turtles 6,000,000 FE.
      *
-     * @return The capacity, or "unlimited".
-     * @cc-r.return number | "unlimited"
+     * @return The capacity.
+     * @cc-r.return number
      * @cc.since 1.6
      * @see #getEnergy()
      * @see #refuel(Optional)
      */
     @ScriptFunction
-    public final Object getEnergyCapacity() {
-        return turtle.isEnergyNeeded() ? turtle.getEnergyCapacity() : "unlimited";
+    public final int getEnergyCapacity() {
+        return turtle.getEnergyCapacity();
     }
 
     /**
@@ -711,14 +727,40 @@ public class TurtleAPI implements IComputerAPI {
     }
 
     /**
+     * Get the server-configured maximum charge rate (FE/t). A per-side {@link #setChargeRate charge rate} above
+     * this is capped to it, so this is the fastest a turtle can actually be charged.
+     *
+     * @return The maximum charge rate in FE/t.
+     * @cc-r.return number
+     * @see #setChargeRate(ComputerSide, int)
+     */
+    @ScriptFunction
+    public final int getMaxChargeRate() {
+        return Config.turtleMaxChargeRate;
+    }
+
+    /**
+     * Get the server-configured maximum discharge rate (FE/t). A per-side {@link #setDischargeRate discharge rate}
+     * above this is capped to it, so this is the fastest a turtle can actually be discharged.
+     *
+     * @return The maximum discharge rate in FE/t.
+     * @cc-r.return number
+     * @see #setDischargeRate(ComputerSide, int)
+     */
+    @ScriptFunction
+    public final int getMaxDischargeRate() {
+        return Config.turtleMaxDischargeRate;
+    }
+
+    /**
      * Push energy out of this turtle into the energy store of the block on the given side.
      *
-     * @param amount The maximum FE to transfer.
      * @param side   The turtle-relative side to push to.
+     * @param amount The maximum FE to transfer.
      * @return The amount of FE actually transferred.
      */
     @ScriptFunction(mainThread = true)
-    public final int transferEnergy(int amount, ComputerSide side) {
+    public final int transferEnergy(ComputerSide side, int amount) {
         var available = Math.min(amount, turtle.getEnergyLevel());
         if (available <= 0) return 0;
         var handle = neighbourEnergy(side);
@@ -731,12 +773,12 @@ public class TurtleAPI implements IComputerAPI {
     /**
      * Pull energy from the energy store of the block on the given side into this turtle.
      *
-     * @param amount The maximum FE to absorb.
      * @param side   The turtle-relative side to pull from.
+     * @param amount The maximum FE to absorb.
      * @return The amount of FE actually absorbed.
      */
     @ScriptFunction(mainThread = true)
-    public final int absorbEnergy(int amount, ComputerSide side) {
+    public final int absorbEnergy(ComputerSide side, int amount) {
         var space = Math.min(amount, turtle.getEnergyCapacity() - turtle.getEnergyLevel());
         if (space <= 0) return 0;
         var handle = neighbourEnergy(side);
