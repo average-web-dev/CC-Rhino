@@ -88,52 +88,59 @@ public class JSMachine implements IMachine {
         scheduleTick = environment.scheduleTick();
 
         factory = new CCContextFactory();
+        // The context is thread-affine, so we bind it only for the duration of each execution (see handleEvent).
+        // Enter it here purely for the setup below, then exit so it isn't left bound to whatever worker thread
+        // happened to construct us — that thread may later run a different computer.
         cx = factory.enterContext();
-        scope = cx.initStandardObjects();
+        try {
+            scope = cx.initStandardObjects();
 
-        // Strip all Java interop globals — classShutter already blocks class loading,
-        // but removing these prevents enumeration and makes the intent explicit.
-        for (var name : new String[]{
-            "Packages", "java", "javax", "org", "com", "edu", "net",
-            "JavaImporter", "importClass", "importPackage"
-        }) {
-            ScriptableObject.deleteProperty(scope, name);
-        }
-
-        // Compile bios now so we can use executeScriptWithContinuations later.
-        biosScript = cx.compileString(biosSource, "bios.js", 1, null);
-
-        emitter = new JSEventEmitter();
-
-        // Build the module loader and register all CC APIs as native modules.
-        var loader = new JSRequire(scope, environment.fileSystem());
-        var context = environment.context();
-        var methods = environment.luaMethods();
-        for (var api : environment.apis()) {
-            for (var name : api.getNames()) {
-                var obj = JSAPIBuilder.build(cx, scope, api, context, methods);
-                loader.registerNative(name, obj);
+            // Strip all Java interop globals — classShutter already blocks class loading,
+            // but removing these prevents enumeration and makes the intent explicit.
+            for (var name : new String[]{
+                "Packages", "java", "javax", "org", "com", "edu", "net",
+                "JavaImporter", "importClass", "importPackage"
+            }) {
+                ScriptableObject.deleteProperty(scope, name);
             }
-        }
 
-        // Register the engine-internal 'events' module (emitter + scheduler).
-        var eventsApi = new EventsAPI(emitter, eventLoop);
-        loader.registerNative("events", JSAPIBuilder.build(cx, scope, eventsApi, context, methods));
+            // Compile bios now so we can use executeScriptWithContinuations later.
+            biosScript = cx.compileString(biosSource, "bios.js", 1, null);
 
-        // Expose loader, run the JS require() setup, then remove the loader from global scope.
-        // The setup script captures a reference via closure so require() still works after deletion.
-        ScriptableObject.putProperty(scope, "__cc_loader__", loader);
-        cx.evaluateString(scope, REQUIRE_SETUP_JS, "require-setup.js", 1, null);
-        ScriptableObject.deleteProperty(scope, "__cc_loader__");
+            emitter = new JSEventEmitter();
 
-        // Wake up the pause spin-loop immediately when a hard abort is requested.
-        abortListener = () -> {
-            if (timeout.isHardAborted()) {
-                var t = executionThread;
-                if (t != null) LockSupport.unpark(t);
+            // Build the module loader and register all CC APIs as native modules.
+            var loader = new JSRequire(scope, environment.fileSystem());
+            var context = environment.context();
+            var methods = environment.luaMethods();
+            for (var api : environment.apis()) {
+                for (var name : api.getNames()) {
+                    var obj = JSAPIBuilder.build(cx, scope, api, context, methods);
+                    loader.registerNative(name, obj);
+                }
             }
-        };
-        timeout.addListener(abortListener);
+
+            // Register the engine-internal 'events' module (emitter + scheduler).
+            var eventsApi = new EventsAPI(emitter, eventLoop);
+            loader.registerNative("events", JSAPIBuilder.build(cx, scope, eventsApi, context, methods));
+
+            // Expose loader, run the JS require() setup, then remove the loader from global scope.
+            // The setup script captures a reference via closure so require() still works after deletion.
+            ScriptableObject.putProperty(scope, "__cc_loader__", loader);
+            cx.evaluateString(scope, REQUIRE_SETUP_JS, "require-setup.js", 1, null);
+            ScriptableObject.deleteProperty(scope, "__cc_loader__");
+
+            // Wake up the pause spin-loop immediately when a hard abort is requested.
+            abortListener = () -> {
+                if (timeout.isHardAborted()) {
+                    var t = executionThread;
+                    if (t != null) LockSupport.unpark(t);
+                }
+            };
+            timeout.addListener(abortListener);
+        } finally {
+            Context.exit();
+        }
     }
 
     /**
@@ -153,6 +160,9 @@ public class JSMachine implements IMachine {
         if (isDisposed) return MachineResult.OK;
 
         executionThread = Thread.currentThread();
+        // Rhino contexts are thread-affine; bind ours to this worker thread for the duration of the execution.
+        // CC runs a given computer on one worker at a time, so the single `cx` is free between events.
+        factory.enterContext(cx);
         try {
             if (!started) {
                 started = true;
@@ -224,6 +234,7 @@ public class JSMachine implements IMachine {
             return MachineResult.OK;
 
         } finally {
+            Context.exit();
             executionThread = null;
         }
     }
@@ -289,7 +300,9 @@ public class JSMachine implements IMachine {
             timeout.removeListener(listener);
             abortListener = null;
         }
-        Context.exit();
+        // The context is entered/exited per execution (constructor + handleEvent), not held open across the
+        // machine's lifetime, so there is nothing to exit here — and close() may run on a thread that never
+        // entered it.
     }
 
     private final class CCContextFactory extends ContextFactory {
