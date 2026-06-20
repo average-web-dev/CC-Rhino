@@ -15,8 +15,10 @@ import team.reborn.energy.api.EnergyStorage;
 
 /**
  * Exposes a turtle's energy buffer as a Tech Reborn {@link EnergyStorage} on one face — the Fabric counterpart
- * of the NeoForge capability — so machines/cables can charge it. Charging is gated by the script-configured
- * per-side charge rate; this is a sink only (discharging is performed actively by {@code TurtleBrain.pushEnergy}).
+ * of the NeoForge capability. Insertion is gated by the per-side charge rate and extraction by the per-side
+ * discharge rate ({@code turtle.setChargeRate}/{@code setDischargeRate}; {@code 0} disables a direction).
+ * Discharging also happens actively via {@code TurtleBrain.pushEnergy}, but the discharge rate equally permits
+ * being pulled (e.g. another turtle's {@code absorbEnergy}).
  *
  * <p>Extends {@link SnapshotParticipant} so an aborted transaction rolls the turtle's energy back.
  */
@@ -36,6 +38,12 @@ public class TurtleEnergyStorage extends SnapshotParticipant<Integer> implements
         return Math.min(requested, Config.turtleMaxChargeRate);
     }
 
+    /** FE/t this face emits when pulled. A {@code null} (unsided) query, or a turtle without fuel, emits none. */
+    private int dischargeRate() {
+        if (!turtle.isEnergyNeeded() || side == null) return 0;
+        return Math.min(turtle.getDischargeRate(DirectionUtil.toLocal(turtle.getDirection(), side)), Config.turtleMaxDischargeRate);
+    }
+
     @Override
     public long insert(long maxAmount, TransactionContext transaction) {
         var accepted = Math.min(Math.min(maxAmount, chargeRate()), (long) turtle.getEnergyCapacity() - turtle.getEnergyLevel());
@@ -47,7 +55,11 @@ public class TurtleEnergyStorage extends SnapshotParticipant<Integer> implements
 
     @Override
     public long extract(long maxAmount, TransactionContext transaction) {
-        return 0;
+        var extracted = Math.min(Math.min(maxAmount, dischargeRate()), (long) turtle.getEnergyLevel());
+        if (extracted <= 0) return 0;
+        updateSnapshots(transaction);
+        turtle.consumeEnergy((int) extracted);
+        return extracted;
     }
 
     @Override
@@ -67,7 +79,7 @@ public class TurtleEnergyStorage extends SnapshotParticipant<Integer> implements
 
     @Override
     public boolean supportsExtraction() {
-        return false;
+        return dischargeRate() > 0;
     }
 
     @Override

@@ -12,10 +12,11 @@ import net.neoforged.neoforge.energy.IEnergyStorage;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Exposes a turtle's energy buffer as a Forge Energy {@link IEnergyStorage} on one face, so machines/cables can
- * charge it. Charging is gated by the turtle-relative per-side charge rate the script configures
- * ({@code turtle.setChargeRate}; {@code 0} disables that face). This is a sink only — discharging is performed
- * actively by the turtle each tick (see {@code TurtleBrain.pushEnergy}), since FE machines push rather than pull.
+ * Exposes a turtle's energy buffer as a Forge Energy {@link IEnergyStorage} on one face. Both directions are gated
+ * by the turtle-relative per-side rates the script configures ({@code turtle.setChargeRate}/{@code setDischargeRate};
+ * {@code 0} disables that direction). Charging is passive (a machine pushes in); discharging additionally happens
+ * actively each tick (see {@code TurtleBrain.pushEnergy}, since FE machines push rather than pull), but a discharge
+ * rate also permits pulling (e.g. another turtle's {@code absorbEnergy}).
  */
 public class TurtleEnergyStorage implements IEnergyStorage {
     private final TurtleAccessInternal turtle;
@@ -33,6 +34,12 @@ public class TurtleEnergyStorage implements IEnergyStorage {
         return Math.min(requested, Config.turtleMaxChargeRate);
     }
 
+    /** FE/t this face emits when pulled. A {@code null} (unsided) query, or a turtle without fuel, emits none. */
+    private int dischargeRate() {
+        if (!turtle.isEnergyNeeded() || side == null) return 0;
+        return Math.min(turtle.getDischargeRate(DirectionUtil.toLocal(turtle.getDirection(), side)), Config.turtleMaxDischargeRate);
+    }
+
     @Override
     public int receiveEnergy(int toReceive, boolean simulate) {
         var accepted = Math.min(Math.min(toReceive, chargeRate()), turtle.getEnergyCapacity() - turtle.getEnergyLevel());
@@ -43,7 +50,10 @@ public class TurtleEnergyStorage implements IEnergyStorage {
 
     @Override
     public int extractEnergy(int toExtract, boolean simulate) {
-        return 0;
+        var extracted = Math.min(Math.min(toExtract, dischargeRate()), turtle.getEnergyLevel());
+        if (extracted <= 0) return 0;
+        if (!simulate) turtle.consumeEnergy(extracted);
+        return extracted;
     }
 
     @Override
@@ -58,7 +68,7 @@ public class TurtleEnergyStorage implements IEnergyStorage {
 
     @Override
     public boolean canExtract() {
-        return false;
+        return dischargeRate() > 0;
     }
 
     @Override
