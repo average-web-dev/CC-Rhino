@@ -24,6 +24,11 @@ Users write JavaScript (ES6 subset) instead of Lua inside the mod.
 - `ILuaMachine` / `MachineEnvironment` interface surface stays unchanged
 - All Java API implementations (turtle, fs, peripheral, …) kept as-is
 
+**Rhino authoring constraints (for all ROM/bios TS):** this Rhino build mis-scopes block declarations and lacks some ES syntax, so:
+
+- Use **`let`, never `const`, for anything declared inside a loop or `if`/`else` block** — Rhino hoists block `const` to function scope, so a loop redeclares it (`redeclaration of const`) and you cannot shadow it. `const` is only safe at module top level. (`bash.ts` already follows this.)
+- **No spread in calls or array literals** (`f(...xs)`, `[...xs]`) — use `.concat()` / `.apply()` instead.
+
 **Event loop model (how `events.on` survives a blocking `turtle.dig()`):**
 
 ```text
@@ -443,7 +448,12 @@ Implement in strict dependency order. Each item is a separate file commit.
 - [ ] **11.25** File management: `ls.ts`, `cp.ts`, `mv.ts`, `rm.ts`, `mkdir.ts`, `type.ts`, `drive.ts`
 - [ ] **11.26** Info/control: `id.ts`, `label.ts`, `reboot.ts`, `shutdown.ts`, `clear.ts`, `time.ts`, `about.ts`
 - [ ] **11.27** `help.ts` (program) — page help topics from `/rom/help/`; `programs.ts` — list available commands
-- [ ] **11.28** `edit.ts` — full-screen text editor: cursor movement, copy/paste, syntax highlighting for `.ts`/`.js`, tab-completion for `require` names
+- [x] **11.28** `edit.ts` — full-screen text editor (MVP): load/create, cursor + scroll, insert/Enter/Backspace/Delete, paste, term_resize, Ctrl menu (Save/Exit). Established the **interactive-program model**: `main()` blocks on a `system.yield()` spin while its own `events.on('char'/'key'/'paste')` callbacks edit; `bash` suspends its own input listeners while a program runs. Follow-ups:
+  - [ ] **11.28a** Syntax highlighting for `.ts`/`.js` — `term.blit` per line + a tokenizer in a shared `rom/lib/cc/syntax.ts` (keyword/string/template/number/comment/identifier → colour). Must thread a multiline carry state (block comments, template literals) from the top of the viewport down. Reused by `js.ts` (11.29).
+  - [ ] **11.28b** Tab completion — `require('…')` module names (native + `require.paths`) and identifiers/keywords; reuse bash's `commonPrefix` + the `cc/shell/completion` factories (11.15).
+  - [ ] **11.28c** Copy / cut / paste **selection** (shift+arrows), plus `Run`/`Print` menu items and an unsaved-changes prompt on Exit.
+  - [ ] **11.28d** Mouse support (`mouse_click` to position caret, `mouse_scroll` to scroll).
+  - [ ] **11.28e** Depends on Tier-0 `keys.ts` (11.4) + `colors.ts` (11.3) — replace the inlined key codes / colour numbers once those land.
 - [ ] **11.29** `js.ts` — interactive JS REPL using `Function()`; print return values via `cc/pretty`; history, tab-completion
 - [ ] **11.30** `monitor.ts` — run a program redirecting its terminal output to an attached monitor peripheral
 - [ ] **11.31** Network programs: `wget.ts`, `pastebin.ts` (upload/download)

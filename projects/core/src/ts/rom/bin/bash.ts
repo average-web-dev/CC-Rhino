@@ -361,7 +361,15 @@ function start(): void {
         }
 
         // ── External program ─────────────────────────────────────────────────
+        // Suspend our own input listeners while the program runs, so an interactive
+        // program (e.g. edit) owns char/key input exclusively and we don't both react
+        // to the same keypress. Synchronous programs return at once; interactive ones
+        // block in their main() until they exit, only then handing input back to us.
+        events.off('char', onChar);
+        events.off('key',  onKey);
         const found = (run as (...a: string[]) => boolean).apply(null, [cmd].concat(args));
+        events.on('char', onChar);
+        events.on('key',  onKey);
         if (!found && !(cmd as string).includes('/')) {
             // Only print "not found" for bare command names, not for explicit paths.
             print(`bash: ${cmd}: command not found`);
