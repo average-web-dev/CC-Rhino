@@ -20,6 +20,8 @@ import dan200.computercraft.shared.config.ConfigFile;
 import dan200.computercraft.shared.network.container.ContainerData;
 import dan200.computercraft.shared.util.InventoryUtil;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
+import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
+import team.reborn.energy.api.EnergyStorage;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.event.player.UseEntityCallback;
 import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;
@@ -187,8 +189,27 @@ public class PlatformHelperImpl implements PlatformHelper {
 
     @Override
     public @Nullable EnergyHandle getEnergyStorage(Level level, BlockPos pos, Direction side) {
-        // Fabric has no Forge Energy; turtle energy transfer is a no-op here until a Fabric energy API is wired in.
-        return null;
+        var storage = EnergyStorage.SIDED.find(level, pos, side);
+        if (storage == null) return null;
+        return new EnergyHandle() {
+            @Override
+            public int receiveEnergy(int amount, boolean simulate) {
+                try (var tx = Transaction.openOuter()) {
+                    var inserted = storage.insert(amount, tx);
+                    if (!simulate) tx.commit();
+                    return (int) inserted;
+                }
+            }
+
+            @Override
+            public int extractEnergy(int amount, boolean simulate) {
+                try (var tx = Transaction.openOuter()) {
+                    var extracted = storage.extract(amount, tx);
+                    if (!simulate) tx.commit();
+                    return (int) extracted;
+                }
+            }
+        };
     }
 
     @Override

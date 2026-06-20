@@ -99,6 +99,14 @@ dependencies {
     "includeImplementation"(libs.nightConfig.core)
     "includeImplementation"(libs.nightConfig.toml)
 
+    // Tech Reborn's "Energy" API — Fabric's de-facto Forge Energy equivalent. Bundled (jar-in-jar) so turtles
+    // can be charged/discharged without the player installing it separately.
+    modImplementation(libs.teamRebornEnergy) {
+        exclude("net.fabricmc", "fabric-loader")
+        exclude("net.fabricmc.fabric-api")
+    }
+    include(libs.teamRebornEnergy)
+
     // Pull in our other projects. See comments in MinecraftConfigurations on this nastiness.
     "localImplementation"(project(":core"))
     "localImplementation"(commonClasses(project(":fabric-api")))

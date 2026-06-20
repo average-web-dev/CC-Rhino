@@ -9,6 +9,7 @@
 # Remember to update corresponding versions in fabric.mod.json/neoforge.mods.toml
 fabric-api = "0.116.12+1.21.1"
 fabric-loader = "0.18.4"
+teamRebornEnergy = "4.1.0"
 neoForge = "21.1.9"
 neoMergeTool = "2.0.0"
 mixin = "0.8.5"
@@ -108,6 +109,7 @@ emi = { module = "dev.emi:emi-xplat-mojmap", version.ref = "emi" }
 fabric-api = { module = "net.fabricmc.fabric-api:fabric-api", version.ref = "fabric-api" }
 fabric-junit = { module = "net.fabricmc:fabric-loader-junit", version.ref = "fabric-loader" }
 fabric-loader = { module = "net.fabricmc:fabric-loader", version.ref = "fabric-loader" }
+teamRebornEnergy = { module = "teamreborn:energy", version.ref = "teamRebornEnergy" }
 fabricPermissions = { module = "me.lucko:fabric-permissions-api", version.ref = "fabricPermissions" }
 iris-fabric = { module = "maven.modrinth:iris", version.ref = "iris-fabric" }
 iris-forge = { module = "maven.modrinth:iris", version.ref = "iris-forge" }
