@@ -11,9 +11,10 @@ import net.neoforged.neoforge.energy.IEnergyStorage;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Exposes a turtle's energy buffer as a Forge Energy {@link IEnergyStorage} on one face, so it can be charged
- * or discharged by cables and machines. Charge/discharge are gated by the turtle-relative per-side rates the
- * script configures ({@code turtle.setChargeRate}/{@code setDischargeRate}); {@code 0} disables a direction.
+ * Exposes a turtle's energy buffer as a Forge Energy {@link IEnergyStorage} on one face, so machines/cables can
+ * charge it. Charging is gated by the turtle-relative per-side charge rate the script configures
+ * ({@code turtle.setChargeRate}; {@code 0} disables that face). This is a sink only — discharging is performed
+ * actively by the turtle each tick (see {@code TurtleBrain.pushEnergy}), since FE machines push rather than pull.
  */
 public class TurtleEnergyStorage implements IEnergyStorage {
     private final TurtleAccessInternal turtle;
@@ -31,12 +32,6 @@ public class TurtleEnergyStorage implements IEnergyStorage {
         return turtle.getChargeRate(DirectionUtil.toLocal(turtle.getDirection(), side));
     }
 
-    /** FE/t this face emits. A {@code null} (unsided) query, or a turtle without fuel, emits none. */
-    private int dischargeRate() {
-        if (!turtle.isEnergyNeeded() || side == null) return 0;
-        return turtle.getDischargeRate(DirectionUtil.toLocal(turtle.getDirection(), side));
-    }
-
     @Override
     public int receiveEnergy(int toReceive, boolean simulate) {
         var accepted = Math.min(Math.min(toReceive, chargeRate()), turtle.getEnergyCapacity() - turtle.getEnergyLevel());
@@ -47,10 +42,7 @@ public class TurtleEnergyStorage implements IEnergyStorage {
 
     @Override
     public int extractEnergy(int toExtract, boolean simulate) {
-        var extracted = Math.min(Math.min(toExtract, dischargeRate()), turtle.getEnergyLevel());
-        if (extracted <= 0) return 0;
-        if (!simulate) turtle.consumeEnergy(extracted);
-        return extracted;
+        return 0;
     }
 
     @Override
@@ -65,7 +57,7 @@ public class TurtleEnergyStorage implements IEnergyStorage {
 
     @Override
     public boolean canExtract() {
-        return dischargeRate() > 0;
+        return false;
     }
 
     @Override

@@ -23,7 +23,9 @@ import dan200.computercraft.shared.config.Config;
 import dan200.computercraft.shared.container.InventoryDelegate;
 import dan200.computercraft.shared.turtle.TurtleOverlay;
 import dan200.computercraft.shared.turtle.blocks.TurtleBlockEntity;
+import dan200.computercraft.shared.platform.PlatformHelper;
 import dan200.computercraft.shared.util.BlockEntityHelpers;
+import dan200.computercraft.shared.util.DirectionUtil;
 import dan200.computercraft.shared.util.Holiday;
 import dan200.computercraft.shared.util.NBTUtil;
 import net.minecraft.core.BlockPos;
@@ -119,6 +121,9 @@ public class TurtleBrain implements TurtleAccessInternal {
             // The block may have been broken while the command was executing (for instance, if a block explodes
             // when being mined). If so, abort.
             if (owner.isRemoved()) return;
+
+            // Actively push energy out of any side with a discharge rate (FE doesn't flow on its own).
+            pushEnergy(world);
         }
 
         // Advance animation
@@ -424,6 +429,22 @@ public class TurtleBrain implements TurtleAccessInternal {
     public void setDischargeRate(ComputerSide side, int rate) {
         dischargeRate[side.ordinal()] = Math.max(0, rate);
         owner.onTileEntityChange();
+    }
+
+    /** Push energy out of every side with a discharge rate into the neighbouring block, up to that side's FE/t. */
+    private void pushEnergy(Level world) {
+        if (!isEnergyNeeded()) return;
+        var facing = getDirection();
+        var pos = getPosition();
+        for (var side : ComputerSide.values()) {
+            var available = Math.min(dischargeRate[side.ordinal()], getEnergyLevel());
+            if (available <= 0) continue;
+            var dir = DirectionUtil.toWorld(facing, side);
+            var handle = PlatformHelper.get().getEnergyStorage(world, pos.relative(dir), dir.getOpposite());
+            if (handle == null) continue;
+            var moved = handle.receiveEnergy(available, false);
+            if (moved > 0) consumeEnergy(moved);
+        }
     }
 
     private static int[] newRates(int value) {
