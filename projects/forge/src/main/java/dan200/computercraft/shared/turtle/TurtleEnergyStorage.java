@@ -4,6 +4,7 @@
 
 package dan200.computercraft.shared.turtle;
 
+import dan200.computercraft.shared.config.Config;
 import dan200.computercraft.shared.turtle.core.TurtleAccessInternal;
 import dan200.computercraft.shared.util.DirectionUtil;
 import net.minecraft.core.Direction;
@@ -28,8 +29,8 @@ public class TurtleEnergyStorage implements IEnergyStorage {
     /** FE/t this face accepts. A {@code null} (unsided) query allows charging; a turtle without fuel accepts none. */
     private int chargeRate() {
         if (!turtle.isEnergyNeeded()) return 0;
-        if (side == null) return Integer.MAX_VALUE;
-        return turtle.getChargeRate(DirectionUtil.toLocal(turtle.getDirection(), side));
+        var requested = side == null ? Integer.MAX_VALUE : turtle.getChargeRate(DirectionUtil.toLocal(turtle.getDirection(), side));
+        return Math.min(requested, Config.turtleMaxChargeRate);
     }
 
     @Override

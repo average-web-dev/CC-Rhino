@@ -34,6 +34,10 @@ public final class Config {
     // 600 FE/move buys 80 moves.
     public static int turtleEnergyPerMovement = 600;
     public static int turtleFuelToEnergyFactor = 30;
+    // Server caps (FE/t) on a turtle's passive charge and discharge, regardless of the per-side rate a script
+    // requests. Default unlimited; lower to throttle how fast turtles draw from / feed energy networks.
+    public static int turtleMaxChargeRate = Integer.MAX_VALUE;
+    public static int turtleMaxDischargeRate = Integer.MAX_VALUE;
     public static boolean turtlesCanPush = true;
 
     public static final int DEFAULT_COMPUTER_TERM_WIDTH = 51;

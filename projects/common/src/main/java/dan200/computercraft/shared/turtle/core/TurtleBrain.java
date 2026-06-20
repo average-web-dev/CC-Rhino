@@ -437,7 +437,8 @@ public class TurtleBrain implements TurtleAccessInternal {
         var facing = getDirection();
         var pos = getPosition();
         for (var side : ComputerSide.values()) {
-            var available = Math.min(dischargeRate[side.ordinal()], getEnergyLevel());
+            var rate = Math.min(dischargeRate[side.ordinal()], Config.turtleMaxDischargeRate);
+            var available = Math.min(rate, getEnergyLevel());
             if (available <= 0) continue;
             var dir = DirectionUtil.toWorld(facing, side);
             var handle = PlatformHelper.get().getEnergyStorage(world, pos.relative(dir), dir.getOpposite());

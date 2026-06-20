@@ -68,6 +68,8 @@ public final class ConfigSpec {
     public static final ConfigFile.Value<Integer> advancedTurtleEnergieLimit;
     public static final ConfigFile.Value<Integer> turtleEnergyPerMovement;
     public static final ConfigFile.Value<Integer> turtleFuelToEnergyFactor;
+    public static final ConfigFile.Value<Integer> turtleMaxChargeRate;
+    public static final ConfigFile.Value<Integer> turtleMaxDischargeRate;
     public static final ConfigFile.Value<Boolean> turtlesCanPush;
 
     public static final ConfigFile.Value<Integer> computerTermWidth;
@@ -340,6 +342,14 @@ public final class ConfigSpec {
                     (FE = burnTime * factor). Independent of the per-movement cost.""")
                 .defineInRange("fuel_to_energy_factor", Config.turtleFuelToEnergyFactor, 0, Integer.MAX_VALUE);
 
+            turtleMaxChargeRate = builder
+                .comment("The maximum Forge Energy (FE/t) a turtle may passively accept, capping any per-side charge rate.")
+                .defineInRange("max_charge_rate", Config.turtleMaxChargeRate, 0, Integer.MAX_VALUE);
+
+            turtleMaxDischargeRate = builder
+                .comment("The maximum Forge Energy (FE/t) a turtle may passively emit, capping any per-side discharge rate.")
+                .defineInRange("max_discharge_rate", Config.turtleMaxDischargeRate, 0, Integer.MAX_VALUE);
+
             turtlesCanPush = builder
                 .comment("""
                     If set to true, Turtles will push entities out of the way instead of stopping if
@@ -447,6 +457,8 @@ public final class ConfigSpec {
         Config.advancedTurtleEnergieLimit = advancedTurtleEnergieLimit.get();
         Config.turtleEnergyPerMovement = turtleEnergyPerMovement.get();
         Config.turtleFuelToEnergyFactor = turtleFuelToEnergyFactor.get();
+        Config.turtleMaxChargeRate = turtleMaxChargeRate.get();
+        Config.turtleMaxDischargeRate = turtleMaxDischargeRate.get();
         Config.turtlesCanPush = turtlesCanPush.get();
 
         // Terminal size
