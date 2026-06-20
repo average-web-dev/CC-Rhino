@@ -76,7 +76,8 @@ public class FSAPI implements IComputerAPI {
      * @param path     The file path.
      * @param encoding {@code "binary"} / {@code "latin1"} / {@code "ascii"} for raw bytes;
      *                 omit or {@code "utf8"} / {@code "utf-8"} for a text string.
-     * @return File contents as a {@code string} (text) or {@code Buffer} (binary).
+     * @return File contents as a {@code string} (binary data is returned as a byte-per-char string).
+     * @cc-r.return string
      * @throws ScriptException If the file cannot be read.
      */
     @ScriptFunction
@@ -526,6 +527,7 @@ public class FSAPI implements IComputerAPI {
      *
      * @param path The path to query.
      * @return Free bytes, or {@code "unlimited"}.
+     * @cc-r.return number | "unlimited"
      * @throws ScriptException If the path does not exist.
      */
     @ScriptFunction

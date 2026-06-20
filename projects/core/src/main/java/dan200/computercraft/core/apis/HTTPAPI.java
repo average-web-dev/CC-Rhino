@@ -69,7 +69,7 @@ public class HTTPAPI implements IComputerAPI {
     }
 
     @ScriptFunction
-    public final Object request(IArguments args) throws ScriptException {
+    public final Result request(IArguments args) throws ScriptException {
         String address, requestMethod;
         ByteBuffer postBody;
         Map<?, ?> headerTable;
@@ -118,28 +118,28 @@ public class HTTPAPI implements IComputerAPI {
                 throw new ScriptException("Too many ongoing HTTP requests");
             }
 
-            return true;
+            return Result.succeed();
         } catch (HTTPRequestException e) {
-            return new Object[]{ false, e.getMessage() };
+            return Result.fail(e.getMessage());
         }
     }
 
     @ScriptFunction
-    public final Object checkURL(String address) throws ScriptException {
+    public final Result checkURL(String address) throws ScriptException {
         try {
             var uri = HttpRequest.checkUri(address);
             if (!new CheckUrl(checkUrls, apiEnvironment, address, uri).queue(CheckUrl::run)) {
                 throw new ScriptException("Too many ongoing checkUrl calls");
             }
 
-            return true;
+            return Result.succeed();
         } catch (HTTPRequestException e) {
-            return new Object[]{ false, e.getMessage() };
+            return Result.fail(e.getMessage());
         }
     }
 
     @ScriptFunction
-    public final Object websocket(IArguments args) throws ScriptException {
+    public final Result websocket(IArguments args) throws ScriptException {
         if (!CoreConfig.httpWebsocketEnabled) {
             throw new ScriptException("Websocket connections are disabled");
         }
@@ -168,9 +168,9 @@ public class HTTPAPI implements IComputerAPI {
                 throw new ScriptException("Too many websockets already open");
             }
 
-            return true;
+            return Result.succeed();
         } catch (HTTPRequestException e) {
-            return new Object[]{ false, e.getMessage() };
+            return Result.fail(e.getMessage());
         }
     }
 

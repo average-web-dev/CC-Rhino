@@ -62,6 +62,7 @@ public class WebsocketHandle {
      * @cc.changed 1.80pr1.13 Added return value indicating whether the message was binary.
      * @cc.changed 1.87.0 Added timeout argument.
      * @cc.changed 1.117.0 Added return value indicating why receiving the message failed.
+     * @cc-r.return [message: string, binary: boolean] | [closed: null, reason: string]
      */
     @ScriptFunction
     public final MethodResult receive(Optional<Double> timeout) throws ScriptException {

@@ -21,7 +21,7 @@ public record Result(boolean ok, @Nullable String reason) {
     }
 
     /** A failed result, explaining why. */
-    public static Result fail(String reason) {
+    public static Result fail(@Nullable String reason) {
         return new Result(false, reason);
     }
 }
