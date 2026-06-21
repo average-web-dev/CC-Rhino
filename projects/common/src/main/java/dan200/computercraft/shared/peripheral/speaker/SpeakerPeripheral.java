@@ -305,6 +305,7 @@ public abstract class SpeakerPeripheral implements IPeripheral {
      * @cc.tparam {number...} audio A list of amplitudes.
      * @cc.tparam [opt] number volume The volume to play this audio at. If not given, defaults to the previous volume
      * given to {@link #playAudio}.
+     * @cc-r.param audio {@code number[]}
      * @cc.since 1.100
      * @cc.usage Read an audio file, decode it using [`cc.audio.dfpwm`], and play it using the speaker.
      *

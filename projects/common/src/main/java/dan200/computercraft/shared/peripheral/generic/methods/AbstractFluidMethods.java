@@ -44,6 +44,7 @@ public abstract class AbstractFluidMethods<T> implements GenericPeripheral {
      * @param fluids The current fluid storage.
      * @return All tanks.
      * @cc.treturn { (table|nil)... } Basic information about all fluids in this fluid storage.
+     * @cc-r.hide fluids
      */
     @ScriptFunction(mainThread = true)
     public abstract Map<Integer, Map<String, ?>> tanks(T fluids);
@@ -63,6 +64,7 @@ public abstract class AbstractFluidMethods<T> implements GenericPeripheral {
      * @return The amount of moved fluid.
      * @throws ScriptException If the peripheral to transfer to doesn't exist or isn't an fluid container.
      * @cc.see peripheral.getName Allows you to get the name of a [wrapped][`peripheral.wrap`] peripheral.
+     * @cc-r.hide from
      */
     @ScriptFunction(mainThread = true)
     public abstract int pushFluid(
@@ -84,6 +86,7 @@ public abstract class AbstractFluidMethods<T> implements GenericPeripheral {
      * @return The amount of moved fluid.
      * @throws ScriptException If the peripheral to transfer to doesn't exist or isn't an fluid container.
      * @cc.see peripheral.getName Allows you to get the name of a [wrapped][`peripheral.wrap`] peripheral.
+     * @cc-r.hide to
      */
     @ScriptFunction(mainThread = true)
     public abstract int pullFluid(

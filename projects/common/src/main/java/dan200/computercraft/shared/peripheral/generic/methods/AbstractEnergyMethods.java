@@ -38,6 +38,7 @@ public abstract class AbstractEnergyMethods<T> implements GenericPeripheral {
      *
      * @param energy The current energy storage.
      * @return The energy stored in this block, in FE.
+     * @cc-r.hide energy
      */
     @ScriptFunction(mainThread = true)
     public abstract int getEnergy(T energy);
@@ -47,6 +48,7 @@ public abstract class AbstractEnergyMethods<T> implements GenericPeripheral {
      *
      * @param energy The current energy storage.
      * @return The energy capacity of this block.
+     * @cc-r.hide energy
      */
     @ScriptFunction(mainThread = true)
     public abstract int getEnergyCapacity(T energy);

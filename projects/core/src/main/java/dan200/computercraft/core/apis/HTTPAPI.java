@@ -68,6 +68,14 @@ public class HTTPAPI implements IComputerAPI {
         Resource.cleanup();
     }
 
+    /**
+     * Make an HTTP request to a website, returning once it has been queued.
+     *
+     * @param args The request URL (or an options table), and optionally a body, headers, and binary flag.
+     * @return Whether the request was successfully queued.
+     * @throws ScriptException If the request is malformed.
+     * @cc-r.params {@code url: string | { url: string; body?: string; headers?: Record<string, string>; binary?: boolean; method?: string; redirect?: boolean; timeout?: number }, body?: string | number[], headers?: Record<string, string>, binary?: boolean}
+     */
     @ScriptFunction
     public final Result request(IArguments args) throws ScriptException {
         String address, requestMethod;
@@ -138,6 +146,14 @@ public class HTTPAPI implements IComputerAPI {
         }
     }
 
+    /**
+     * Open a WebSocket connection to a given URL, returning once it has been queued.
+     *
+     * @param args The WebSocket URL (or an options table), and optionally headers.
+     * @return Whether the connection was successfully queued.
+     * @throws ScriptException If WebSocket connections are disabled or the URL is malformed.
+     * @cc-r.params {@code url: string | { url: string; headers?: Record<string, string>; timeout?: number }, headers?: Record<string, string>}
+     */
     @ScriptFunction
     public final Result websocket(IArguments args) throws ScriptException {
         if (!CoreConfig.httpWebsocketEnabled) {

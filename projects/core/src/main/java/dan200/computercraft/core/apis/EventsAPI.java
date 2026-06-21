@@ -70,11 +70,24 @@ public final class EventsAPI implements IComputerAPI {
         return emitter.listenerCount(event);
     }
 
+    /**
+     * Schedule a callback to run after the current operation completes, before the next event is handled.
+     *
+     * @param callback The function to run.
+     * @cc-r.param callback {@code () => void}
+     */
     @ScriptFunction
     public void queueMicrotask(Object callback) {
         if (callback instanceof Callable fn) eventLoop.scheduleMicrotask(fn);
     }
 
+    /**
+     * Schedule a callback to run on the next tick of the event loop.
+     *
+     * @param callback The function to run.
+     * @return A handle which may be passed to {@link #clearImmediate} to cancel it.
+     * @cc-r.param callback {@code () => void}
+     */
     @ScriptFunction
     public int setImmediate(Object callback) {
         return callback instanceof Callable fn ? eventLoop.scheduleImmediate(fn) : -1;

@@ -305,6 +305,7 @@ public abstract class TermMethods {
      * @cc.see colors.unpackRGB To convert from the 24-bit format to three separate channels.
      * @cc.see colors.packRGB To convert from three separate channels to the 24-bit format.
      * @cc.since 1.80pr1
+     * @cc-r.params {@code colour: number, hexOrR: number, g?: number, b?: number}
      */
     @ScriptFunction({ "setPaletteColour", "setPaletteColor" })
     public final void setPaletteColour(IArguments args) throws ScriptException {

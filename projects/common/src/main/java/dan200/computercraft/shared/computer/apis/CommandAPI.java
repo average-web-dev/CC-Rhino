@@ -146,6 +146,7 @@ public class CommandAPI implements IComputerAPI {
      * @return A list of all available commands
      * @throws ScriptException (hidden) On non-string arguments.
      * @cc.tparam string ... The sub-command to complete.
+     * @cc-r.params {@code ...path: string[]}
      */
     @ScriptFunction(mainThread = true)
     public final List<String> list(IArguments args) throws ScriptException {

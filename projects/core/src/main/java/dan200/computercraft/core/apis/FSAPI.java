@@ -97,6 +97,7 @@ public class FSAPI implements IComputerAPI {
      *
      * @param args {@code (path, callback)} or {@code (path, encoding, callback)}.
      * @throws ScriptException On argument errors.
+     * @cc-r.params {@code path: string, encodingOrCallback: string | ((err: string | null, data: string | number[]) => void), callback?: (err: string | null, data: string | number[]) => void}
      */
     @ScriptFunction
     public final void readFile(IArguments args) throws ScriptException {
@@ -127,6 +128,7 @@ public class FSAPI implements IComputerAPI {
      *
      * @param args {@code (path, data)} or {@code (path, data, encoding)}.
      * @throws ScriptException If the file cannot be written.
+     * @cc-r.params {@code path: string, data: string | number[], encoding?: string}
      */
     @ScriptFunction
     public final void writeFileSync(IArguments args) throws ScriptException {
@@ -145,6 +147,7 @@ public class FSAPI implements IComputerAPI {
      *
      * @param args {@code (path, data, callback)} or {@code (path, data, encoding, callback)}.
      * @throws ScriptException On argument errors.
+     * @cc-r.params {@code path: string, data: string | number[], encodingOrCallback: string | ((err: string | null) => void), callback?: (err: string | null) => void}
      */
     @ScriptFunction
     public final void writeFile(IArguments args) throws ScriptException {
@@ -175,6 +178,7 @@ public class FSAPI implements IComputerAPI {
      *
      * @param args {@code (path, data)} or {@code (path, data, encoding)}.
      * @throws ScriptException If the file cannot be written.
+     * @cc-r.params {@code path: string, data: string | number[], encoding?: string}
      */
     @ScriptFunction
     public final void appendFileSync(IArguments args) throws ScriptException {
@@ -193,6 +197,7 @@ public class FSAPI implements IComputerAPI {
      *
      * @param args {@code (path, data, callback)} or {@code (path, data, encoding, callback)}.
      * @throws ScriptException On argument errors.
+     * @cc-r.params {@code path: string, data: string | number[], encodingOrCallback: string | ((err: string | null) => void), callback?: (err: string | null) => void}
      */
     @ScriptFunction
     public final void appendFile(IArguments args) throws ScriptException {
@@ -240,6 +245,7 @@ public class FSAPI implements IComputerAPI {
      * @param path     The directory path.
      * @param callback Called with {@code (err, string[])} .
      * @throws ScriptException On argument errors.
+     * @cc-r.param callback {@code (err: string | null, entries: string[]) => void}
      */
     @ScriptFunction
     public final void readdir(String path, Object callback) throws ScriptException {
@@ -272,6 +278,7 @@ public class FSAPI implements IComputerAPI {
      *
      * @param args {@code (path, callback)} or {@code (path, options, callback)}.
      * @throws ScriptException On argument errors.
+     * @cc-r.params {@code path: string, optionsOrCallback: Record<string, unknown> | ((err: string | null) => void), callback?: (err: string | null) => void}
      */
     @ScriptFunction
     public final void mkdir(IArguments args) throws ScriptException {
@@ -310,6 +317,7 @@ public class FSAPI implements IComputerAPI {
      *
      * @param args {@code (path, callback)} or {@code (path, options, callback)}.
      * @throws ScriptException On argument errors.
+     * @cc-r.params {@code path: string, optionsOrCallback: { force?: boolean } | ((err: string | null) => void), callback?: (err: string | null) => void}
      */
     @ScriptFunction
     public final void rm(IArguments args) throws ScriptException {
@@ -358,6 +366,7 @@ public class FSAPI implements IComputerAPI {
      * @param dest     Destination path.
      * @param callback Called with {@code (err)}.
      * @throws ScriptException On argument errors.
+     * @cc-r.param callback {@code (err: string | null) => void}
      */
     @ScriptFunction
     public final void rename(String src, String dest, Object callback) throws ScriptException {
@@ -392,6 +401,7 @@ public class FSAPI implements IComputerAPI {
      *
      * @param args {@code (src, dest, callback)} or {@code (src, dest, options, callback)}.
      * @throws ScriptException On argument errors.
+     * @cc-r.params {@code src: string, dest: string, optionsOrCallback: Record<string, unknown> | ((err: string | null) => void), callback?: (err: string | null) => void}
      */
     @ScriptFunction
     public final void cp(IArguments args) throws ScriptException {
@@ -426,6 +436,7 @@ public class FSAPI implements IComputerAPI {
      * @param dest     Destination path.
      * @param callback Called with {@code (err)}.
      * @throws ScriptException On argument errors.
+     * @cc-r.param callback {@code (err: string | null) => void}
      */
     @ScriptFunction
     public final void copyFile(String src, String dest, Object callback) throws ScriptException {
@@ -547,6 +558,7 @@ public class FSAPI implements IComputerAPI {
      * @param path The path to query.
      * @return Capacity in bytes, or {@code null}.
      * @throws ScriptException If the path cannot be resolved.
+     * @cc-r.return {@code number | null}
      */
     @Nullable
     @ScriptFunction

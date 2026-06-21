@@ -63,6 +63,8 @@ public class ReadWriteHandle extends AbstractHandle {
 
     /**
      * {@inheritDoc}
+     *
+     * @cc-r.params {@code text: string | number}
      */
     @Override
     @ScriptFunction
