@@ -467,8 +467,8 @@ public class TurtleBrain implements TurtleAccessInternal {
         if (getLevel().isClientSide) throw new UnsupportedOperationException("Cannot run commands on the client");
 
         var computer = owner.getServerComputer();
-        if (computer == null) return MethodResult.of(new Object[]{ false, "Turtle is not running" });
-        if (commandQueue.size() > 16) return MethodResult.of(new Object[]{ false, "Too many ongoing turtle commands" });
+        if (computer == null) return MethodResult.of(Result.fail("Turtle is not running"));
+        if (commandQueue.size() > 16) return MethodResult.of(Result.fail("Too many ongoing turtle commands"));
 
         // Queue the command and await its completion through the standard task_complete continuation: the
         // turtle's update tick runs the command and fires task_complete for this id (see dispatchCommand).
@@ -683,8 +683,7 @@ public class TurtleBrain implements TurtleAccessInternal {
         var end = System.nanoTime();
 
         // Resume the awaiting continuation through the standard task_complete event. The command always
-        // *completes* (task ok = true); the action's own success/failure is encoded in the returned value
-        // (the `[ok, …results]` array), matching the previous turtle_response payload exactly.
+        // *completes* (task ok = true); the action's own success/failure is encoded in the returned Result.
         if (computer == null) return;
         computer.getMainThreadMonitor().trackWork(end - start, TimeUnit.NANOSECONDS);
 

@@ -34,9 +34,11 @@ public class CraftingTablePeripheral implements IPeripheral {
     }
 
     /**
-     * @param count
-     * @cc-r.return {@code [success: true] | [success: false, msg: string]}
-     * @throws ScriptException
+     * Craft items using the recipe in the turtle's inventory.
+     *
+     * @param count The maximum number of crafts to perform.
+     * @cc-r.return Result
+     * @throws ScriptException If the count is out of range.
      */
     @ScriptFunction
     public final MethodResult craft(Optional<Integer> count) throws ScriptException {

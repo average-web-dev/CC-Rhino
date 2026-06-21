@@ -121,6 +121,7 @@ public class TurtleAPI implements IComputerAPI {
      * Move the turtle forward one block.
      *
      * @return The turtle command result.
+     * @cc-r.return Result
      * @cc.treturn boolean Whether the turtle could successfully move.
      * @cc.treturn string|nil The reason the turtle could not move.
      */
@@ -133,6 +134,7 @@ public class TurtleAPI implements IComputerAPI {
      * Move the turtle backwards one block.
      *
      * @return The turtle command result.
+     * @cc-r.return Result
      * @cc.treturn boolean Whether the turtle could successfully move.
      * @cc.treturn string|nil The reason the turtle could not move.
      */
@@ -145,6 +147,7 @@ public class TurtleAPI implements IComputerAPI {
      * Move the turtle up one block.
      *
      * @return The turtle command result.
+     * @cc-r.return Result
      * @cc.treturn boolean Whether the turtle could successfully move.
      * @cc.treturn string|nil The reason the turtle could not move.
      */
@@ -157,6 +160,7 @@ public class TurtleAPI implements IComputerAPI {
      * Move the turtle down one block.
      *
      * @return The turtle command result.
+     * @cc-r.return Result
      * @cc.treturn boolean Whether the turtle could successfully move.
      * @cc.treturn string|nil The reason the turtle could not move.
      */
@@ -169,6 +173,7 @@ public class TurtleAPI implements IComputerAPI {
      * Rotate the turtle 90 degrees to the left.
      *
      * @return The turtle command result.
+     * @cc-r.return Result
      * @cc.treturn boolean Whether the turtle could successfully turn.
      * @cc.treturn string|nil The reason the turtle could not turn.
      */
@@ -181,6 +186,7 @@ public class TurtleAPI implements IComputerAPI {
      * Rotate the turtle 90 degrees to the right.
      *
      * @return The turtle command result.
+     * @cc-r.return Result
      * @cc.treturn boolean Whether the turtle could successfully turn.
      * @cc.treturn string|nil The reason the turtle could not turn.
      */
@@ -198,6 +204,7 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @param side The specific tool to use. Should be "left" or "right".
      * @return The turtle command result.
+     * @cc-r.return Result
      * @cc.treturn boolean Whether a block was broken.
      * @cc.treturn string|nil The reason no block was broken.
      * @cc.changed 1.6 Added optional side argument.
@@ -213,6 +220,7 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @param side The specific tool to use.
      * @return The turtle command result.
+     * @cc-r.return Result
      * @cc.treturn boolean Whether a block was broken.
      * @cc.treturn string|nil The reason no block was broken.
      * @cc.changed 1.6 Added optional side argument.
@@ -228,6 +236,7 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @param side The specific tool to use.
      * @return The turtle command result.
+     * @cc-r.return Result
      * @cc.treturn boolean Whether a block was broken.
      * @cc.treturn string|nil The reason no block was broken.
      * @cc.changed 1.6 Added optional side argument.
@@ -247,6 +256,7 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @param args Arguments to place.
      * @return The turtle command result.
+     * @cc-r.return Result
      * @cc.tparam [opt] string text When placing a sign, set its contents to this text.
      * @cc.treturn boolean Whether the block could be placed.
      * @cc.treturn string|nil The reason the block was not placed.
@@ -262,6 +272,7 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @param args Arguments to place.
      * @return The turtle command result.
+     * @cc-r.return Result
      * @cc.tparam [opt] string text When placing a sign, set its contents to this text.
      * @cc.treturn boolean Whether the block could be placed.
      * @cc.treturn string|nil The reason the block was not placed.
@@ -278,6 +289,7 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @param args Arguments to place.
      * @return The turtle command result.
+     * @cc-r.return Result
      * @cc.tparam [opt] string text When placing a sign, set its contents to this text.
      * @cc.treturn boolean Whether the block could be placed.
      * @cc.treturn string|nil The reason the block was not placed.
@@ -295,6 +307,7 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @param count The number of items to drop. If not given, the entire stack will be dropped.
      * @return The turtle command result.
+     * @cc-r.return Result
      * @throws ScriptException If dropping an invalid number of items.
      * @cc.treturn boolean Whether items were dropped.
      * @cc.treturn string|nil The reason the no items were dropped.
@@ -312,6 +325,7 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @param count The number of items to drop. If not given, the entire stack will be dropped.
      * @return The turtle command result.
+     * @cc-r.return Result
      * @throws ScriptException If dropping an invalid number of items.
      * @cc.treturn boolean Whether items were dropped.
      * @cc.treturn string|nil The reason the no items were dropped.
@@ -329,6 +343,7 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @param count The number of items to drop. If not given, the entire stack will be dropped.
      * @return The turtle command result.
+     * @cc-r.return Result
      * @throws ScriptException If dropping an invalid number of items.
      * @cc.treturn boolean Whether items were dropped.
      * @cc.treturn string|nil The reason the no items were dropped.
@@ -353,9 +368,9 @@ public class TurtleAPI implements IComputerAPI {
      */
 
     @ScriptFunction(mainThread = true)
-    public final Object[] select(int slot) throws ScriptException {
+    public final boolean select(int slot) throws ScriptException {
         turtle.setSelectedSlot(checkSlot(slot));
-        return new Object[]{ true };
+        return true;
     }
 
     /**
@@ -468,6 +483,7 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @param side The specific tool to use.
      * @return The turtle command result.
+     * @cc-r.return Result
      * @cc.treturn boolean Whether an entity was attacked.
      * @cc.treturn string|nil The reason nothing was attacked.
      * @cc.since 1.4
@@ -483,6 +499,7 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @param side The specific tool to use.
      * @return The turtle command result.
+     * @cc-r.return Result
      * @cc.treturn boolean Whether an entity was attacked.
      * @cc.treturn string|nil The reason nothing was attacked.
      * @cc.since 1.4
@@ -498,6 +515,7 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @param side The specific tool to use.
      * @return The turtle command result.
+     * @cc-r.return Result
      * @cc.treturn boolean Whether an entity was attacked.
      * @cc.treturn string|nil The reason nothing was attacked.
      * @cc.since 1.4
@@ -515,6 +533,7 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @param count The number of items to suck. If not given, up to a stack of items will be picked up.
      * @return The turtle command result.
+     * @cc-r.return Result
      * @throws ScriptException If given an invalid number of items.
      * @cc.treturn boolean Whether items were picked up.
      * @cc.treturn string|nil The reason the no items were picked up.
@@ -531,6 +550,7 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @param count The number of items to suck. If not given, up to a stack of items will be picked up.
      * @return The turtle command result.
+     * @cc-r.return Result
      * @throws ScriptException If given an invalid number of items.
      * @cc.treturn boolean Whether items were picked up.
      * @cc.treturn string|nil The reason the no items were picked up.
@@ -547,6 +567,7 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @param count The number of items to suck. If not given, up to a stack of items will be picked up.
      * @return The turtle command result.
+     * @cc-r.return Result
      * @throws ScriptException If given an invalid number of items.
      * @cc.treturn boolean Whether items were picked up.
      * @cc.treturn string|nil The reason the no items were picked up.
@@ -600,6 +621,7 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @param countA The maximum number of items to consume. One can pass `0` to check if an item is combustable or not.
      * @return If this turtle could be refuelled.
+     * @cc-r.return Result
      * @throws ScriptException If the refuel count is out of range.
      * @cc.treturn [1] true If the turtle was refuelled.
      * @cc.treturn [2] false If the turtle was not refuelled.
@@ -655,7 +677,6 @@ public class TurtleAPI implements IComputerAPI {
      * @return If the item was moved or not.
      * @throws ScriptException If the slot is out of range.
      * @throws ScriptException If the number of items is out of range.
-     * @cc-r.return boolean
      * @cc.since 1.45
      */
     @ScriptFunction(mainThread = true)
@@ -826,6 +847,7 @@ public class TurtleAPI implements IComputerAPI {
      * upgrade is removed, but no new one is equipped.
      *
      * @return Whether an item was equipped or not.
+     * @cc-r.return Result
      * @cc.treturn [1] true If the item was equipped.
      * @cc.treturn [2] false If we could not equip the item.
      * @cc.treturn [2] string The reason equipping this item failed.
@@ -846,6 +868,7 @@ public class TurtleAPI implements IComputerAPI {
      * upgrade is removed, but no new one is equipped.
      *
      * @return Whether an item was equipped or not.
+     * @cc-r.return Result
      * @cc.treturn [1] true If the item was equipped.
      * @cc.treturn [2] false If we could not equip the item.
      * @cc.treturn [2] string The reason equipping this item failed.
