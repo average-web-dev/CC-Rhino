@@ -38,11 +38,11 @@ import org.jspecify.annotations.Nullable;
 
 public class TurtlePlaceCommand implements TurtleCommand {
     private final InteractDirection direction;
-    private final Object[] extraArguments;
+    private final @Nullable String signText;
 
-    public TurtlePlaceCommand(InteractDirection direction, Object[] arguments) {
+    public TurtlePlaceCommand(InteractDirection direction, @Nullable String signText) {
         this.direction = direction;
-        extraArguments = arguments;
+        this.signText = signText;
     }
 
     @Override
@@ -61,7 +61,7 @@ public class TurtlePlaceCommand implements TurtleCommand {
         // Do the deploying
         turtlePlayer.loadInventory(turtle);
         var message = new ErrorMessage();
-        var result = deploy(stack, turtle, turtlePlayer, direction, extraArguments, message);
+        var result = deploy(stack, turtle, turtlePlayer, direction, signText, message);
         turtlePlayer.unloadInventory(turtle);
         if (result) {
             // Animate and return success
@@ -76,7 +76,7 @@ public class TurtlePlaceCommand implements TurtleCommand {
 
     private static boolean deploy(
         ItemStack stack, ITurtleAccess turtle, TurtlePlayer turtlePlayer, Direction direction,
-        @Nullable Object[] extraArguments, @Nullable ErrorMessage outErrorMessage
+        @Nullable String signText, @Nullable ErrorMessage outErrorMessage
     ) {
         // Deploy on an entity
         if (deployOnEntity(turtle, turtlePlayer)) return true;
@@ -86,13 +86,13 @@ public class TurtlePlaceCommand implements TurtleCommand {
 
         // Try to deploy against a block. Tries the following options:
         //     Deploy on the block immediately in front
-        return deployOnBlock(stack, turtle, turtlePlayer, newPosition, direction.getOpposite(), extraArguments, true, outErrorMessage)
+        return deployOnBlock(stack, turtle, turtlePlayer, newPosition, direction.getOpposite(), signText, true, outErrorMessage)
             // Deploy on the block one block away
-            || deployOnBlock(stack, turtle, turtlePlayer, newPosition.relative(direction), direction.getOpposite(), extraArguments, false, outErrorMessage)
+            || deployOnBlock(stack, turtle, turtlePlayer, newPosition.relative(direction), direction.getOpposite(), signText, false, outErrorMessage)
             // Deploy down on the block in front
-            || (direction.getAxis() != Direction.Axis.Y && deployOnBlock(stack, turtle, turtlePlayer, newPosition.below(), Direction.UP, extraArguments, false, outErrorMessage))
+            || (direction.getAxis() != Direction.Axis.Y && deployOnBlock(stack, turtle, turtlePlayer, newPosition.below(), Direction.UP, signText, false, outErrorMessage))
             // Deploy back onto the turtle
-            || deployOnBlock(stack, turtle, turtlePlayer, position, direction, extraArguments, false, outErrorMessage);
+            || deployOnBlock(stack, turtle, turtlePlayer, position, direction, signText, false, outErrorMessage);
     }
 
     private static boolean deployOnEntity(ITurtleAccess turtle, TurtlePlayer turtlePlayer) {
@@ -158,7 +158,7 @@ public class TurtlePlaceCommand implements TurtleCommand {
 
     private static boolean deployOnBlock(
         ItemStack stack, ITurtleAccess turtle, TurtlePlayer turtlePlayer, BlockPos position, Direction side,
-        @Nullable Object[] extraArguments, boolean adjacent, @Nullable ErrorMessage outErrorMessage
+        @Nullable String signText, boolean adjacent, @Nullable ErrorMessage outErrorMessage
     ) {
         // Re-orient the fake player
         var playerDir = side.getOpposite();
@@ -178,14 +178,14 @@ public class TurtlePlaceCommand implements TurtleCommand {
         var placed = doDeployOnBlock(stack, turtlePlayer, hit, adjacent).consumesAction();
 
         // Set text on signs
-        if (placed && item instanceof SignItem && extraArguments != null && extraArguments.length >= 1 && extraArguments[0] instanceof String message) {
+        if (placed && item instanceof SignItem && signText != null) {
             var world = turtle.getLevel();
             var tile = world.getBlockEntity(position);
             if (tile == null || tile == existingTile) {
                 tile = world.getBlockEntity(position.relative(side));
             }
 
-            if (tile instanceof SignBlockEntity sign) setSignText(world, sign, message);
+            if (tile instanceof SignBlockEntity sign) setSignText(world, sign, signText);
         }
 
         return placed;

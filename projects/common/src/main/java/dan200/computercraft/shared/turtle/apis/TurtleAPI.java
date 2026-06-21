@@ -254,51 +254,48 @@ public class TurtleAPI implements IComputerAPI {
      * can pick up and place down fluids, and wheat can be used to breed cows. However, you cannot use {@link #place} to
      * perform arbitrary block interactions, such as clicking buttons or flipping levers.
      *
-     * @param args Arguments to place.
+     * @param text When placing a sign, set its contents to this text.
      * @return The turtle command result.
      * @cc-r.return Result
-     * @cc.tparam [opt] string text When placing a sign, set its contents to this text.
      * @cc.treturn boolean Whether the block could be placed.
      * @cc.treturn string|nil The reason the block was not placed.
      * @cc.since 1.4
      */
     @ScriptFunction
-    public final MethodResult place(IArguments args) throws ScriptException {
-        return trackCommand(new TurtlePlaceCommand(InteractDirection.FORWARD, args.getAll()));
+    public final MethodResult place(Optional<String> text) {
+        return trackCommand(new TurtlePlaceCommand(InteractDirection.FORWARD, text.orElse(null)));
     }
 
     /**
      * Place a block or item into the world above the turtle.
      *
-     * @param args Arguments to place.
+     * @param text When placing a sign, set its contents to this text.
      * @return The turtle command result.
      * @cc-r.return Result
-     * @cc.tparam [opt] string text When placing a sign, set its contents to this text.
      * @cc.treturn boolean Whether the block could be placed.
      * @cc.treturn string|nil The reason the block was not placed.
      * @cc.since 1.4
      * @see #place For more information about placing items.
      */
     @ScriptFunction
-    public final MethodResult placeUp(IArguments args) throws ScriptException {
-        return trackCommand(new TurtlePlaceCommand(InteractDirection.UP, args.getAll()));
+    public final MethodResult placeUp(Optional<String> text) {
+        return trackCommand(new TurtlePlaceCommand(InteractDirection.UP, text.orElse(null)));
     }
 
     /**
      * Place a block or item into the world below the turtle.
      *
-     * @param args Arguments to place.
+     * @param text When placing a sign, set its contents to this text.
      * @return The turtle command result.
      * @cc-r.return Result
-     * @cc.tparam [opt] string text When placing a sign, set its contents to this text.
      * @cc.treturn boolean Whether the block could be placed.
      * @cc.treturn string|nil The reason the block was not placed.
      * @cc.since 1.4
      * @see #place For more information about placing items.
      */
     @ScriptFunction
-    public final MethodResult placeDown(IArguments args) throws ScriptException {
-        return trackCommand(new TurtlePlaceCommand(InteractDirection.DOWN, args.getAll()));
+    public final MethodResult placeDown(Optional<String> text) {
+        return trackCommand(new TurtlePlaceCommand(InteractDirection.DOWN, text.orElse(null)));
     }
 
     /**
