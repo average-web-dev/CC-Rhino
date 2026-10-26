@@ -117,18 +117,11 @@ public class JSMachine implements IMachine {
         // happened to construct us — that thread may later run a different computer.
         cx = factory.enterContext();
         try {
-            var globals = cx.initStandardObjects();
+            // The "safe" standard objects never install LiveConnect (Packages, java, JavaImporter, getClass, …);
+            // the deny-all ClassShutter in CCContextFactory stays as a second layer.
+            var globals = cx.initSafeStandardObjects();
             scope = globals;
             JSLimits.install(globals);
-
-            // Strip all Java interop globals — classShutter already blocks class loading,
-            // but removing these prevents enumeration and makes the intent explicit.
-            for (var name : new String[]{
-                "Packages", "java", "javax", "org", "com", "edu", "net",
-                "JavaImporter", "importClass", "importPackage"
-            }) {
-                ScriptableObject.deleteProperty(scope, name);
-            }
 
             // Compile bios now so we can use executeScriptWithContinuations later.
             biosScript = cx.compileString(biosSource, "bios.js", 1, null);

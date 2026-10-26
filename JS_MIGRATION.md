@@ -110,7 +110,7 @@ committed as raw `.js` — Gradle emits the `.js` output into the resource tree.
     - `cx.setLanguageVersion(Context.VERSION_ES6)`
     - `cx.setInstructionObserverThreshold(CoreConfig.jsInstructionThreshold)`
     - `cx.setClassShutter(name -> false)` — block all Java class access from JS
-    - `scope = cx.initStandardObjects()`
+    - `scope = cx.initSafeStandardObjects()` — no LiveConnect globals (Packages, java, getClass, …)
   - `handleEvent(String name, Object[] args)` → runs bios on first call (startup), returns `MachineResult.OK`
   - `printExecutionState()` → stub
   - `close()` → `isDisposed = true; Context.exit()`
