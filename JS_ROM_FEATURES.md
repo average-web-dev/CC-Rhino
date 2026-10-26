@@ -160,7 +160,7 @@ fs.isDriveRoot(path: string): boolean
 ```
 gps.CHANNEL_GPS = 65534
 
-gps.locate(timeout?: number, debug?: boolean): [number, number, number] | null
+gps.locate(timeout?: number, debug?: boolean): BlockPosition | null   // { x, y, z }, as commands.getBlockPosition()
 // Broadcasts a "PING" on CHANNEL_GPS, collects modem_message replies,
 // runs trilateration with 3+ distance/position fixes, and returns [x, y, z].
 // Returns null on timeout or if position is ambiguous.
@@ -230,7 +230,7 @@ http.websocket(url: string | WsOptions, headers?): WebSocket | [false, string]
 http.websocketAsync(url: string | WsOptions, headers?): void  // fires websocket_success/failure
 
 // Response object (ReadHandle with extra methods):
-//   response.getResponseCode(): number
+//   response.getResponseCode(): HttpStatus   // { code, message }
 //   response.getResponseHeaders(): Record<string,string>
 //   response.readAll(): string
 //   response.readLine(): string | null
@@ -239,7 +239,7 @@ http.websocketAsync(url: string | WsOptions, headers?): void  // fires websocket
 
 // WebSocket object:
 //   ws.send(message: string, binary?: boolean): void
-//   ws.receive(timeout?: number): string | null
+//   ws.receive(timeout?: number): WebsocketReceiveResult   // { success, message, binary } | { success: false, reason }
 //   ws.close(): void
 
 interface HttpOptions {
@@ -607,11 +607,11 @@ turtle.suck(count?: number), turtle.suckUp(), turtle.suckDown()
 turtle.drop(count?: number), turtle.dropUp(), turtle.dropDown()
 
 // Inventory
-turtle.select(slot: number): boolean
+turtle.select(slot: number): void
 turtle.getSelectedSlot(): number
 turtle.getItemCount(slot?: number): number
 turtle.getItemSpace(slot?: number): number
-turtle.getItemDetail(slot?: number, detailed?: boolean): object | null
+turtle.getItemDetail(slot?: number, detailed?: boolean): ItemBasicDetail | ItemDetail | null
 turtle.transferTo(slot: number, count?: number): boolean
 
 // Fuel
