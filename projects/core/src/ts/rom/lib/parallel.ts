@@ -64,12 +64,12 @@ function spawn(task: ParallelTask): ThreadHandle {
 
 /** Throw the first thread's error, if any has failed. */
 function rethrowFirstError(threads: Thread[]): void {
-    for (const t of threads) if (t.failed) throw t.error;
+    for (let t of threads) if (t.failed) throw t.error;
 }
 
 function countDone(threads: Thread[]): number {
     let n = 0;
-    for (const t of threads) if (t.done) n++;
+    for (let t of threads) if (t.done) n++;
     return n;
 }
 
@@ -82,7 +82,7 @@ function waitForN(count: number, ...tasks: ParallelTask[]): number {
     const threads = tasks.map(launch);
     while (true) {
         rethrowFirstError(threads);
-        const done = countDone(threads);
+        let done = countDone(threads);
         if (done >= target) return done;
         system.yield();
     }
