@@ -8,3 +8,5 @@
 declare module "path" { const path: PathModule; export = path; }
 declare module "env" { const env: EnvModule; export = env; }
 declare module "parallel" { const parallel: ParallelModule; export = parallel; }
+declare module "parallel/promises" { const parallelPromises: ParallelPromisesModule; export = parallelPromises; }
+declare module "async" { const async: AsyncModule; export = async; }

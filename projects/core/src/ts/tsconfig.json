@@ -1,7 +1,8 @@
 {
     "compilerOptions": {
         "module": "commonjs",
-        "target": "es2017",
+        "target": "es2015",
+        "importHelpers": true,
         "lib": ["es2017"],
         "strict": true,
         "noEmitOnError": true,

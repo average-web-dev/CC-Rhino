@@ -61,3 +61,15 @@ interface ParallelModule {
      */
     waitForN(count: number, ...tasks: ParallelTask[]): number;
 }
+
+/**
+ * `parallel/promises` — the same functions without blocking the caller: `waitFor*` start their threads once the
+ * caller yields and return a promise that settles as the blocking call would return or throw. The threads belong to
+ * the calling thread, and are stopped with it.
+ */
+interface ParallelPromisesModule {
+    spawn(task: ParallelTask): Promise<ThreadHandle>;
+    waitForAny(...tasks: ParallelTask[]): Promise<number>;
+    waitForAll(...tasks: ParallelTask[]): Promise<void>;
+    waitForN(count: number, ...tasks: ParallelTask[]): Promise<number>;
+}
