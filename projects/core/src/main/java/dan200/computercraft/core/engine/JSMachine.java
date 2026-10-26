@@ -18,6 +18,8 @@ import java.util.concurrent.locks.LockSupport;
 public class JSMachine implements IMachine {
     // Package-visible so EventLoop.mapEvaluator() can compare against it.
     static final String HARD_ABORT_MESSAGE = "hard abort";
+    static final String STACK_OVERFLOW_MESSAGE = "stack overflow";
+    static final String OUT_OF_MEMORY_MESSAGE = "out of memory";
 
     // Synthetic CC event name used to keep the JS event loop running when there is pending internal
     // work (microtasks, setImmediate) but no real CC event is incoming.
@@ -93,7 +95,9 @@ public class JSMachine implements IMachine {
         // happened to construct us — that thread may later run a different computer.
         cx = factory.enterContext();
         try {
-            scope = cx.initStandardObjects();
+            var globals = cx.initStandardObjects();
+            scope = globals;
+            JSLimits.install(globals);
 
             // Strip all Java interop globals — classShutter already blocks class loading,
             // but removing these prevents enumeration and makes the intent explicit.
@@ -235,6 +239,16 @@ public class JSMachine implements IMachine {
             scheduleSelfTick();
             return MachineResult.OK;
 
+        } catch (StackOverflowError e) {
+            // Java-stack recursion (e.g. through native callbacks) bypasses the interpreter's frame limit. Rhino
+            // never lets JS catch an Error, so the script is already unwound; stop the machine.
+            close();
+            return MachineResult.error(STACK_OVERFLOW_MESSAGE);
+        } catch (OutOfMemoryError e) {
+            // Typically a single oversized allocation (e.g. flattening a huge concatenated string) that the JVM
+            // refused, so the heap itself is still intact. Stopping the machine releases everything it holds.
+            close();
+            return MachineResult.error(OUT_OF_MEMORY_MESSAGE);
         } finally {
             Context.exit();
             executionThread = null;
@@ -315,6 +329,8 @@ public class JSMachine implements IMachine {
             cx.setOptimizationLevel(-1);
             cx.setLanguageVersion(Context.VERSION_ES6);
             cx.setInstructionObserverThreshold(CoreConfig.jsInstructionThreshold);
+            // Interpreter frames live on the heap, so unbounded recursion would otherwise eat memory until timeout.
+            cx.setMaximumInterpreterStackDepth(CoreConfig.jsMaxStackDepth);
             cx.setClassShutter(className -> false);
             return cx;
         }
