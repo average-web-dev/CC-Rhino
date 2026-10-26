@@ -35,6 +35,7 @@ public class ComputerBootstrap {
     private static final Logger LOG = LoggerFactory.getLogger(ComputerBootstrap.class);
     private static final int TPS = 20;
     public static final int MAX_TIME = 10;
+    private static final int BOOT_TICKS = TPS * 10;
 
     /**
      * A minimal bios which runs {@code /test.js} instead of booting the ROM. Any error thrown by the test (including
@@ -102,7 +103,9 @@ public class ComputerBootstrap {
 
                 // Break if the computer was once on, and is now off.
                 everOn |= computer.isOn();
-                if ((everOn || tick > TPS) && !computer.isOn()) break;
+                // Booting a JS machine on a cold JVM (first test on CI) can take well over a second, so give it time to
+                // turn on before treating "off" as finished.
+                if ((everOn || tick > BOOT_TICKS) && !computer.isOn()) break;
             }
 
             // The computer may report a failure and shut down between two checks of the loop above.
