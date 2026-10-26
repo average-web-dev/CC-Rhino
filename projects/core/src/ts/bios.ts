@@ -87,7 +87,7 @@
 
   function readFirstLine(path: string): string | null {
       try {
-          const content = fs.readFileSync(path) as string;
+          const content = fs.readFileSync(path);
           return content.split("\n", 1)[0].trim() || null;
       } catch {
           return null;

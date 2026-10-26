@@ -9,7 +9,7 @@ function main(args: string[], cwd: string): void {
     for (let arg of args) {
         let path = resolve(cwd, arg);
         try {
-            let content = fs.readFileSync(path, 'utf8') as string;
+            let content = fs.readFileSync(path, 'utf8');
             // Split on newlines so each line goes through print()'s scroll/cursor logic.
             let lines = content.split('\n');
             // Trim trailing empty element from a final newline.

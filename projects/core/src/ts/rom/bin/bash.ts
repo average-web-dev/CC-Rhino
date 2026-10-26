@@ -124,7 +124,7 @@ function completeCommand(prefix: string): Completion[] {
     for (let b of BUILTINS) names[b] = true;
     for (let dir of require.paths) {
         let entries: string[];
-        try { entries = fs.readdirSync(dir) as string[]; } catch { continue; }
+        try { entries = fs.readdirSync(dir); } catch { continue; }
         for (let e of entries) names[e.endsWith('.js') ? e.slice(0, -3) : e] = true;
     }
     const out: Completion[] = [];
@@ -139,15 +139,14 @@ function completePath(word: string): Completion[] {
     const slash = word.lastIndexOf('/');
     const dirPart = slash >= 0 ? word.slice(0, slash + 1) : '';
     const basePart = slash >= 0 ? word.slice(slash + 1) : word;
-    let entries: string[];
-    try { entries = fs.readdirSync(resolvePath(dirPart === '' ? '.' : dirPart)) as string[]; }
+    let entries: FsDirent[];
+    try { entries = fs.readdirSync(resolvePath(dirPart === '' ? '.' : dirPart), { withFileTypes: true }); }
     catch { return []; }
     const out: Completion[] = [];
-    for (let e of entries) {
+    for (let entry of entries) {
+        let e = entry.name;
         if (!e.startsWith(basePart)) continue;
-        let isDir = false;
-        // @ts-ignore TODO: correct type for fs.statSync
-        try { isDir = fs.statSync(resolvePath(dirPart + e)).isDirectory; } catch { /* unreadable */ }
+        let isDir = entry.isDirectory();
         out.push({ word: dirPart + e, display: isDir ? e + '/' : e, isDir });
     }
     return out.sort((a, b) => (a.word < b.word ? -1 : 1));
@@ -344,7 +343,7 @@ function start(): void {
             const target = raw ? resolvePath(raw) : '/';
             try {
                 const stat = fs.statSync(target);
-                if (stat.isDirectory) {
+                if (stat.isDirectory()) {
                     cwd = target === '/' ? '/' : target.replace(/\/+$/, '');
                 } else {
                     print(`bash: cd: not a directory: ${raw ?? '/'}`);

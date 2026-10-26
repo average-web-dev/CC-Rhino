@@ -40,6 +40,7 @@ class JSFsAPITest {
 
     private JSMachine machine(String bios) throws Exception {
         var fileSystem = new FileSystem("hdd", new MemoryMount());
+        fileSystem.mount("rom", "rom", new MemoryMount().addFile("readme.txt", "hello"));
         var fsApi = new FSAPI(new BasicApiEnvironment(new BasicEnvironment()) {
             @Override
             public FileSystem getFileSystem() {
@@ -98,10 +99,10 @@ class JSFsAPITest {
         try {
             run(machine, null);
             run(machine, TICK);
-            assertEquals(List.of("entries:dir"), probe.values, "callback should be parked in pause()");
+            assertEquals(List.of("entries:dir,rom"), probe.values, "callback should be parked in pause()");
 
             run(machine, TICK);
-            assertEquals(List.of("entries:dir", "resumed"), probe.values);
+            assertEquals(List.of("entries:dir,rom", "resumed"), probe.values);
         } finally {
             machine.close();
         }
@@ -118,7 +119,7 @@ class JSFsAPITest {
         try {
             run(machine, null);
             run(machine, TICK);
-            assertEquals(List.of("true:/missing.txt: No such file:null", "stat:true"), probe.values);
+            assertEquals(List.of("true:ENOENT: no such file or directory, open '/missing.txt':null", "stat:true"), probe.values);
         } finally {
             machine.close();
         }
@@ -136,9 +137,9 @@ class JSFsAPITest {
         try {
             run(machine, null);
             assertEquals(List.of(
-                "nested:/a: No such file",
+                "nested:ENOENT: no such file or directory, mkdir '/a/b'",
                 "nested-recursive:ok",
-                "exists:/a: File exists",
+                "exists:EEXIST: file already exists, mkdir '/a'",
                 "exists-recursive:ok",
                 "child:ok"
             ), probe.values);
@@ -164,13 +165,13 @@ class JSFsAPITest {
         try {
             run(machine, null);
             assertEquals(List.of(
-                "missing:/nope: No such file",
+                "missing:ENOENT: no such file or directory, rm '/nope'",
                 "missing-force:ok",
-                "dir:/d: Is a directory",
-                "dir-force:/d: Is a directory",
+                "dir:EISDIR: illegal operation on a directory, rm '/d'",
+                "dir-force:EISDIR: illegal operation on a directory, rm '/d'",
                 "file:ok",
                 "dir-recursive:ok",
-                "left:"
+                "left:rom"
             ), probe.values);
         } finally {
             machine.close();
@@ -191,8 +192,8 @@ class JSFsAPITest {
         try {
             run(machine, null);
             assertEquals(List.of(
-                "dir:/src: Is a directory",
-                "copyFile-dir:/src: Is a directory",
+                "dir:EISDIR: illegal operation on a directory, cp '/src' -> '/dst'",
+                "copyFile-dir:EISDIR: illegal operation on a directory, copyfile '/src' -> '/dst'",
                 "dir-recursive:ok",
                 "file:ok",
                 "copied:xx"
@@ -223,10 +224,213 @@ class JSFsAPITest {
             run(machine, null);
             for (var i = 0; i < 5; i++) run(machine, TICK);
             assertEquals(List.of(
-                "mkdir:null", "cp:null", "rm:null", "rm-force:null", "rm-dir:/c: Is a directory"
+                "mkdir:null", "cp:null", "rm:null", "rm-force:null", "rm-dir:EISDIR: illegal operation on a directory, rm '/c'"
             ), probe.values);
         } finally {
             machine.close();
         }
+    }
+
+    /** Run a bios and return what it recorded, failing if the machine errors. */
+    private List<Object> runSync(String bios) throws Exception {
+        var machine = machine(bios);
+        try {
+            run(machine, null);
+            return List.copyOf(probe.values);
+        } finally {
+            machine.close();
+        }
+    }
+
+    @Test
+    void errors_carry_node_codes() throws Exception {
+        var values = runSync("""
+            function code(name, fn) {
+                try { fn(); probe.record(name + ':ok'); }
+                catch (e) { probe.record(name + ':' + e.code + ':' + e.syscall + ':' + e.path + ':' + e.errno + (e.dest ? ':' + e.dest : '')); }
+            }
+            fs.mkdirSync('d');
+            fs.writeFileSync('d/f.txt', 'x');
+            fs.writeFileSync('g.txt', 'x');
+            code('read-missing', function () { fs.readFileSync('nope.txt'); });
+            code('read-dir', function () { fs.readFileSync('d'); });
+            code('readdir-file', function () { fs.readdirSync('g.txt'); });
+            code('mkdir-exists', function () { fs.mkdirSync('d'); });
+            code('mkdir-under-file', function () { fs.mkdirSync('g.txt/x', { recursive: true }); });
+            code('rmdir-nonempty', function () { fs.rmdirSync('d'); });
+            code('rmdir-file', function () { fs.rmdirSync('g.txt'); });
+            code('unlink-dir', function () { fs.unlinkSync('d'); });
+            code('write-rom', function () { fs.writeFileSync('rom/x.txt', 'x'); });
+            code('rm-rom', function () { fs.rmSync('rom/readme.txt'); });
+            code('write-no-parent', function () { fs.writeFileSync('missing/x.txt', 'x'); });
+            code('rename-missing', function () { fs.renameSync('nope', 'other'); });
+            code('copy-excl', function () { fs.copyFileSync('g.txt', 'd/f.txt', fs.constants.COPYFILE_EXCL); });
+            code('stat-missing', function () { fs.statSync('nope'); });
+            code('access-rom-w', function () { fs.accessSync('rom/readme.txt', fs.constants.W_OK); });
+            code('access-rom-r', function () { fs.accessSync('rom/readme.txt', fs.R_OK); });
+            code('realpath-missing', function () { fs.realpathSync('nope'); });
+            """);
+        assertEquals(List.of(
+            "read-missing:ENOENT:open:/nope.txt:-2",
+            "read-dir:EISDIR:read:/d:-21",
+            "readdir-file:ENOTDIR:scandir:/g.txt:-20",
+            "mkdir-exists:EEXIST:mkdir:/d:-17",
+            "mkdir-under-file:ENOTDIR:mkdir:/g.txt/x:-20",
+            "rmdir-nonempty:ENOTEMPTY:rmdir:/d:-39",
+            "rmdir-file:ENOTDIR:rmdir:/g.txt:-20",
+            "unlink-dir:EISDIR:unlink:/d:-21",
+            "write-rom:EROFS:open:/rom/x.txt:-30",
+            "rm-rom:EROFS:rm:/rom/readme.txt:-30",
+            "write-no-parent:ENOENT:open:/missing/x.txt:-2",
+            "rename-missing:ENOENT:rename:/nope:-2:/other",
+            "copy-excl:EEXIST:copyfile:/g.txt:-17:/d/f.txt",
+            "stat-missing:ENOENT:stat:/nope:-2",
+            "access-rom-w:EROFS:access:/rom/readme.txt:-30",
+            "access-rom-r:ok",
+            "realpath-missing:ENOENT:realpath:/nope:-2"
+        ), values);
+    }
+
+    @Test
+    void callback_errors_carry_codes() throws Exception {
+        var machine = machine("""
+            fs.readFile('nope.txt', 'utf8', function (err) { probe.record('read:' + err.code + ':' + err.path); });
+            fs.mkdir('a/b', function (err) { probe.record('mkdir:' + err.code); });
+            fs.access('nope', function (err) { probe.record('access:' + err.code); });
+            fs.exists('rom', function (exists) { probe.record('exists:' + exists); });
+            """);
+        try {
+            run(machine, null);
+            run(machine, TICK);
+            assertEquals(List.of("read:ENOENT:/nope.txt", "mkdir:ENOENT", "access:ENOENT", "exists:true"), probe.values);
+        } finally {
+            machine.close();
+        }
+    }
+
+    @Test
+    void read_and_write_accept_options_objects() throws Exception {
+        var values = runSync("""
+            fs.writeFileSync('a.txt', 'héllo', { encoding: 'utf8' });
+            probe.record('utf8:' + fs.readFileSync('a.txt', { encoding: 'utf8', flag: 'r' }));
+            probe.record('latin1:' + fs.readFileSync('a.txt', 'latin1').length);
+            probe.record('hex:' + fs.readFileSync('a.txt', 'hex'));
+            fs.writeFileSync('b.bin', [104, 105]);
+            probe.record('bytes:' + fs.readFileSync('b.bin'));
+            fs.writeFileSync('c.txt', 'aGk=', 'base64');
+            probe.record('base64:' + fs.readFileSync('c.txt') + ':' + fs.readFileSync('c.txt', 'base64'));
+            fs.writeFileSync('a.txt', '!', { flag: 'a' });
+            fs.appendFileSync('a.txt', '?', { encoding: 'utf8' });
+            probe.record('append:' + fs.readFileSync('a.txt'));
+            check('wx', function () { fs.writeFileSync('a.txt', 'x', { flag: 'wx' }); });
+            check('bad-flag', function () { fs.writeFileSync('a.txt', 'x', { flag: 'r' }); });
+            check('bad-encoding', function () { fs.readFileSync('a.txt', 'utf32'); });
+            """);
+        assertEquals(List.of(
+            "utf8:héllo",
+            "latin1:6",
+            "hex:68c3a96c6c6f",
+            "bytes:hi",
+            "base64:hi:aGk=",
+            "append:héllo!?",
+            "wx:EEXIST: file already exists, open '/a.txt'",
+            "bad-flag:The value \"r\" is not supported for the \"flag\" option",
+            "bad-encoding:Unknown encoding: utf32"
+        ), values);
+    }
+
+    @Test
+    void readdir_with_file_types_and_recursive() throws Exception {
+        var values = runSync("""
+            fs.mkdirSync('d/e', { recursive: true });
+            fs.writeFileSync('d/f.txt', 'x');
+            fs.writeFileSync('d/e/g.txt', 'x');
+            var dirents = fs.readdirSync('d', { withFileTypes: true });
+            probe.record(dirents.map(function (d) {
+                return d.name + ':' + d.parentPath + ':' + d.isDirectory() + ':' + d.isFile() + ':' + d.isSymbolicLink();
+            }).join(','));
+            probe.record('recursive:' + fs.readdirSync('d', { recursive: true }).join(','));
+            """);
+        assertEquals(List.of("e:/d:true:false:false,f.txt:/d:false:true:false", "recursive:e,e/g.txt,f.txt"), values);
+    }
+
+    @Test
+    void stat_has_node_methods() throws Exception {
+        var values = runSync("""
+            fs.writeFileSync('a.txt', 'hello');
+            var f = fs.statSync('a.txt');
+            var d = fs.lstatSync('rom');
+            probe.record(f.isFile() + ':' + f.isDirectory() + ':' + f.size + ':' + (f.mode & 0x1ff).toString(8) + ':' + f.readOnly);
+            probe.record(d.isFile() + ':' + d.isDirectory() + ':' + (d.mode & 0x1ff).toString(8) + ':' + d.readOnly);
+            probe.record('date:' + (typeof new Date(f.mtimeMs).getTime()));
+            probe.record('missing:' + fs.statSync('nope', { throwIfNoEntry: false }));
+            """);
+        assertEquals(List.of("true:false:5:644:false", "false:true:555:true", "date:number", "missing:undefined"), values);
+    }
+
+    @Test
+    void mkdir_recursive_returns_first_created_path() throws Exception {
+        var values = runSync("""
+            probe.record('first:' + fs.mkdirSync('a/b/c', { recursive: true }));
+            probe.record('again:' + fs.mkdirSync('a/b/c', { recursive: true }));
+            probe.record('partial:' + fs.mkdirSync('a/x/y', { recursive: true }));
+            probe.record('plain:' + fs.mkdirSync('z'));
+            """);
+        assertEquals(List.of("first:/a", "again:undefined", "partial:/a/x", "plain:undefined"), values);
+    }
+
+    @Test
+    void rename_and_copy_overwrite_like_node() throws Exception {
+        var values = runSync("""
+            fs.writeFileSync('a.txt', 'A');
+            fs.writeFileSync('b.txt', 'B');
+            fs.renameSync('a.txt', 'b.txt');
+            probe.record('rename:' + fs.existsSync('a.txt') + ':' + fs.readFileSync('b.txt'));
+            fs.writeFileSync('c.txt', 'C');
+            fs.copyFileSync('c.txt', 'b.txt');
+            probe.record('copyFile:' + fs.readFileSync('b.txt'));
+            fs.mkdirSync('src/sub', { recursive: true });
+            fs.writeFileSync('src/sub/f.txt', 'new');
+            fs.mkdirSync('dst/sub', { recursive: true });
+            fs.writeFileSync('dst/sub/f.txt', 'old');
+            fs.writeFileSync('dst/keep.txt', 'keep');
+            fs.cpSync('src', 'dst', { recursive: true, force: false });
+            probe.record('no-force:' + fs.readFileSync('dst/sub/f.txt'));
+            check('errorOnExist', function () { fs.cpSync('src', 'dst', { recursive: true, force: false, errorOnExist: true }); });
+            fs.cpSync('src', 'dst', { recursive: true });
+            probe.record('merged:' + fs.readFileSync('dst/sub/f.txt') + ':' + fs.readFileSync('dst/keep.txt'));
+            fs.cpSync('c.txt', 'deep/er/c.txt');
+            probe.record('parents:' + fs.readFileSync('deep/er/c.txt'));
+            check('into-self', function () { fs.cpSync('src', 'src/sub/x', { recursive: true }); });
+            """);
+        assertEquals(List.of(
+            "rename:false:A",
+            "copyFile:C",
+            "no-force:old",
+            "errorOnExist:EEXIST: file already exists, cp '/src/sub/f.txt' -> '/dst/sub/f.txt'",
+            "merged:new:keep",
+            "parents:C",
+            "into-self:EINVAL: invalid argument, cp '/src' -> '/src/sub/x'"
+        ), values);
+    }
+
+    @Test
+    void constants_and_node_style_usage() throws Exception {
+        var values = runSync("""
+            probe.record('constants:' + fs.constants.F_OK + fs.constants.R_OK + fs.constants.W_OK + fs.constants.X_OK
+                + ':' + fs.constants.COPYFILE_EXCL + ':' + fs.F_OK);
+            // A typical Node snippet: create a config dir, write JSON, read it back.
+            var dir = '/etc/app';
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(dir + '/config.json', JSON.stringify({ a: 1 }), 'utf8');
+            var cfg = JSON.parse(fs.readFileSync(dir + '/config.json', 'utf8'));
+            probe.record('json:' + cfg.a);
+            try { fs.readFileSync('/nope.json'); } catch (e) { if (e.code === 'ENOENT') probe.record('enoent-handled'); }
+            probe.record('realpath:' + fs.realpathSync('etc/./app/../app'));
+            fs.unlinkSync(dir + '/config.json');
+            fs.rmdirSync(dir);
+            probe.record('left:' + fs.readdirSync('/etc').length);
+            """);
+        assertEquals(List.of("constants:0421:1:0", "json:1", "enoent-handled", "realpath:/etc/app", "left:0"), values);
     }
 }

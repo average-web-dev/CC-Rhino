@@ -341,6 +341,19 @@ public class TypeScriptDoclet implements Doclet {
             return lines;
         }
 
+        // `@cc-r.overload <signature>` (repeatable) — emit each `(params): ret` signature verbatim as one overload
+        // instead of deriving a signature from the Java method, e.g. for Node-style optional middle arguments.
+        var overloads = blockTags(doc, "cc-r.overload");
+        if (!overloads.isEmpty()) {
+            var lines = new ArrayList<String>();
+            var sum = firstSentence(doc);
+            for (var name : scriptFunctionNames(method)) {
+                if (sum != null) lines.add("/** " + sum + " */");
+                for (var signature : overloads) lines.add(name + signature.trim() + ";");
+            }
+            return lines;
+        }
+
         // Parameter overrides from the docblock: `@cc-r.param <name> <type>` (e.g. a callback type that
         // the Java `Object` parameter can't express), or `@cc-r.params <list>` to replace the whole list.
         var tsParam = new java.util.HashMap<String, String>();

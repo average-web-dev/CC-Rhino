@@ -7,6 +7,7 @@ package dan200.computercraft.api.scripting;
 import org.jspecify.annotations.Nullable;
 
 import java.io.Serial;
+import java.util.Map;
 
 /**
  * An exception representing an error in Lua, like that raised by the {@code error()} function.
@@ -16,17 +17,44 @@ public class ScriptException extends Exception {
     private static final long serialVersionUID = -6136063076818512651L;
     private final boolean hasLevel;
     private final int level;
+    @SuppressWarnings("serial") // Map.copyOf is serializable; the values are plain strings/numbers/booleans.
+    private final Map<String, Object> properties;
 
     public ScriptException(@Nullable String message) {
         super(message);
         hasLevel = false;
         level = 1;
+        properties = Map.of();
     }
 
     public ScriptException(@Nullable String message, int level) {
         super(message);
         hasLevel = true;
         this.level = level;
+        properties = Map.of();
+    }
+
+    /**
+     * Construct an exception whose script-side error object carries additional properties, such as a Node-style
+     * {@code code} ({@code "ENOENT"}) or {@code path}.
+     *
+     * @param message    The error message.
+     * @param properties Extra properties to set on the error object. Values should be strings, numbers or booleans.
+     */
+    public ScriptException(@Nullable String message, Map<String, ?> properties) {
+        super(message);
+        hasLevel = false;
+        level = 1;
+        this.properties = Map.copyOf(properties);
+    }
+
+    /**
+     * Additional properties to set on the error object raised in the script, e.g. {@code code} and {@code path}.
+     *
+     * @return The extra properties, possibly empty.
+     */
+    public Map<String, Object> getProperties() {
+        return properties;
     }
 
     /**

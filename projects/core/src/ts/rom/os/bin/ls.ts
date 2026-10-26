@@ -5,18 +5,13 @@ import resolve = require('/rom/lib/resolve');
 function main(args: string[], cwd: string): void {
     const path = args[0] ? resolve(cwd, args[0]) : cwd;
     try {
-        const entries = (fs.readdirSync(path) as string[]).slice().sort();
+        const entries = fs.readdirSync(path, { withFileTypes: true })
+            .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
         const canColor = term.isColor();
-        const base = path.replace(/\/$/, '');
-        for (let name of entries) {
-            let full = (base === '' ? '' : base) + '/' + name;
-            try {
-                let stat = fs.statSync(full);
-                if (canColor) term.setTextColor(stat.isDirectory ? 32 : 1); // lime / white
-                print(stat.isDirectory ? name + '/' : name);
-            } catch {
-                print(name);
-            }
+        for (let entry of entries) {
+            let isDir = entry.isDirectory();
+            if (canColor) term.setTextColor(isDir ? 32 : 1); // lime / white
+            print(isDir ? entry.name + '/' : entry.name);
         }
         if (canColor) term.setTextColor(1);
     } catch (e: unknown) {

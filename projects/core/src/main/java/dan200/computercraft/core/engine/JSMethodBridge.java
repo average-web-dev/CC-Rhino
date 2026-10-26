@@ -52,8 +52,10 @@ final class JSMethodBridge extends BaseFunction {
             // Continuations, aborts and JS errors raised by callbacks pass through unchanged.
             throw e;
         } catch (ScriptException e) {
-            // An intentional API error: surface it as a plain JS Error carrying just the message.
-            throw jsError(cx, scope, e.getMessage() != null ? e.getMessage() : "Unknown error");
+            // An intentional API error: surface it as a plain JS Error carrying the message (and any extra properties).
+            var error = jsError(cx, scope, e.getMessage() != null ? e.getMessage() : "Unknown error");
+            if (error.getValue() instanceof Scriptable errorObj) JSErrors.putProperties(cx, scope, errorObj, e);
+            throw error;
         } catch (Exception e) {
             // A bug in the native method. Log the details, but don't leak Java class names or messages to scripts.
             LOG.error("Unexpected exception in native method", e);

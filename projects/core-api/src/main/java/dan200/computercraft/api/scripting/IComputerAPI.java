@@ -6,6 +6,8 @@ package dan200.computercraft.api.scripting;
 
 import org.jspecify.annotations.Nullable;
 
+import java.util.Map;
+
 /**
  * Represents a Lua object which is stored as a global variable on computer startup. This must either provide
  * {@link ScriptFunction} annotated functions or implement {@link IDynamicObject}.
@@ -40,6 +42,18 @@ public interface IComputerAPI {
      */
     default @Nullable String getModuleName() {
         return null;
+    }
+
+    /**
+     * Non-function properties of this API's module object, such as Node's {@code fs.constants}.
+     * <p>
+     * Values are converted to script values once, when the computer starts, so they should be immutable data
+     * (strings, numbers, booleans, lists or maps of these).
+     *
+     * @return The constant properties, keyed by property name.
+     */
+    default Map<String, ?> getConstants() {
+        return Map.of();
     }
 
     /**
