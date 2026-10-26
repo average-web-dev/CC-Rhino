@@ -63,9 +63,6 @@ jobs:
         - name: Windows
           uses: windows-latest
 
-        - name: macOS
-          uses: macos-latest
-
     name: Test on ${{ matrix.name }}
     runs-on: ${{ matrix.uses }}
 
