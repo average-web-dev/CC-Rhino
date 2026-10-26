@@ -237,6 +237,8 @@ public final class LanguageProvider implements DataProvider {
         addConfigEntry(ConfigSpec.computerThreads, "Computer threads");
         addConfigEntry(ConfigSpec.maxMainGlobalTime, "Server tick global time limit");
         addConfigEntry(ConfigSpec.maxMainComputerTime, "Server tick computer time limit");
+        addConfigEntry(ConfigSpec.jsMaxStackDepth, "Maximum JavaScript call depth");
+        addConfigEntry(ConfigSpec.jsMaxStringLength, "Maximum JavaScript string length");
 
         addConfigGroup(ConfigSpec.serverSpec, "http", "HTTP");
         addConfigEntry(ConfigSpec.httpEnabled, "Enable the HTTP API");
