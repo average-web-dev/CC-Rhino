@@ -59,7 +59,7 @@ function main(args: string[], cwd: string): void {
     function load(): void {
         try {
             if (fs.existsSync(path)) {
-                let content = fs.readFileSync(path, 'utf8') as string;
+                let content = fs.readFileSync(path, 'utf8');
                 lines = content.split('\n');
                 if (lines.length === 0) lines = [''];
             }
