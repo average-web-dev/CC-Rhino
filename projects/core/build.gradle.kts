@@ -37,6 +37,10 @@ val transpileTypeScript by tasks.registering(cc.tweaked.gradle.NpxExecToDir::cla
     inputs.files(fileTree("src/ts") { include("**/*.ts") }).withPropertyName("sources")
     inputs.file("src/ts/tsconfig.json").withPropertyName("tsconfig")
 
+    // The ROM type-checks against the .d.ts generated from the Java API (see tsconfig.json "include").
+    dependsOn(":common:generateTsTypes")
+    inputs.dir(project(":common").layout.buildDirectory.dir("tsTypes")).withPropertyName("apiTypes")
+
     output = layout.buildDirectory.dir("generated/js")
 
     args = listOf("tsc", "--project", "src/ts/tsconfig.json")
