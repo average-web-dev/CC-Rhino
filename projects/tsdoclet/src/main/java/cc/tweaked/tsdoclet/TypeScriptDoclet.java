@@ -196,7 +196,7 @@ public class TypeScriptDoclet implements Doclet {
         collectScriptMethods(type, new java.util.HashSet<>(), methods);
 
         var body = new ArrayList<String>();
-        for (var method : methods) body.addAll(renderMethod(method));
+        for (var method : methods) body.addAll(renderMethod(method, null));
         if (body.isEmpty()) return; // nothing scriptable here
 
         var isPeripheral = isAssignableTo(type, "IPeripheral");
@@ -229,9 +229,71 @@ public class TypeScriptDoclet implements Doclet {
             // `module` matches [a-z_]+, so it is a valid JS identifier for the const binding.
             out.append("declare module \"").append(module).append("\" { const ").append(module)
                 .append(": ").append(name).append("; export = ").append(module).append("; }\n");
+            emitPromisesModule(module, name, methods);
         }
 
         Files.writeString(outputDir.resolve(name + ".d.ts"), out.toString());
+    }
+
+    /**
+     * Emit {@code <Name>Promises.d.ts} for the engine-generated {@code <module>/promises} module: the same methods,
+     * each returning a {@code Promise} of the blocking form's result. Node-style pairs collapse as the engine does it
+     * (see {@code JSAPIBuilder}): {@code fooSync} plus a callback {@code foo} become one promise-returning {@code foo}
+     * with {@code fooSync}'s signature.
+     */
+    private void emitPromisesModule(String module, String name, List<ExecutableElement> methods) throws IOException {
+        var names = new java.util.HashSet<String>();
+        for (var method : methods) names.addAll(scriptFunctionNames(method));
+
+        var promiseName = name + "Promises";
+        var out = new StringBuilder("/** The `").append(module).append("/promises` module: `").append(module)
+            .append("` with every function returning a promise instead of blocking. */\n");
+        out.append("interface ").append(promiseName).append(" {\n");
+        for (var method : methods) {
+            for (var line : renderMethod(method, names)) out.append("    ").append(line).append("\n");
+        }
+        out.append("}\n");
+
+        var binding = module + "Promises";
+        out.append("declare function require(id: \"").append(module).append("/promises\"): ").append(promiseName).append(";\n");
+        out.append("declare module \"").append(module).append("/promises\" { const ").append(binding)
+            .append(": ").append(promiseName).append("; export = ").append(binding).append("; }\n");
+        Files.writeString(outputDir.resolve(promiseName + ".d.ts"), out.toString());
+    }
+
+    /**
+     * The names a method is exposed under in a {@code /promises} module, given all script names of the module: a
+     * callback form with a {@code …Sync} sibling is dropped, and a {@code …Sync} form with a callback sibling is
+     * renamed to the callback name.
+     */
+    private static List<String> promiseNames(List<String> names, java.util.Set<String> moduleNames) {
+        var out = new ArrayList<String>();
+        for (var name : names) {
+            if (moduleNames.contains(name + "Sync")) continue;
+            if (name.endsWith("Sync") && name.length() > 4 && moduleNames.contains(name.substring(0, name.length() - 4))) {
+                out.add(name.substring(0, name.length() - 4));
+            } else {
+                out.add(name);
+            }
+        }
+        return out;
+    }
+
+    /** {@code (params): ret} → {@code (params): Promise<ret>}, for a verbatim {@code @cc-r.overload} signature. */
+    private String promiseSignature(ExecutableElement method, String signature) {
+        // The parameter list ends at the parenthesis matching the leading `(`.
+        var depth = 0;
+        for (var i = 0; i < signature.length(); i++) {
+            var c = signature.charAt(i);
+            if (c == '(') depth++;
+            if (c == ')' && --depth == 0) {
+                var rest = signature.substring(i + 1).trim();
+                if (!rest.startsWith(":")) break;
+                return signature.substring(0, i + 1) + ": Promise<" + rest.substring(1).trim() + ">";
+            }
+        }
+        error(method, "Cannot parse @cc-r.overload signature " + signature);
+        return signature;
     }
 
     /**
@@ -381,20 +443,29 @@ public class TypeScriptDoclet implements Doclet {
         Files.writeString(outputDir.resolve(name + ".d.ts"), out);
     }
 
-    /** Render the declarations for one method — one per exposed name (annotation aliases). */
-    private List<String> renderMethod(ExecutableElement method) {
+    /**
+     * Render the declarations for one method — one per exposed name (annotation aliases).
+     *
+     * @param promiseModule {@code null} for the blocking module; for its {@code /promises} flavour, all script names of
+     *                      the module (see {@link #promiseNames}). Every return type is then wrapped in a
+     *                      {@code Promise}.
+     */
+    private List<String> renderMethod(ExecutableElement method, java.util.Set<String> promiseModule) {
         var doc = new MethodDoc(method);
         var summary = doc.summary();
+        var promise = promiseModule != null;
+        var exposed = promise ? promiseNames(scriptFunctionNames(method), promiseModule) : scriptFunctionNames(method);
+        var voidRet = promise ? "Promise<void>" : "void";
 
         // `@cc-r.eventlistener` — emit a generic listener over EventMap plus a string fallback overload.
         if (!doc.tags("cc-r.eventlistener").isEmpty()) {
             var lines = new ArrayList<String>();
-            for (var name : scriptFunctionNames(method)) {
+            for (var name : exposed) {
                 if (summary != null) lines.add("/** " + summary + " */");
-                lines.add(name + "<E extends keyof EventMap>(event: E, listener: (...args: EventMap[E]) => void): void;");
+                lines.add(name + "<E extends keyof EventMap>(event: E, listener: (...args: EventMap[E]) => void): " + voidRet + ";");
                 // `any[]` (not `unknown[]`): a catch-all listener is contravariant, so a more
                 // specific handler like `(id: number) => void` must remain assignable to it.
-                lines.add(name + "(event: string, listener: (...args: any[]) => void): void;");
+                lines.add(name + "(event: string, listener: (...args: any[]) => void): " + voidRet + ";");
             }
             return lines;
         }
@@ -404,9 +475,11 @@ public class TypeScriptDoclet implements Doclet {
         var overloads = doc.tags("cc-r.overload");
         if (!overloads.isEmpty()) {
             var lines = new ArrayList<String>();
-            for (var name : scriptFunctionNames(method)) {
+            for (var name : exposed) {
                 if (summary != null) lines.add("/** " + summary + " */");
-                for (var signature : overloads) lines.add(name + signature.trim() + ";");
+                for (var signature : overloads) {
+                    lines.add(name + (promise ? promiseSignature(method, signature.trim()) : signature.trim()) + ";");
+                }
             }
             return lines;
         }
@@ -477,8 +550,10 @@ public class TypeScriptDoclet implements Doclet {
             if (!ret.equals("void") && !ret.contains("null") && isNullable(method)) ret = ret + " | null";
         }
 
+        if (promise) ret = "Promise<" + ret + ">";
+
         var lines = new ArrayList<String>();
-        for (var name : scriptFunctionNames(method)) {
+        for (var name : exposed) {
             if (summary != null) lines.add("/** " + summary + " */");
             lines.add(name + "(" + paramStr + "): " + ret + ";");
         }
