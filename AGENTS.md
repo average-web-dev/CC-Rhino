@@ -55,8 +55,8 @@ part of `assemble`.
   optional, and `ScriptUtil.toRecord` accepts them missing), `@cc-r.extends` (extra TS supertypes, e.g. a handle
   exposing a `ReadHandle` via `ObjectSource`), `@cc-r.param <component> <type>` on records. `{@inheritDoc}` is
   resolved. Item/block/entity/fluid detail shapes are hand-written in `projects/core/src/ts/types/details.d.ts`;
-  events are `@Event` records (`CoreEvents`, `PeripheralEvents`) that make up the generated `EventMap`. **Queue events
-  through their record** (`computer.queueEvent(new CoreEvents.Timer(id))`; `queueEvent(Record)` exists on
+  events are `@Event` records (`CoreEvents`, `PeripheralEvents`) that make up the generated `EventMap` (plus an empty,
+  augmentable `CustomEventMap` for `events.emit`). **Queue events through their record** (`computer.queueEvent(new CoreEvents.Timer(id))`; `queueEvent(Record)` exists on
   `IComputerAccess`, `AttachedComputerSet`, `IAPIEnvironment`, `Computer`, `ServerComputer`), never with a raw name and
   argument list, so the declaration and the queued arguments cannot drift. A varargs record
   (`record ComputerCommand(String... args)`) spreads its last component and becomes a rest element in `EventMap`.
@@ -80,7 +80,7 @@ part of `assemble`.
 | Deferring JS callbacks from native code onto the event loop (e.g. fs callbacks) | `core/engine/JSScheduler.java` |
 | Promises: `/promises` modules, promise jobs, `async`/`tslib` modules, async-code detection | `core/engine/JSPromises.java`, `Waiter.java`, `JSAPIBuilder.java` (+ `EventLoop`) |
 | Safepoint aborts, resource limits | `core/engine/JSAbort.java`, `JSLimits.java`, `core/CoreConfig.java` (+ `ConfigSpec`) |
-| Event bus (`events.on/once/off`) | `core/engine/JSEventEmitter.java`, `core/apis/EventsAPI.java` |
+| Event bus (`events.on/once/off/emit`, `fireNow`, native-name registry) | `core/engine/JSEventEmitter.java` (incl. the JS `emit`), `core/apis/EventsAPI.java`, `EventLoop.emitPlan`/`dispatchNow`, core-api `scripting/Events.java` |
 | Core APIs (`fs`, `system`, `term`, `http`, `peripheral`, `redstone`) | `projects/core/src/main/java/dan200/computercraft/core/apis/` |
 | Scripting API for addon mods (`@ScriptFunction`, `MethodResult`, `Result`, `TaskCompletion`) | `projects/core-api/src/main/java/dan200/computercraft/api/scripting/` |
 | Turtle API + command queue | `projects/common/.../shared/turtle/apis/TurtleAPI.java`, `turtle/core/TurtleBrain.java` |
@@ -121,6 +121,15 @@ part of `assemble`.
   `setImmediate` belongs to a thread; stopping a thread discards them. Ctrl+T raises `Error("Terminated")` in the
   foreground program; bash runs each program as a foreground thread. There is deliberately **no** public
   `pullEvent`/`queueEvent`.
+- Events: native events (`@Event` records → `EventMap`) are queued with `queueEvent(record)` from any thread and reach
+  listeners on a later tick (listeners may block; blocked calls waiting for the event are woken). `events.emit(name,
+  ...args)` delivers *script-defined* events synchronously (Node semantics, returns "had listeners"); native names
+  are rejected (`ERR_RESERVED_EVENT`), custom ones are typed by augmenting `CustomEventMap`. Java code already inside
+  the machine (a script method) can use `JSEventEmitter.current().fireNow(record)`. `emit` is a JS function
+  (`JSEventEmitter.installEmit`) so that listeners of the calling thread and its ancestors may block (blocking the
+  caller); listeners of unrelated threads, and every listener called by `fireNow` / `events/promises.emit` or by an
+  `emit` inside `forEach` & co. (#38), cannot block. `@Event` holders outside core must be registered with `Events.register` (e.g. `PeripheralEvents` in
+  `ModRegistry.register`), or scripts could emit them.
 - Async model (#35): blocking stays the default. Every native module `x` also exists as `require('x/promises')` with
   the same functions returning real `Promise`s (`fooSync` + callback `foo` pairs collapse to a promise `foo`, as in
   Node's `fs/promises`); objects returned through it get promise methods too. Rhino's promise jobs run in the event

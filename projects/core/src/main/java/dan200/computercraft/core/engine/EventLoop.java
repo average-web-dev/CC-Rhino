@@ -562,7 +562,10 @@ public final class EventLoop {
         return run(cx, scope, new Strand(root, true), () -> cx.executeScriptWithContinuations(bios, scope));
     }
 
-    /** Invoke the {@code events.on} listeners for {@code event}, each as a strand of the thread that registered it. */
+    /**
+     * Invoke the {@code events.on} listeners for a queued {@code event}, each as a strand of the thread that registered
+     * it. Each is entered from the event loop, so it may block. See {@link #dispatchNow} for synchronous delivery.
+     */
     MachineResult emit(Context cx, Scriptable scope, String event, Object[] jsArgs) {
         for (var entry : emitter.take(event)) {
             if (entry.owner().isDead()) continue;
@@ -571,6 +574,107 @@ public final class EventLoop {
             if (r.isError()) return r;
         }
         return MachineResult.OK;
+    }
+
+    /**
+     * Invoke the {@code events.on} listeners for {@code event} synchronously, from inside running JS
+     * ({@link JSEventEmitter#fireNow}, {@code events/promises.emit}; the blocking {@code events.emit} uses {@link #emitPlan}). Each listener runs as the thread that registered it, as in
+     * {@link #emit}, but is called directly rather than entered from the event loop: no continuation can be captured
+     * there, so a listener that tries to block fails with the usual "cannot be used inside callbacks run by native
+     * code" error.
+     *
+     * <p>An error in a listener owned by the calling thread or one of its ancestors (always the case for listeners of
+     * the root thread) is thrown to the caller, as Node's {@code emit} does: failing the owner would kill the caller
+     * anyway, so it gets the chance to handle the error. The remaining listeners are then skipped. An error in a
+     * listener of an unrelated thread fails that thread, exactly as in normal dispatch, and the remaining listeners
+     * still run.
+     *
+     * @return Whether there were listeners (of running threads) for the event.
+     */
+    boolean dispatchNow(Context cx, Scriptable scope, String event, Object[] jsArgs) {
+        var any = false;
+        for (var entry : emitter.take(event)) {
+            if (entry.owner().isDead()) continue;
+            any = true;
+            var owner = entry.owner().effective();
+            var caller = currentThread();
+            try {
+                callAs(owner, cx, scope, entry.fn(), scope, jsArgs);
+            } catch (JSAbort e) {
+                throw noteAbort(e);
+            } catch (RhinoException e) {
+                if (isSelfOrAncestor(owner, caller)) throw e;
+                threadFailed(owner, errorValue(cx, scope, e));
+            }
+        }
+        return any;
+    }
+
+    /**
+     * The listeners {@code events.emit} (the JS function of {@link JSEventEmitter#installEmit}) calls for
+     * {@code event}, as a JS array in registration order. {@code once} listeners are removed now.
+     *
+     * <ul>
+     *   <li>A listener owned by the calling thread or one of its ancestors is returned as is: {@code emit} calls it
+     *   directly, so it runs as part of the caller's strand and may block, blocking the caller. That is the caller's
+     *   own lineage: the ancestor is waiting for the caller (or runs it in the background) and is killed along with
+     *   it, or before it. Work the listener starts belongs to the caller; Ctrl+T or stopping the caller reaches a
+     *   blocked listener like any blocking call of the caller, and the error propagates out of {@code emit}.</li>
+     *   <li>A listener of an unrelated thread is returned wrapped in a {@link ForeignListener}, which runs it as its
+     *   owner, from Java: like normal dispatch, it cannot block (it gets the usual "cannot be used inside callbacks
+     *   run by native code" error) and an error fails its owner instead of reaching the caller.</li>
+     * </ul>
+     */
+    Scriptable emitPlan(Context cx, Scriptable scope, String event) {
+        var caller = currentThread();
+        var listeners = new ArrayList<Object>();
+        for (var entry : emitter.take(event)) {
+            if (entry.owner().isDead()) continue;
+            var owner = entry.owner().effective();
+            if (isSelfOrAncestor(owner, caller)) {
+                listeners.add(entry.fn());
+            } else {
+                var foreign = new ForeignListener(owner, entry.fn());
+                ScriptRuntime.setFunctionProtoAndParent(foreign, cx, scope);
+                listeners.add(foreign);
+            }
+        }
+        return cx.newArray(scope, listeners.toArray());
+    }
+
+    /** A listener of a thread unrelated to the caller of {@code events.emit}: see {@link #emitPlan}. */
+    @SuppressWarnings("serial") // never serialized
+    private final class ForeignListener extends BaseFunction {
+        private static final long serialVersionUID = 1L;
+
+        private final JSThread owner;
+        private final Callable fn;
+
+        ForeignListener(JSThread owner, Callable fn) {
+            this.owner = owner;
+            this.fn = fn;
+        }
+
+        @Override
+        public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+            // An earlier listener may have stopped the owner.
+            if (owner.isDead()) return Undefined.instance;
+            try {
+                callAs(owner, cx, scope, fn, scope, args);
+            } catch (JSAbort e) {
+                throw noteAbort(e);
+            } catch (RhinoException e) {
+                threadFailed(owner, errorValue(cx, scope, e));
+            }
+            return Undefined.instance;
+        }
+    }
+
+    private static boolean isSelfOrAncestor(JSThread candidate, JSThread thread) {
+        for (@Nullable JSThread t = thread; t != null; t = t.parent) {
+            if (t == candidate) return true;
+        }
+        return false;
     }
 
     /**

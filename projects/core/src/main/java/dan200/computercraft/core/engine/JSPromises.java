@@ -344,7 +344,8 @@ final class JSPromises {
      *                  prevented capturing a continuation.
      */
     static JavaScriptException blockingError(Context cx, Scriptable scope, String name, String hint, boolean asyncCode) {
-        var where = asyncCode ? "inside async code" : "inside async code or callbacks run by native code (such as Array.prototype.forEach)";
+        var where = asyncCode ? "inside async code" : "inside async code or callbacks run by native code "
+            + "(such as Array.prototype.forEach, or a listener of another thread called by events.emit)";
         return ScriptRuntime.throwError(cx, ScriptableObject.getTopLevelScope(scope),
             name + " blocks and cannot be used " + where + " — use " + hint + " instead");
     }

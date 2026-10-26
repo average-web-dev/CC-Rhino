@@ -13,8 +13,14 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** {@link Events} turns {@link Event} records into the {@code (name, args)} pair queued on the computer. */
+/**
+ * {@link Events} turns {@link Event} records into the {@code (name, args)} pair queued on the computer, and keeps the
+ * registry of native event names.
+ */
 public class EventsTest {
     @Event("spread")
     public record Spread(int first, String... rest) {
@@ -25,6 +31,26 @@ public class EventsTest {
         var event = new CoreEvents.TaskComplete(3, false, null);
         assertEquals("task_complete", Events.name(event));
         assertEquals(Arrays.asList(3L, false, null), Arrays.asList(Events.arguments(event)));
+    }
+
+    /** A holder class of event records, as {@link CoreEvents}. */
+    public static final class Holder {
+        private Holder() {
+        }
+
+        @Event("holder_event")
+        public record HolderEvent() {
+        }
+    }
+
+    @Test
+    void registered_events_are_native() {
+        assertFalse(Events.isNative("spread"));
+        assertFalse(Events.isNative("holder_event"));
+        Events.register(Spread.class, Holder.class);
+        assertTrue(Events.isNative("spread"));
+        assertTrue(Events.isNative("holder_event"));
+        assertThrows(IllegalArgumentException.class, () -> Events.register(String.class));
     }
 
     @Test

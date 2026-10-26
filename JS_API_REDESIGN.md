@@ -155,20 +155,47 @@ JS. Only the **in-game** values are MC-specific and must stay.
 ## `events` — event bus (global singleton)
 
 > **Note:** Node's `events` module exports the `EventEmitter` **class**. Here `events` is
-> deliberately a **global singleton emitter** for the single CC event queue. The emitter API
-> (`on`/`once`/`off`/`emit`) is the preferred form; `pullEvent` remains only as a blocking
-> low-level variant.
+> deliberately a **global singleton emitter** for the computer's events. There is deliberately no public
+> `pullEvent`/`queueEvent`: blocking APIs wait for their own events internally, and a program reacts to events
+> through listeners.
 
 | Function | Parameters | Return | Kind |
 |---|---|---|---|
 | `on` | `event, cb` | `void` | EventEmitter (Phase 5) |
 | `once` | `event, cb` | `void` | EventEmitter |
 | `off` | `event, cb` | `void` | EventEmitter |
-| `emit` / `queueEvent` | `name, ...args` | `void` | push event onto the queue |
-| `pullEvent` | `filter?` | `[name, ...args]` | **blocking** (low-level) |
-| `pullEventRaw` | `filter?` | `[name, ...args]` | **blocking** (no terminate handling) |
+| `listenerCount` | `event` | `number` | EventEmitter |
+| `emit` | `event, ...args` | `boolean` (had listeners) | EventEmitter, **synchronous** (Phase 13) |
+| `queueMicrotask` / `setImmediate` / `clearImmediate` | `cb` / `cb` / `id` | `void` / `number` / `void` | event-loop scheduling |
 
-**CC low-level timers/alarms** (fire events, hence here):
+**Native vs. custom events.** Native events come from the computer (input, timers, peripherals, `task_complete`,
+…): they are declared as `@Event` records, typed by the generated `EventMap`, queued on the computer and delivered
+on a later tick, where listeners may block. `events.emit` delivers a *script-defined* event synchronously, like
+Node's `EventEmitter.emit`: the listeners run in registration order before `emit` returns, receive the arguments
+unchanged, and `emit` returns whether there were any. Details:
+
+- **Native names are reserved**: `emit('key')`, `emit('timer')`, `emit('task_complete')`, … throw an `Error` with
+  `code: 'ERR_RESERVED_EVENT'`, so a program cannot fake input, timers or another program's task completion. All
+  other names are free. Declare your events' arguments by augmenting `CustomEventMap`
+  (`declare global { interface CustomEventMap { my_event: [count: number]; } }`), which types `emit`, `on`, `once`
+  and `off`; emitting a native name is also a compile error.
+- **Own listeners may block.** Listeners of the emitting thread or of a thread it belongs to (e.g. the program that
+  started it with `parallel`) run as part of the caller and may block (`turtle.dig()`, `sleep`, …), which blocks the
+  caller; `emit` returns once they have all finished. An error they throw is thrown from `emit` (remaining listeners
+  are skipped, as in Node), and Ctrl+T reaches them like any blocking call of the caller. (`emit` is implemented in
+  JS for this, so that a continuation can be captured through it.)
+- **Listeners of other threads** (another program) run as their own thread and cannot block: blocking calls throw a
+  clear error — defer such work with `setImmediate` or use a `/promises` module. An error there fails that program
+  instead of the caller. Listeners of all threads run in registration order.
+- `emit` called where nothing can block — inside an `Array.prototype.forEach` callback & co. (see #38), a generator
+  or a promise callback — cannot let its listeners block either (same clear error).
+- `require('events/promises').emit(...)` calls every listener without letting it block and returns an
+  already-settled `Promise<boolean>`.
+- Java code running inside the machine (a script method) can deliver an `@Event` record synchronously with
+  `JSEventEmitter.current().fireNow(record)` (listeners cannot block there); everything else queues events on the
+  computer.
+
+**CC low-level timers/alarms** (they fire events; exposed by the `system` module):
 
 | Function | Parameters | Return | Note |
 |---|---|---|---|
