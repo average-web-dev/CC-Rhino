@@ -63,8 +63,9 @@ public class TestAPI extends ComputerState implements IComputerAPI {
     public final void fail(String message) throws ScriptException {
         LOG.error("Computer '{}' failed with {}", label, message);
         if (markers.contains(ComputerState.DONE)) throw new ScriptException("Cannot call fail/ok multiple times.");
-        markers.add(ComputerState.DONE);
+        // Set the error before the marker, so a reader which sees DONE also sees the failure.
         error = message;
+        markers.add(ComputerState.DONE);
         throw new ScriptException(message);
     }
 

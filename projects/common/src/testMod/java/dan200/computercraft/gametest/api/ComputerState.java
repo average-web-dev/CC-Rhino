@@ -9,7 +9,6 @@ import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.gametest.framework.GameTestSequence;
 import org.jspecify.annotations.Nullable;
 
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,8 +24,9 @@ public class ComputerState {
 
     protected static final Map<String, ComputerState> lookup = new ConcurrentHashMap<>();
 
-    protected final Set<String> markers = new HashSet<>();
-    protected @Nullable String error;
+    // Written on the computer thread and read on the server thread.
+    protected final Set<String> markers = ConcurrentHashMap.newKeySet();
+    protected volatile @Nullable String error;
 
     public boolean isDone(String marker) {
         return markers.contains(marker);

@@ -174,7 +174,7 @@ private fun ScriptTaskContext.findPeripheral(type: String): String? {
     val peripheral = getApi<PeripheralAPI>()
     for (side in ComputerSide.NAMES) {
         val hasType = peripheral.hasType(side, type)
-        if (hasType != null && hasType[0] == true) return side
+        if (hasType == true) return side
     }
 
     return null
@@ -188,7 +188,7 @@ private suspend fun ScriptTaskContext.getPeripheralNames(): List<String> {
         peripherals.add(side)
 
         val hasType = peripheral.hasType(side, "peripheral_hub")
-        if (hasType == null || hasType[0] != true) continue
+        if (hasType != true) continue
 
         val names = peripheral.call(context, ObjectArguments(side, "getNamesRemote")).await() ?: continue
         @Suppress("UNCHECKED_CAST")
@@ -207,7 +207,7 @@ private suspend fun ScriptTaskContext.callRemotePeripheral(name: String, method:
         if (!peripheral.isPresent(side)) continue
 
         val hasType = peripheral.hasType(side, "peripheral_hub")
-        if (hasType == null || hasType[0] != true) continue
+        if (hasType != true) continue
 
         val isPresent = peripheral.call(context, ObjectArguments(side, "isPresentRemote", name)).await() ?: continue
         if (isPresent[0] as Boolean) {

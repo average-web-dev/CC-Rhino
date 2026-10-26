@@ -48,13 +48,12 @@ class Disk_Drive_Test {
     }
 
     /**
-     * [DiskDrivePeripheral] returns `false` when the item is not a disk (or is absent).
+     * [DiskDrivePeripheral] returns `null` when the item is not a disk (or is absent).
      */
     @GameTest
     fun Audio_title_when_empty(helper: GameTestHelper) = helper.sequence {
         thenOnComputer {
-            callPeripheral("right", "getAudioTitle")
-                .assertArrayEquals(false, message = "Correct audio title")
+            assertEquals(null, callPeripheral("right", "getAudioTitle")!![0], "Correct audio title")
         }
     }
 
@@ -107,7 +106,7 @@ class Disk_Drive_Test {
             helper.setContainerItem(BlockPos(1, 2, 2), 0, ItemStack(ModRegistry.Items.DISK.get()))
         }
         thenOnComputer {
-            getApi<FSAPI>().getDrive("disk").assertArrayEquals("right")
+            assertEquals("right", getApi<FSAPI>().getDrive("disk"))
             callPeripheral("right", "ejectDisk")
         }
         thenIdle(2)
