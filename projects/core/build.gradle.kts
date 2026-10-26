@@ -43,7 +43,9 @@ val transpileTypeScript by tasks.registering(cc.tweaked.gradle.NpxExecToDir::cla
 
     output = layout.buildDirectory.dir("generated/js")
 
-    args = listOf("tsc", "--project", "src/ts/tsconfig.json")
+    // tsc plus a Rhino fix-up transform (see the script).
+    inputs.file("src/build/compile-ts.mjs").withPropertyName("compiler")
+    args = listOf("tsx", "src/build/compile-ts.mjs", "--project", "src/ts/tsconfig.json")
 
     onlyIf { hasTypeScriptSources }
 }
@@ -63,7 +65,8 @@ val transpileTestTypeScript by tasks.registering(cc.tweaked.gradle.NpxExecToDir:
 
     output = layout.buildDirectory.dir("generated/testJs")
 
-    args = listOf("tsc", "--project", "src/test/ts/tsconfig.json")
+    inputs.file("src/build/compile-ts.mjs").withPropertyName("compiler")
+    args = listOf("tsx", "src/build/compile-ts.mjs", "--project", "src/test/ts/tsconfig.json")
 }
 
 dependencies {

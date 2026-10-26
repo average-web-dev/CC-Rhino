@@ -400,6 +400,9 @@ function start(): void {
 
     events.on('char', onChar);
     events.on('key',  onKey);
+    // A promise rejected without a handler fails the program that created it (and is printed like any program error,
+    // see run()). Rejections nobody owns anymore — the program already returned, or shell-level code — arrive here.
+    events.on('unhandled_rejection', (error) => print(formatError('<promise>', error)));
     showPrompt();
 }
 

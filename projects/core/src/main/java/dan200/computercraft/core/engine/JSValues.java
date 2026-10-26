@@ -140,7 +140,7 @@ public final class JSValues {
             // main-thread tasks, but it may still yield via MethodResult like any other native method.
             var bridge = new JSMethodBridge(
                 (target, context, args) -> function.call(args), function, NO_CONTEXT,
-                "function", "a /promises module", false, false
+                "function", "a /promises module", !function.isNonYielding(), false
             );
             ScriptRuntime.setFunctionProtoAndParent(bridge, cx, scope);
             return bridge;

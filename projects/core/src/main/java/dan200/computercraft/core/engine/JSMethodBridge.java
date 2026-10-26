@@ -78,21 +78,26 @@ final class JSMethodBridge extends BaseFunction {
 
     private Object callBlocking(Context cx, Scriptable scope, Object[] args) {
         var promises = JSPromises.get(cx);
-        if (mayBlock && promises != null && promises.inAsyncCode()) throw JSPromises.blockingError(cx, scope, name, hint, true);
+        var inAsyncCode = promises != null && promises.inAsyncCode();
+        // A method that may block needs a continuation, so make sure we can capture one *before* it runs and has side
+        // effects. Capturing only freezes the interpreter frames (they are copied on write afterwards); if the method
+        // then returns immediately, the unused continuation is simply dropped. In async code we know it is impossible
+        // without trying — and must not try, as capturing would freeze a generator's frame.
+        ContinuationPending pending = null;
+        if (mayBlock) {
+            if (inAsyncCode) throw JSPromises.blockingError(cx, scope, name, hint, true);
+            pending = capture(cx, scope);
+        }
         try {
             var mr = method.apply(target, context, new JSArguments(args));
             if (mr.getDestination() == null) {
                 return JSValues.toJsResult(cx, scope, mr.getResult());
             }
-            if (promises != null && promises.inAsyncCode()) throw JSPromises.blockingError(cx, scope, name, hint, true);
-            // Method wants to yield — capture a Rhino continuation so JS execution suspends.
-            // The event loop catches the thrown ContinuationPending and resumes it later.
-            ContinuationPending pending;
-            try {
-                pending = cx.captureContinuation();
-            } catch (IllegalStateException e) {
-                // A Java frame (e.g. Array.prototype.forEach, a Promise executor) sits between us and the event loop.
-                throw JSPromises.blockingError(cx, scope, name, hint, false);
+            // Method wants to yield — suspend JS execution with a Rhino continuation. The event loop catches the
+            // thrown ContinuationPending and resumes it later. A method we expected not to block can only fail here.
+            if (pending == null) {
+                if (inAsyncCode) throw JSPromises.blockingError(cx, scope, name, hint, true);
+                pending = capture(cx, scope);
             }
             pending.setApplicationState(mr);
             throw pending;
@@ -132,6 +137,16 @@ final class JSMethodBridge extends BaseFunction {
         } catch (Exception e) {
             LOG.error("Unexpected exception in native method", e);
             return promises.rejected(cx, EventLoop.newError(cx, scope, "Error", INTERNAL_ERROR_MESSAGE));
+        }
+    }
+
+    /** Capture the caller's continuation, or fail with a clear error if a Java frame (a native callback) prevents it. */
+    private ContinuationPending capture(Context cx, Scriptable scope) {
+        try {
+            return cx.captureContinuation();
+        } catch (IllegalStateException e) {
+            // A Java frame (e.g. Array.prototype.forEach, a Promise executor) sits between us and the event loop.
+            throw JSPromises.blockingError(cx, scope, name, hint, false);
         }
     }
 

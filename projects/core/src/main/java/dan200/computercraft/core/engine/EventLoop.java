@@ -51,6 +51,8 @@ public final class EventLoop {
     private static final Logger LOG = LoggerFactory.getLogger(EventLoop.class);
     private static final Object[] NO_ARGS = new Object[0];
     static final String TERMINATED = "Terminated";
+    /** The event an unhandled rejection is reported with when no running thread owns it (see {@link #checkRejections}). */
+    static final String UNHANDLED_REJECTION_EVENT = "unhandled_rejection";
 
     private record Parked(Strand strand, Waiter waiter) {}
 
@@ -116,6 +118,18 @@ public final class EventLoop {
     // Nesting depth of generator resumptions and promise jobs: JS running there is entered from Java and cannot block.
     private int generatorDepth = 0;
     private int promiseJobDepth = 0;
+
+    // Unhandled-rejection tracking (see checkRejections): promises created since the last check, rejections not yet
+    // reported, and every promise a handler was attached to.
+    private record Candidate(Scriptable promise, JSThread owner) {}
+
+    private record Rejection(Scriptable promise, JSThread owner, @Nullable Object reason) {}
+
+    private final List<Candidate> freshPromises = new ArrayList<>();
+    private final List<Rejection> rejections = new ArrayList<>();
+    private final Set<Scriptable> handledPromises = Collections.newSetFromMap(new WeakHashMap<>());
+    private @Nullable Callable promiseThen;
+    private boolean trackingSuppressed = false;
 
     // Set when the safepoint aborts the machine. Rhino's promise machinery catches the abort like any other error, so
     // it may never propagate to us; every piece of JS checks this afterwards instead.
@@ -426,6 +440,115 @@ public final class EventLoop {
         }
     }
 
+    // ------------------------------------------------------------------ unhandled rejections
+
+    /** Enable unhandled-rejection tracking; {@code then} is the original {@code Promise.prototype.then}. */
+    void trackPromises(Callable then) {
+        promiseThen = then;
+    }
+
+    /** A promise was created (by the {@code Promise} constructor, see {@link JSPromises}): it belongs to this thread. */
+    void promiseCreated(Scriptable promise) {
+        if (promiseThen != null && !trackingSuppressed) freshPromises.add(new Candidate(promise, currentThread()));
+    }
+
+    /** A handler was attached to {@code promise}, so its rejection is handled. */
+    void promiseHandled(Scriptable promise) {
+        handledPromises.add(promise);
+    }
+
+    /**
+     * Report rejections that have no handler once the microtask queue is empty, as Node does at the end of a
+     * microtask checkpoint, and start watching the promises created since the last check.
+     *
+     * <ul>
+     *   <li>A promise created by a thread that has been stopped is never reported: its work is discarded.</li>
+     *   <li>If the creating thread is still running (and is not the root thread), it fails with
+     *   {@code Error("Unhandled promise rejection: …")} — like Node ≥ 15, which exits the process. An async program
+     *   that lost an error would otherwise go on half-dead; failing it ends it like any uncaught error, and the shell
+     *   prints the error.</li>
+     *   <li>Otherwise (the root thread — bios and shell — or a thread that has already returned) the error is emitted
+     *   as the {@value #UNHANDLED_REJECTION_EVENT} event, which the shell prints.</li>
+     * </ul>
+     *
+     * <p>Watching a promise means attaching a reaction through the original {@code then}, without marking it handled.
+     * Promises with a handler at the end of the drain they were created in are never watched, so the overhead only
+     * applies to fire-and-forget promises.
+     */
+    private MachineResult checkRejections(Context cx, Scriptable scope) {
+        if (!rejections.isEmpty()) {
+            var pending = new ArrayList<>(rejections);
+            rejections.clear();
+            for (var rejection : pending) {
+                if (handledPromises.contains(rejection.promise()) || rejection.owner().isDead()) continue;
+                var error = rejectionError(cx, scope, rejection.reason());
+                var owner = rejection.owner();
+                if (!owner.isRoot() && owner.state == JSThread.State.RUNNING) {
+                    threadFailed(owner, error);
+                } else {
+                    var r = emit(cx, scope, UNHANDLED_REJECTION_EVENT, new Object[]{ error });
+                    if (r.isError()) return r;
+                }
+            }
+        }
+
+        var then = promiseThen;
+        if (then != null && !freshPromises.isEmpty()) {
+            var fresh = new ArrayList<>(freshPromises);
+            freshPromises.clear();
+            for (var candidate : fresh) {
+                if (handledPromises.contains(candidate.promise())) continue;
+                var watcher = new RejectionWatcher(candidate);
+                ScriptRuntime.setFunctionProtoAndParent(watcher, cx, scope);
+                trackingSuppressed = true; // the reaction's own derived promise is not a candidate
+                try {
+                    then.call(cx, scope, candidate.promise(), new Object[]{ Undefined.instance, watcher });
+                } finally {
+                    trackingSuppressed = false;
+                }
+            }
+        }
+        return MachineResult.OK;
+    }
+
+    /** The reaction watching a candidate promise: records its rejection for {@link #checkRejections}. */
+    @SuppressWarnings("serial") // never serialized
+    private final class RejectionWatcher extends BaseFunction {
+        private static final long serialVersionUID = 1L;
+
+        private final Candidate candidate;
+
+        RejectionWatcher(Candidate candidate) {
+            this.candidate = candidate;
+        }
+
+        @Override
+        public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+            rejections.add(new Rejection(candidate.promise(), candidate.owner(), args.length > 0 ? args[0] : Undefined.instance));
+            return Undefined.instance;
+        }
+    }
+
+    /**
+     * The error an unhandled rejection is reported with: {@code Error("Unhandled promise rejection: <message>")}, with
+     * the reason as its {@code cause} and the reason's stack (so the location points at the original error).
+     */
+    private static Scriptable rejectionError(Context cx, Scriptable scope, @Nullable Object reason) {
+        String description;
+        try {
+            var message = reason instanceof Scriptable s ? ScriptableObject.getProperty(s, "message") : null;
+            description = message instanceof CharSequence m ? m.toString() : ScriptRuntime.toString(reason);
+        } catch (RhinoException e) {
+            description = "(unprintable reason)";
+        }
+        var error = newError(cx, scope, "Error", "Unhandled promise rejection: " + description);
+        ScriptableObject.putProperty(error, "cause", reason);
+        if (reason instanceof Scriptable s && ScriptableObject.getProperty(s, "stack") instanceof CharSequence stack) {
+            ScriptableObject.putProperty(error, "stack", stack.toString());
+        }
+        return error;
+    }
+
     /** Remember that the safepoint aborted the machine (see {@link #abort}). */
     JSAbort noteAbort(JSAbort abort) {
         if (this.abort == null) this.abort = abort;
@@ -540,7 +663,14 @@ public final class EventLoop {
             }
 
             var micro = microtaskQueue.poll();
-            if (micro == null) return MachineResult.OK;
+            if (micro == null) {
+                // The queue is empty: report unhandled rejections, which may queue more work (failing a thread,
+                // running listeners, watching new promises).
+                var r = checkRejections(cx, scope);
+                if (r.isError()) return r;
+                if (ready.isEmpty() && microtaskQueue.isEmpty()) return MachineResult.OK;
+                continue;
+            }
             var r = switch (micro) {
                 case Task task -> task.owner().isDead() ? MachineResult.OK : run(cx, scope, new Strand(task.owner(), false),
                     () -> cx.callFunctionWithContinuations(task.fn(), scope, NO_ARGS));
@@ -725,5 +855,7 @@ public final class EventLoop {
         checkMap.clear();
         awaiting.clear();
         promiseGroups.clear();
+        freshPromises.clear();
+        rejections.clear();
     }
 }

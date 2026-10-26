@@ -6,6 +6,7 @@ package dan200.computercraft.core.engine;
 
 import dan200.computercraft.api.scripting.IComputerAPI;
 import dan200.computercraft.api.scripting.IContext;
+import dan200.computercraft.api.scripting.IDynamicObject;
 import dan200.computercraft.core.methods.ApiMethod;
 import dan200.computercraft.core.methods.MethodSupplier;
 import dan200.computercraft.core.methods.NamedMethod;
@@ -81,7 +82,7 @@ final class JSAPIBuilder {
                 }
             }
 
-            var mayBlock = entry.info() != null && !entry.info().nonYielding();
+            var mayBlock = mayBlock(e.getKey(), entry);
             var bridge = new JSMethodBridge(
                 entry.method(), entry.target(), context, module == null ? name : module + "." + name, hint, mayBlock, promises
             );
@@ -95,5 +96,23 @@ final class JSAPIBuilder {
             ScriptableObject.putProperty(obj, name, fn);
         }
         return found;
+    }
+
+    /**
+     * Whether a method may block. {@code @ScriptFunction}s know it ({@link NamedMethod#nonYielding()}); a dynamic
+     * object's method may block unless it says otherwise ({@link IDynamicObject#isNonYielding(int)}). Methods without
+     * any information (only test doubles) are treated as non-blocking, and only fail once they actually block.
+     */
+    private static boolean mayBlock(String name, Entry entry) {
+        var info = entry.info();
+        if (info != null) return !info.nonYielding();
+        if (entry.target() instanceof IDynamicObject dynamic) {
+            var names = dynamic.getMethodNames();
+            for (var i = 0; i < names.length; i++) {
+                if (names[i].equals(name)) return !dynamic.isNonYielding(i);
+            }
+            return true;
+        }
+        return false;
     }
 }

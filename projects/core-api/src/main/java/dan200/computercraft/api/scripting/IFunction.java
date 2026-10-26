@@ -21,4 +21,37 @@ public interface IFunction {
      * @throws ScriptException Upon Lua errors.
      */
     MethodResult call(IArguments arguments) throws ScriptException;
+
+    /**
+     * Whether this function never yields, i.e. always returns {@link MethodResult#of(Object)}. A function that may
+     * yield (the default, as it cannot be known in advance) is treated as blocking: it cannot be called from async
+     * code (generators, promise callbacks) or from callbacks run by native code, and is rejected there before it runs.
+     *
+     * @return Whether this function never yields.
+     * @see #nonYielding(IFunction)
+     */
+    default boolean isNonYielding() {
+        return false;
+    }
+
+    /**
+     * Mark a function as never yielding (see {@link #isNonYielding()}), so it can be called anywhere, including async
+     * code.
+     *
+     * @param function The function, which must only ever return immediate results.
+     * @return A function with the same behaviour that reports itself as non-yielding.
+     */
+    static IFunction nonYielding(IFunction function) {
+        return new IFunction() {
+            @Override
+            public MethodResult call(IArguments arguments) throws ScriptException {
+                return function.call(arguments);
+            }
+
+            @Override
+            public boolean isNonYielding() {
+                return true;
+            }
+        };
+    }
 }

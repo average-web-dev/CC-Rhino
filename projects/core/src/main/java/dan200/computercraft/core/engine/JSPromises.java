@@ -26,6 +26,11 @@ import org.mozilla.javascript.*;
  * silently discards its own promise chains, while a promise another thread is waiting for still settles (a pending
  * native operation of a stopped thread rejects with {@code Error("Terminated")}, see {@link EventLoop}).
  *
+ * <h2>Unhandled rejections</h2>
+ * The global {@code Promise} is replaced by a constructor reporting every new promise to the {@link EventLoop}, which
+ * reports a rejection that has no handler by the end of a microtask drain (see {@link EventLoop#checkRejections}).
+ * {@code then} marks a promise as handled.
+ *
  * <p>Installed on the machine's Rhino context by {@link JSMachine}, in the same way as {@link JSScheduler}.
  */
 final class JSPromises {
@@ -69,16 +74,88 @@ final class JSPromises {
                 return t;
             }
 
+            // Async generators and `for await` (tsc's output for es2015). Same algorithms as tslib's; they need
+            // Symbol.asyncIterator, which Rhino lacks and the engine polyfills.
+            function __await(v) {
+                return this instanceof __await ? (this.v = v, this) : new __await(v);
+            }
+
+            function __asyncGenerator(thisArg, _arguments, generator) {
+                if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+                var g = apply.call(generator, thisArg, _arguments || []), i, q = [];
+                i = Object.create(Object.prototype);
+                verb("next");
+                verb("throw");
+                verb("return", awaitReturn);
+                i[Symbol.asyncIterator] = function () { return this; };
+                return i;
+                function awaitReturn(f) { return function (v) { return Promise.resolve(v).then(f, reject); }; }
+                function verb(n, f) {
+                    if (g[n]) {
+                        i[n] = function (v) { return new Promise(function (a, b) { q.push([n, v, a, b]) > 1 || resume(n, v); }); };
+                        if (f) i[n] = f(i[n]);
+                    }
+                }
+                function resume(n, v) { try { step(g[n](v)); } catch (e) { settle(q[0][3], e); } }
+                function step(r) { r.value instanceof __await ? Promise.resolve(r.value.v).then(fulfill, reject) : settle(q[0][2], r); }
+                function fulfill(value) { resume("next", value); }
+                function reject(value) { resume("throw", value); }
+                function settle(f, v) { if (f(v), q.shift(), q.length) resume(q[0][0], q[0][1]); }
+            }
+
+            function __asyncDelegator(o) {
+                var i = {}, p;
+                verb("next");
+                verb("throw", function (e) { throw e; });
+                verb("return");
+                i[Symbol.iterator] = function () { return this; };
+                return i;
+                function verb(n, f) {
+                    i[n] = o[n] ? function (v) { return (p = !p) ? { value: __await(o[n](v)), done: false } : f ? f(v) : v; } : f;
+                }
+            }
+
+            function __asyncValues(o) {
+                if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+                var m = o[Symbol.asyncIterator], i;
+                if (m) return m.call(o);
+                o = o[Symbol.iterator]();
+                i = {};
+                verb("next");
+                verb("throw");
+                verb("return");
+                i[Symbol.asyncIterator] = function () { return this; };
+                return i;
+                function verb(n) {
+                    i[n] = o[n] && function (v) {
+                        return new Promise(function (resolve, reject) { v = o[n](v); settle(resolve, reject, v.done, v.value); });
+                    };
+                }
+                function settle(resolve, reject, d, v) {
+                    Promise.resolve(v).then(function (v) { resolve({ value: v, done: d }); }, reject);
+                }
+            }
+
             function run(fn) {
                 if (typeof fn !== "function") throw new TypeError("bad argument #1 (function expected, got " + typeof fn + ")");
                 return __awaiter(undefined, Array.prototype.slice.call(arguments, 1), Promise, fn);
             }
 
             return [
-                { __awaiter: __awaiter, __assign: __assign, __rest: __rest },
+                {
+                    __awaiter: __awaiter, __assign: __assign, __rest: __rest, __await: __await,
+                    __asyncGenerator: __asyncGenerator, __asyncDelegator: __asyncDelegator, __asyncValues: __asyncValues,
+                },
                 { run: run, unwrap: unwrap },
             ];
         })
+        """;
+
+    /** Defines the well-known {@code Symbol.asyncIterator}, which Rhino 1.9.1 lacks (needed by {@code for await}). */
+    private static final String ASYNC_ITERATOR_JS = """
+        if (typeof Symbol.asyncIterator !== "symbol") {
+            Object.defineProperty(Symbol, "asyncIterator", { value: Symbol("Symbol.asyncIterator") });
+        }
         """;
 
     /** Application state of the continuation captured by {@code async.unwrap}: the promise it waits for. */
@@ -129,6 +206,46 @@ final class JSPromises {
         }
     }
 
+    /** The global {@code Promise}: the original constructor, plus reporting each new promise to the event loop. */
+    @SuppressWarnings("serial") // never serialized
+    private final class PromiseConstructor extends BaseFunction {
+        private static final long serialVersionUID = 1L;
+
+        private final Function original;
+
+        PromiseConstructor(Function original, Scriptable prototype) {
+            this.original = original;
+            setImmunePrototypeProperty(prototype);
+        }
+
+        @Override
+        public String getFunctionName() {
+            return "Promise";
+        }
+
+        @Override
+        public int getArity() {
+            return 1;
+        }
+
+        @Override
+        public int getLength() {
+            return 1;
+        }
+
+        @Override
+        public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+            return original.call(cx, scope, thisObj, args); // TypeError: Promise requires new
+        }
+
+        @Override
+        public Scriptable construct(Context cx, Scriptable scope, Object[] args) {
+            var promise = original.construct(cx, scope, args);
+            eventLoop.promiseCreated(promise);
+            return promise;
+        }
+    }
+
     private final EventLoop eventLoop;
     private final Scriptable scope;
     private final Function promiseConstructor;
@@ -138,12 +255,28 @@ final class JSPromises {
     private JSPromises(Context cx, Scriptable scope, EventLoop eventLoop, JSCallShim shim) {
         this.eventLoop = eventLoop;
         this.scope = scope;
-        // Keep the original constructor: scripts may replace the global.
-        promiseConstructor = (Function) ScriptableObject.getProperty(scope, "Promise");
 
-        var promiseProto = (ScriptableObject) promiseConstructor.get("prototype", promiseConstructor);
+        // Replace the global Promise constructor with one that reports every promise it creates to the event loop, for
+        // unhandled-rejection tracking (Rhino's own tracker keeps a static map shared by every computer). It shares
+        // the prototype and static methods, and is the prototype's constructor and its own species, so the promises
+        // Rhino creates for then/all/race/… go through it too. Keep a reference: scripts may replace the global.
+        var nativePromise = (Function) ScriptableObject.getProperty(scope, "Promise");
+        var promiseProto = (ScriptableObject) nativePromise.get("prototype", nativePromise);
+        var constructor = new PromiseConstructor(nativePromise, promiseProto);
+        ScriptRuntime.setFunctionProtoAndParent(constructor, cx, scope);
+        for (var name : new String[]{ "resolve", "reject", "all", "allSettled", "any", "race", "withResolvers" }) {
+            var value = ScriptableObject.getProperty(nativePromise, name);
+            if (value != Scriptable.NOT_FOUND) constructor.defineProperty(name, value, ScriptableObject.DONTENUM);
+        }
+        constructor.put(SymbolKey.SPECIES, constructor, constructor);
+        promiseProto.defineProperty("constructor", constructor, ScriptableObject.DONTENUM);
+        ScriptableObject.defineProperty(scope, "Promise", constructor, ScriptableObject.DONTENUM);
+        promiseConstructor = constructor;
+
         var then = (Callable) ScriptableObject.getProperty(promiseProto, "then");
+        eventLoop.trackPromises(then);
         promiseProto.defineProperty("then", function(cx, new NativeFunction("then", 2, (c, s, thisObj, args) -> {
+            eventLoop.promiseHandled(thisObj);
             var owner = eventLoop.currentThread();
             return then.call(c, s, thisObj, new Object[]{ own(c, owner, arg(args, 0)), own(c, owner, arg(args, 1)) });
         })), ScriptableObject.DONTENUM);
@@ -161,6 +294,8 @@ final class JSPromises {
                 }
             })), ScriptableObject.DONTENUM);
         }
+
+        cx.evaluateString(scope, ASYNC_ITERATOR_JS, "async-iterator.js", 1, null);
 
         var unwrap = shim.wrap(cx, scope, new NativeFunction("unwrap", 1, (c, s, thisObj, args) -> unwrap(c, s, arg(args, 0))));
         var factory = (Function) cx.evaluateString(scope, ASYNC_JS, "async.js", 1, null);

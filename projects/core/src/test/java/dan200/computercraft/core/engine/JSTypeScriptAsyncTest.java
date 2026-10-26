@@ -37,15 +37,42 @@ class JSTypeScriptAsyncTest {
         assertFalse(source.contains("await wp") || source.contains("await collect"), "no native await remains:\n" + source);
     }
 
-    @Test
-    void async_functions_run_on_rhino() throws IOException {
-        var rec = new JSMachineBuilder.Recorder();
-        var machine = new JSMachineBuilder()
+    private static JSMachine machine(String fixture, JSMachineBuilder.Recorder rec) throws IOException {
+        return new JSMachineBuilder()
             .api("w", Map.<String, ApiMethod>of("await", (target, context, args) -> TaskCompletion.await(args.getLong(0))))
             .api(rec, rec.methods())
             // The fixture is a CommonJS module.
-            .bios("(function (exports, module) {\n" + fixture("async.js") + "\n})({}, { exports: {} });")
+            .bios("(function (exports, module) {\n" + fixture(fixture) + "\n})({}, { exports: {} });")
             .build();
+    }
+
+    @Test
+    void async_generators_compile_to_the_tslib_helpers() throws IOException {
+        var source = fixture("async-generators.js");
+        for (var helper : new String[]{ "__asyncGenerator(", "__await(", "__asyncDelegator(", "__asyncValues(" }) {
+            assertTrue(source.contains("tslib_1." + helper), "uses " + helper + ":\n" + source);
+        }
+    }
+
+    @Test
+    void async_generators_and_for_await_run_on_rhino() throws IOException {
+        var rec = new JSMachineBuilder.Recorder();
+        var machine = machine("async-generators.js", rec);
+        try {
+            assertOk(machine.handleEvent(null, null));
+            assertOk(machine.handleEvent("task_complete", new Object[]{ 1L, true, "a" }));
+            assertEquals(List.of(), rec.values, "still waiting");
+            assertOk(machine.handleEvent("task_complete", new Object[]{ 2L, true, "b" }));
+            assertEquals(List.of("a,sync,b,p,q,r"), rec.values);
+        } finally {
+            machine.close();
+        }
+    }
+
+    @Test
+    void async_functions_run_on_rhino() throws IOException {
+        var rec = new JSMachineBuilder.Recorder();
+        var machine = machine("async.js", rec);
         try {
             assertOk(machine.handleEvent(null, null));
             for (var id = 1; id <= 3; id++) {

@@ -95,6 +95,47 @@ class JSPromisesTest {
         public final Handle open() {
             return new Handle();
         }
+
+        /** May block (returns a MethodResult), but returns immediately. */
+        @ScriptFunction
+        public final MethodResult quick(int value) {
+            calls++;
+            return MethodResult.of(value);
+        }
+
+        /** A dynamic object: {@code slow} may block, {@code fast} is declared non-yielding. */
+        @ScriptFunction
+        public final IDynamicObject dynamic() {
+            return new IDynamicObject() {
+                @Override
+                public String[] getMethodNames() {
+                    return new String[]{ "slow", "fast" };
+                }
+
+                @Override
+                public MethodResult callMethod(IContext context, int method, IArguments arguments) {
+                    calls++;
+                    return MethodResult.of(method == 0 ? "slow" : "fast");
+                }
+
+                @Override
+                public boolean isNonYielding(int method) {
+                    return method == 1;
+                }
+            };
+        }
+
+        /** Functions of unknown kind (treated as blocking) and declared non-yielding. */
+        @ScriptFunction
+        public final Map<String, IFunction> functions() {
+            return Map.of(
+                "unknown", args -> {
+                    calls++;
+                    return MethodResult.of("unknown");
+                },
+                "known", IFunction.nonYielding(args -> MethodResult.of("known"))
+            );
+        }
     }
 
     private final ImmediateContext context = new ImmediateContext();
@@ -350,6 +391,57 @@ class JSPromisesTest {
             "w.await blocks and cannot be used inside async code or callbacks run by native code (such as "
                 + "Array.prototype.forEach) — use require('w/promises') instead"
         ), rec.values);
+        assertEquals(0, api.calls, "the method never ran");
+    }
+
+    @Test
+    void blocking_inside_a_promise_executor_throws_before_running() throws Exception {
+        boot("""
+            new Promise(function () { w.main(); })['catch'](function (e) { record(e.message); });
+            """);
+        assertEquals(List.of(
+            "w.main blocks and cannot be used inside async code or callbacks run by native code (such as "
+                + "Array.prototype.forEach) — use require('w/promises') instead"
+        ), rec.values);
+        assertEquals(0, api.calls);
+    }
+
+    @Test
+    void methods_that_may_block_but_return_immediately_work_everywhere_outside_async_code() throws Exception {
+        boot("""
+            var total = 0;
+            function add(n) { if (n > 0) { total += w.quick(n); add(n - 1); } }
+            for (var i = 0; i < 200; i++) total += w.quick(1);
+            add(20);
+            try { total += w.quick(1); throw new Error('x'); } catch (e) { total += w.quick(1); }
+            var fns = [function () { return w.quick(2); }, function () { return w.quick(3); }];
+            for (var j = 0; j < fns.length; j++) total += fns[j]();
+            record(total);
+            record(w.await(1));
+            record(total + w.quick(1));
+            """);
+        assertOk(complete(1, true, "a"));
+        assertEquals(List.of(417L, "a", 418L), rec.values);
+    }
+
+    @Test
+    void dynamic_objects_and_functions_block_unless_declared_non_yielding() throws Exception {
+        boot("""
+            var d = w.dynamic(), f = w.functions();
+            record(d.slow() + ' ' + d.fast() + ' ' + f.unknown() + ' ' + f.known());
+            Promise.resolve().then(function () {
+                record(d.fast() + ' ' + f.known());
+                try { d.slow(); } catch (e) { record(e.message); }
+                try { f.unknown(); } catch (e) { record(e.message); }
+            });
+            """);
+        assertEquals(List.of(
+            "slow fast unknown known",
+            "fast known",
+            "slow blocks and cannot be used inside async code — use the /promises module the object came from instead",
+            "function blocks and cannot be used inside async code — use a /promises module instead"
+        ), rec.values);
+        assertEquals(4, api.calls, "only the calls outside async code and the non-yielding ones ran");
     }
 
     @Test
@@ -361,6 +453,65 @@ class JSPromisesTest {
             """);
         assertOk(complete(1, true, "a"));
         assertEquals(List.of(42L, "a"), rec.values);
+    }
+
+    // ------------------------------------------------------------------ unhandled rejections
+
+    @Test
+    void unhandled_rejection_fails_the_program_that_created_it() throws Exception {
+        boot("""
+            try {
+                parallel.waitForAll(function () {
+                    async.run(function* () { throw new TypeError('lost'); });
+                    w.await(1);
+                    record('not reached');
+                });
+            } catch (e) {
+                record(e.message);
+                record(e.cause instanceof TypeError);
+            }
+            """);
+        assertEquals(List.of("Unhandled promise rejection: lost", true), rec.values);
+    }
+
+    @Test
+    void rejections_handled_before_the_drain_ends_are_not_reported() throws Exception {
+        boot("""
+            events.on('unhandled_rejection', function (e) { record(e.message); });
+            var p = Promise.reject(new Error('late'));
+            events.queueMicrotask(function () { p['catch'](function () { record('caught'); }); });
+            Promise.reject('plain');
+            wp.fail();
+            """);
+        assertEquals(List.of(
+            "caught", "Unhandled promise rejection: plain", "Unhandled promise rejection: ENOENT: no such file"
+        ), rec.values);
+    }
+
+    @Test
+    void later_rejections_of_unhandled_promises_are_reported() throws Exception {
+        boot("""
+            events.on('unhandled_rejection', function (e) { record(e.message); });
+            wp.await(1);
+            wp.await(2).then(null, function (e) { record('handled ' + e.message); });
+            """);
+        assertOk(complete(1, false, "boom"));
+        assertOk(complete(2, false, "boom"));
+        assertEquals(List.of("Unhandled promise rejection: boom", "handled boom"), rec.values);
+    }
+
+    @Test
+    void stopped_threads_do_not_report_rejections() throws Exception {
+        boot("""
+            events.on('unhandled_rejection', function (e) { record(e.message); });
+            var handle = parallel.spawn(function () {
+                wp.await(1);
+                Promise.resolve().then(function () { throw new Error('discarded'); });
+                handle.stop();
+            });
+            """);
+        assertOk(complete(1, true, null));
+        assertEquals(List.of(), rec.values);
     }
 
     // ------------------------------------------------------------------ threads
