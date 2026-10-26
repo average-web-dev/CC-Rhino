@@ -42,12 +42,26 @@ interface ScriptTaskContext {
             val callback = result.callback
             val values = result.result
 
-            if (callback == null) return values
-
-            val filter = if (values == null) null else values[0] as String?
-            result = callback.resume(pullEvent(filter))
+            when (result.destination) {
+                null -> return values
+                MethodResult.Bucket.TIMER -> {
+                    val timer = (values!![0] as Number).toInt()
+                    while (true) {
+                        val event = pullEvent("timer")
+                        if ((event[1] as? Number)?.toInt() == timer) return null
+                    }
+                }
+                MethodResult.Bucket.YIELD -> return null
+                MethodResult.Bucket.IO -> {
+                    val filter = if (values.isNullOrEmpty()) null else values[0] as String?
+                    result = callback!!.resume(pullEvent(filter))
+                }
+            }
         }
     }
+
+    /** Resolve a [MethodResult] until completion, returning its single value. */
+    suspend fun MethodResult.awaitValue(): Any? = await()?.firstOrNull()
 
     /** Call a peripheral method. */
     suspend fun ScriptTaskContext.callPeripheral(name: String, method: String, vararg args: Any?): Array<out Any?>? =

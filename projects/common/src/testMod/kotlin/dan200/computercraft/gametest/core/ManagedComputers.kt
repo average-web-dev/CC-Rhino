@@ -4,9 +4,9 @@
 
 package dan200.computercraft.gametest.core
 
-import dan200.computercraft.core.apis.OSAPI
-import dan200.computercraft.core.engine.CobaltLuaMachine
-import dan200.computercraft.core.engine.ILuaMachine
+import dan200.computercraft.core.apis.SystemAPI
+import dan200.computercraft.core.engine.IMachine
+import dan200.computercraft.core.engine.JSMachine
 import dan200.computercraft.core.engine.MachineEnvironment
 import dan200.computercraft.gametest.api.thenOnComputer
 import dan200.computercraft.mixin.gametest.GameTestInfoAccessor
@@ -18,6 +18,7 @@ import net.minecraft.gametest.framework.GameTestAssertPosException
 import net.minecraft.gametest.framework.GameTestInfo
 import net.minecraft.gametest.framework.GameTestSequence
 import org.slf4j.LoggerFactory
+import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.util.*
 import java.util.concurrent.CancellationException
@@ -25,14 +26,14 @@ import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * Provides a custom [ILuaMachine] which allows computers to run Kotlin or Lua code, depending on their ID.
+ * Provides a custom [IMachine] which allows computers to run Kotlin or JS code, depending on their ID.
  *
- * This allows writing game tests which consume Lua APIs, without having the overhead of starting a new computer for
+ * This allows writing game tests which consume script APIs, without having the overhead of starting a new computer for
  * each test.
  *
  * @see GameTestSequence.thenOnComputer
  */
-object ManagedComputers : ILuaMachine.Factory {
+object ManagedComputers : IMachine.Factory {
     private val LOGGER = LoggerFactory.getLogger(ManagedComputers::class.java)
     private val computers: MutableMap<String, Queue<suspend ScriptTaskContext.() -> Unit>> = mutableMapOf()
 
@@ -62,23 +63,85 @@ object ManagedComputers : ILuaMachine.Factory {
         return monitor
     }
 
-    override fun create(environment: MachineEnvironment, bios: InputStream): ILuaMachine {
-        val os = environment.apis.asSequence().filterIsInstance(OSAPI::class.java).first()
-        val id = os.computerID
-        val label = os.computerLabel
+    override fun create(environment: MachineEnvironment, bios: InputStream): IMachine {
+        val system = environment.apis.asSequence().filterIsInstance<SystemAPI>().first()
+        val id = system.computerID
+        val label = system.computerLabel
         return when {
-            id != 1 -> CobaltLuaMachine(environment, bios)
+            id != 1 -> JSMachine(environment, testBios())
 
-            label != null && label[0] != null -> KotlinMachine(environment, label[0] as String)
+            label != null -> ManagedMachine(environment, label)
 
             else -> {
-                LOGGER.error("Kotlin Lua machine must have a label")
-                CobaltLuaMachine(environment, bios)
+                LOGGER.error("Kotlin machine must have a label")
+                JSMachine(environment, testBios())
             }
         }
     }
 
-    private class KotlinMachine(environment: MachineEnvironment, private val label: String) :
+    private fun testBios(): InputStream = ByteArrayInputStream(TEST_BIOS.toByteArray(Charsets.UTF_8))
+
+    /**
+     * A minimal bios used by every JS computer in the test world, in place of the real ROM boot sequence (see
+     * `ComputerBootstrap` for the unit-test equivalent).
+     *
+     * It defines `print`/`write`, exposes the `test` API as a global (extended with the assertion helpers which were
+     * previously declared in `rom/autorun/cctest.lua`), and then runs `/startup.js` if present. The startup script
+     * (see `data/cctest/computer/startup.js`) runs `/tests/<label>.js` and reports back through [TestAPI].
+     */
+    private val TEST_BIOS = """
+        (function () {
+            var term = require('term');
+            var fs = require('fs');
+            var native = require('test');
+
+            function newLine() {
+                var pos = term.getCursorPos();
+                var size = term.getSize();
+                if (pos.y + 1 >= size.height) {
+                    term.scroll(1);
+                    term.setCursorPos({ x: 0, y: size.height - 1 });
+                } else {
+                    term.setCursorPos({ x: 0, y: pos.y + 1 });
+                }
+            }
+
+            globalThis.write = function (text) { term.write(String(text)); };
+            globalThis.print = function () {
+                term.write(Array.prototype.map.call(arguments, String).join('\t'));
+                newLine();
+            };
+
+            function describe(value) {
+                return typeof value === 'string' ? JSON.stringify(value) : String(value);
+            }
+
+            var test = {
+                ok: function (marker) { native.ok(marker); },
+                fail: function (message) { native.fail(String(message)); },
+                log: function (message) { native.log(String(message)); },
+                assert: function (value, message) {
+                    if (value) return value;
+                    test.fail(message !== undefined ? message : 'Assertion failed');
+                },
+                eq: function (expected, actual, message) {
+                    if (expected === actual) return;
+                    var text = 'Assertion failed:\nExpected ' + describe(expected) + ',\ngot ' + describe(actual);
+                    test.fail(message !== undefined ? message + ' - ' + text : text);
+                },
+                neq: function (expected, actual, message) {
+                    if (expected !== actual) return;
+                    var text = 'Assertion failed:\nExpected something different to ' + describe(expected);
+                    test.fail(message !== undefined ? message + ' - ' + text : text);
+                },
+            };
+            globalThis.test = test;
+
+            if (fs.existsSync('/startup.js')) require('/startup.js');
+        })();
+    """.trimIndent()
+
+    private class ManagedMachine(environment: MachineEnvironment, private val label: String) :
         KotlinMachine(environment) {
         override fun getTask(): (suspend KotlinMachine.() -> Unit)? = computers[label]?.poll()
     }

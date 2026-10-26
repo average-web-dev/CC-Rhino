@@ -10,6 +10,7 @@ import dan200.computercraft.api.pocket.IPocketUpgrade
 import dan200.computercraft.api.upgrades.UpgradeData
 import dan200.computercraft.client.pocket.ClientPocketComputers
 import dan200.computercraft.core.apis.TermAPI
+import dan200.computercraft.core.apis.TermMethods
 import dan200.computercraft.gametest.api.*
 import dan200.computercraft.mixin.gametest.GameTestHelperAccessor
 import dan200.computercraft.shared.ModRegistry
@@ -57,7 +58,7 @@ class Pocket_Computer_Test {
         // Update the terminal contents again.
         thenOnComputer(unique) {
             val term = getApi<TermAPI>()
-            term.setCursorPos(1, 1)
+            term.setCursorPos(TermMethods.CursorPosition(1, 1))
             term.setCursorBlink(true)
             term.write(Coerced("Updated text :)"))
         }
