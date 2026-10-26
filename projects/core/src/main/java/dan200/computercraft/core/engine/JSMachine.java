@@ -129,6 +129,8 @@ public class JSMachine implements IMachine {
             emitter = new JSEventEmitter();
             var shim = new JSCallShim(cx, scope);
             eventLoop = new EventLoop(shim);
+            // Lets native APIs (e.g. fs callbacks) defer JS callbacks onto the event loop.
+            JSScheduler.install(cx, scope, eventLoop);
 
             // Build the module loader and register all CC APIs as native modules.
             var loader = new JSRequire(scope, environment.fileSystem());

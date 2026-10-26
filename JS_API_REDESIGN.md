@@ -42,7 +42,7 @@ Every operation comes twice: blocking (`…Sync`, throws on error) and callback 
 | `writeFileSync` / `writeFile` | `path, data, encoding?` | `void` | (new, convenience) |
 | `appendFileSync` / `appendFile` | `path, data, encoding?` | `void` | (new) |
 | `readdirSync` / `readdir` | `path` | `string[]` | `list` |
-| `mkdirSync` / `mkdir` | `path, {recursive?}` | `void` | `makeDir` (recursive=true default) |
+| `mkdirSync` / `mkdir` | `path, {recursive?}` | `void` | `makeDir` (recursive defaults to false, as in Node) |
 | `rmSync` / `rm` | `path, {recursive?, force?}` | `void` | `delete` |
 | `renameSync` / `rename` | `src, dest` | `void` | `move` |
 | `cpSync` / `cp` | `src, dest, {recursive?}` | `void` | `copy` |
