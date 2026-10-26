@@ -89,6 +89,12 @@ final class JSMachineBuilder {
         }, apiMethods);
     }
 
+    /** Register a real {@link IComputerAPI} whose methods are generated from its {@code @ScriptFunction}s. */
+    JSMachineBuilder api(IComputerAPI api) {
+        apis.add(api);
+        return this;
+    }
+
     /** Register an explicit {@link IComputerAPI} with the given methods (e.g. a {@link Recorder}). */
     JSMachineBuilder api(IComputerAPI api, Map<String, ApiMethod> apiMethods) {
         apis.add(api);

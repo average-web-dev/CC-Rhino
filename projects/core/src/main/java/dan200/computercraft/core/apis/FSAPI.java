@@ -9,12 +9,15 @@ import dan200.computercraft.api.scripting.IArguments;
 import dan200.computercraft.api.scripting.IComputerAPI;
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.scripting.ScriptFunction;
+import dan200.computercraft.core.engine.JSScheduler;
+import dan200.computercraft.core.engine.JSValues;
 import dan200.computercraft.core.filesystem.FileSystem;
 import dan200.computercraft.core.filesystem.FileSystemException;
 import dan200.computercraft.core.metrics.Metrics;
 import org.jspecify.annotations.Nullable;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
+import org.mozilla.javascript.ScriptableObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -24,12 +27,15 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.OpenOption;
 import java.util.*;
 
-import dan200.computercraft.core.engine.JSValues;
+import static dan200.computercraft.api.filesystem.MountConstants.FILE_EXISTS;
+import static dan200.computercraft.api.filesystem.MountConstants.NOT_A_DIRECTORY;
+import static dan200.computercraft.api.filesystem.MountConstants.NO_SUCH_FILE;
 
 /**
  * Interact with the computer's filesystem. Modelled on Node.js {@code fs}: every operation
  * comes in a blocking {@code …Sync} variant (throws on error) and a callback variant that
- * calls {@code (err, result)} before returning.
+ * calls {@code callback(err, result)} on the next event-loop tick, after the call has returned.
+ * Callbacks run like event listeners, so they may use blocking APIs themselves.
  *
  * <p>Path helpers ({@code join}, {@code basename}, …) live in the separate {@code path} module.
  * File handles ({@code openSync} / {@code open}) are deferred to a later phase.
@@ -37,8 +43,7 @@ import dan200.computercraft.core.engine.JSValues;
  * @cc.module fs
  */
 public class FSAPI implements IComputerAPI {
-    private static final Set<OpenOption> READ_EXTENDED =
-        Set.of(java.nio.file.StandardOpenOption.READ, java.nio.file.StandardOpenOption.WRITE);
+    private static final String IS_A_DIRECTORY = "Is a directory";
 
     private final IAPIEnvironment environment;
     private @Nullable FileSystem fileSystem = null;
@@ -82,43 +87,24 @@ public class FSAPI implements IComputerAPI {
      */
     @ScriptFunction
     public final Object readFileSync(String path, Optional<String> encoding) throws ScriptException {
-        var binary = isBinary(encoding.orElse(null));
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            var bytes = doReadBytes(path);
-            return binary ? bytes : new String(bytes, StandardCharsets.UTF_8);
-        } catch (FileSystemException | IOException e) {
-            throw new ScriptException(e.getMessage());
-        }
+        return doReadFile(path, isBinary(encoding.orElse(null)));
     }
 
     /**
-     * Read the entire contents of a file, calling {@code callback(err, data)} when done.
-     * The callback is invoked synchronously (CC filesystem I/O does not block a separate thread).
+     * Read the entire contents of a file, calling {@code callback(err, data)} on the next tick.
      *
      * @param args {@code (path, callback)} or {@code (path, encoding, callback)}.
      * @throws ScriptException On argument errors.
-     * @cc-r.params {@code path: string, encodingOrCallback: string | ((err: string | null, data: string | number[]) => void), callback?: (err: string | null, data: string | number[]) => void}
+     * @cc-r.params {@code path: string, encodingOrCallback: string | ((err: Error | null, data: string) => void), callback?: (err: Error | null, data: string) => void}
      */
     @ScriptFunction
     public final void readFile(IArguments args) throws ScriptException {
         if (args.count() < 2) throw new ScriptException("Expected (path, [encoding,] callback)");
         var path = args.getString(0);
-        String encoding = null;
-        Function callback;
-        if (args.count() >= 3) {
-            encoding = args.getString(1);
-            callback = extractCallback(args.get(2));
-        } else {
-            callback = extractCallback(args.get(1));
-        }
+        var encoding = args.count() >= 3 ? args.getString(1) : null;
+        var callback = extractCallback(args.get(args.count() >= 3 ? 2 : 1));
         var binary = isBinary(encoding);
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            var bytes = doReadBytes(path);
-            Object result = binary ? bytes : new String(bytes, StandardCharsets.UTF_8);
-            callResult(callback, result);
-        } catch (FileSystemException | IOException e) {
-            callError(callback, e.getMessage());
-        }
+        withCallback(callback, () -> doReadFile(path, binary));
     }
 
     // ── Convenience write ─────────────────────────────────────────────────────
@@ -135,40 +121,19 @@ public class FSAPI implements IComputerAPI {
         if (args.count() < 2) throw new ScriptException("Expected (path, data[, encoding])");
         var path = args.getString(0);
         var bytes = toBytesFromArg(args.get(1), args.count() > 2 ? args.getString(2) : null);
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            doWriteBytes(path, bytes, MountConstants.WRITE_OPTIONS);
-        } catch (FileSystemException | IOException e) {
-            throw new ScriptException(e.getMessage());
-        }
+        doWriteFile(path, bytes, MountConstants.WRITE_OPTIONS);
     }
 
     /**
-     * Write data to a file, calling {@code callback(err)} when done.
+     * Write data to a file, calling {@code callback(err)} on the next tick.
      *
      * @param args {@code (path, data, callback)} or {@code (path, data, encoding, callback)}.
      * @throws ScriptException On argument errors.
-     * @cc-r.params {@code path: string, data: string | number[], encodingOrCallback: string | ((err: string | null) => void), callback?: (err: string | null) => void}
+     * @cc-r.params {@code path: string, data: string | number[], encodingOrCallback: string | ((err: Error | null) => void), callback?: (err: Error | null) => void}
      */
     @ScriptFunction
     public final void writeFile(IArguments args) throws ScriptException {
-        if (args.count() < 3) throw new ScriptException("Expected (path, data, [encoding,] callback)");
-        var path = args.getString(0);
-        var rawData = args.get(1);
-        String encoding = null;
-        Function callback;
-        if (args.count() >= 4) {
-            encoding = args.getString(2);
-            callback = extractCallback(args.get(3));
-        } else {
-            callback = extractCallback(args.get(2));
-        }
-        var bytes = toBytesFromArg(rawData, encoding);
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            doWriteBytes(path, bytes, MountConstants.WRITE_OPTIONS);
-            callResult(callback, null);
-        } catch (FileSystemException | IOException e) {
-            callError(callback, e.getMessage());
-        }
+        writeWithCallback(args, MountConstants.WRITE_OPTIONS);
     }
 
     // ── Convenience append ────────────────────────────────────────────────────
@@ -185,40 +150,31 @@ public class FSAPI implements IComputerAPI {
         if (args.count() < 2) throw new ScriptException("Expected (path, data[, encoding])");
         var path = args.getString(0);
         var bytes = toBytesFromArg(args.get(1), args.count() > 2 ? args.getString(2) : null);
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            doWriteBytes(path, bytes, MountConstants.APPEND_OPTIONS);
-        } catch (FileSystemException | IOException e) {
-            throw new ScriptException(e.getMessage());
-        }
+        doWriteFile(path, bytes, MountConstants.APPEND_OPTIONS);
     }
 
     /**
-     * Append data to a file, calling {@code callback(err)} when done.
+     * Append data to a file, calling {@code callback(err)} on the next tick.
      *
      * @param args {@code (path, data, callback)} or {@code (path, data, encoding, callback)}.
      * @throws ScriptException On argument errors.
-     * @cc-r.params {@code path: string, data: string | number[], encodingOrCallback: string | ((err: string | null) => void), callback?: (err: string | null) => void}
+     * @cc-r.params {@code path: string, data: string | number[], encodingOrCallback: string | ((err: Error | null) => void), callback?: (err: Error | null) => void}
      */
     @ScriptFunction
     public final void appendFile(IArguments args) throws ScriptException {
+        writeWithCallback(args, MountConstants.APPEND_OPTIONS);
+    }
+
+    private void writeWithCallback(IArguments args, Set<OpenOption> options) throws ScriptException {
         if (args.count() < 3) throw new ScriptException("Expected (path, data, [encoding,] callback)");
         var path = args.getString(0);
-        var rawData = args.get(1);
-        String encoding = null;
-        Function callback;
-        if (args.count() >= 4) {
-            encoding = args.getString(2);
-            callback = extractCallback(args.get(3));
-        } else {
-            callback = extractCallback(args.get(2));
-        }
-        var bytes = toBytesFromArg(rawData, encoding);
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            doWriteBytes(path, bytes, MountConstants.APPEND_OPTIONS);
-            callResult(callback, null);
-        } catch (FileSystemException | IOException e) {
-            callError(callback, e.getMessage());
-        }
+        var encoding = args.count() >= 4 ? args.getString(2) : null;
+        var callback = extractCallback(args.get(args.count() >= 4 ? 3 : 2));
+        var bytes = toBytesFromArg(args.get(1), encoding);
+        withCallback(callback, () -> {
+            doWriteFile(path, bytes, options);
+            return null;
+        });
     }
 
     // ── Directory operations ──────────────────────────────────────────────────
@@ -232,115 +188,98 @@ public class FSAPI implements IComputerAPI {
      */
     @ScriptFunction
     public final List<String> readdirSync(String path) throws ScriptException {
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            return getFileSystem().list(path);
-        } catch (FileSystemException e) {
-            throw new ScriptException(e.getMessage());
-        }
+        return doReaddir(path);
     }
 
     /**
-     * List a directory, calling {@code callback(err, entries)} when done.
+     * List a directory, calling {@code callback(err, entries)} on the next tick.
      *
      * @param path     The directory path.
      * @param callback Called with {@code (err, string[])} .
      * @throws ScriptException On argument errors.
-     * @cc-r.param callback {@code (err: string | null, entries: string[]) => void}
+     * @cc-r.param callback {@code (err: Error | null, entries: string[]) => void}
      */
     @ScriptFunction
     public final void readdir(String path, Object callback) throws ScriptException {
         var fn = extractCallback(callback);
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            callResult(fn, getFileSystem().list(path));
-        } catch (FileSystemException e) {
-            callError(fn, e.getMessage());
-        }
+        withCallback(fn, () -> doReaddir(path));
     }
 
     /**
-     * Create a directory (and any missing parents) at {@code path}.
+     * Create a directory at {@code path}.
      *
-     * @param path The directory path.
+     * <p>Without {@code recursive} the parent must already exist and {@code path} must not. With
+     * {@code { recursive: true }} missing parents are created and an existing directory is not an error.
+     *
+     * @param path    The directory path.
+     * @param options {@code { recursive?: boolean }}.
      * @throws ScriptException If the directory could not be created.
+     * @cc-r.params {@code path: string, options?: { recursive?: boolean }}
      */
     @ScriptFunction
-    public final void mkdirSync(String path) throws ScriptException {
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            getFileSystem().makeDir(path);
-        } catch (FileSystemException e) {
-            throw new ScriptException(e.getMessage());
-        }
+    public final void mkdirSync(String path, Optional<Map<?, ?>> options) throws ScriptException {
+        doMkdir(path, flag(options.orElse(null), "recursive"));
     }
 
     /**
-     * Create a directory, calling {@code callback(err)} when done.
-     * Accepts an optional {@code options} object (ignored; parents are always created).
+     * Create a directory, calling {@code callback(err)} on the next tick. See {@link #mkdirSync} for the options.
      *
      * @param args {@code (path, callback)} or {@code (path, options, callback)}.
      * @throws ScriptException On argument errors.
-     * @cc-r.params {@code path: string, optionsOrCallback: Record<string, unknown> | ((err: string | null) => void), callback?: (err: string | null) => void}
+     * @cc-r.params {@code path: string, optionsOrCallback: { recursive?: boolean } | ((err: Error | null) => void), callback?: (err: Error | null) => void}
      */
     @ScriptFunction
     public final void mkdir(IArguments args) throws ScriptException {
         if (args.count() < 2) throw new ScriptException("Expected (path, [options,] callback)");
         var path = args.getString(0);
+        var options = optionsAt(args, 1);
         var callback = extractCallback(args.get(args.count() - 1));
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            getFileSystem().makeDir(path);
-            callResult(callback, null);
-        } catch (FileSystemException e) {
-            callError(callback, e.getMessage());
-        }
+        var recursive = flag(options, "recursive");
+        withCallback(callback, () -> {
+            doMkdir(path, recursive);
+            return null;
+        });
     }
 
     // ── File manipulation ─────────────────────────────────────────────────────
 
     /**
-     * Delete a file or directory (and all its contents).
+     * Delete a file or directory.
      *
-     * @param path The path to delete.
+     * <p>Directories are only removed with {@code { recursive: true }} (which also deletes their contents).
+     * {@code { force: true }} ignores a path that does not exist; other errors are still reported.
+     *
+     * @param path    The path to delete.
+     * @param options {@code { recursive?: boolean, force?: boolean }}.
      * @throws ScriptException If the path could not be deleted.
+     * @cc-r.params {@code path: string, options?: { recursive?: boolean, force?: boolean }}
      */
     @ScriptFunction
-    public final void rmSync(String path) throws ScriptException {
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            getFileSystem().delete(path);
-        } catch (FileSystemException e) {
-            throw new ScriptException(e.getMessage());
-        }
+    public final void rmSync(String path, Optional<Map<?, ?>> options) throws ScriptException {
+        var opts = options.orElse(null);
+        doRm(path, flag(opts, "recursive"), flag(opts, "force"));
     }
 
     /**
-     * Delete a file or directory, calling {@code callback(err)} when done.
-     * Accepts an optional {@code options} object; {@code {force:true}} suppresses
-     * errors for non-existent paths.
+     * Delete a file or directory, calling {@code callback(err)} on the next tick. See {@link #rmSync} for the
+     * options.
      *
      * @param args {@code (path, callback)} or {@code (path, options, callback)}.
      * @throws ScriptException On argument errors.
-     * @cc-r.params {@code path: string, optionsOrCallback: { force?: boolean } | ((err: string | null) => void), callback?: (err: string | null) => void}
+     * @cc-r.params {@code path: string, optionsOrCallback: { recursive?: boolean, force?: boolean } | ((err: Error | null) => void), callback?: (err: Error | null) => void}
      */
     @ScriptFunction
     public final void rm(IArguments args) throws ScriptException {
         if (args.count() < 2) throw new ScriptException("Expected (path, [options,] callback)");
         var path = args.getString(0);
+        var options = optionsAt(args, 1);
         var callback = extractCallback(args.get(args.count() - 1));
-        var force = false;
-        if (args.count() >= 3) {
-            var opts = args.get(1);
-            if (opts instanceof Map<?, ?> map) {
-                force = Boolean.TRUE.equals(map.get("force"));
-            }
-        }
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            getFileSystem().delete(path);
-            callResult(callback, null);
-        } catch (FileSystemException e) {
-            if (force) {
-                callResult(callback, null);
-            } else {
-                callError(callback, e.getMessage());
-            }
-        }
+        var recursive = flag(options, "recursive");
+        var force = flag(options, "force");
+        withCallback(callback, () -> {
+            doRm(path, recursive, force);
+            return null;
+        });
     }
 
     /**
@@ -352,73 +291,67 @@ public class FSAPI implements IComputerAPI {
      */
     @ScriptFunction
     public final void renameSync(String src, String dest) throws ScriptException {
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            getFileSystem().move(src, dest);
-        } catch (FileSystemException e) {
-            throw new ScriptException(e.getMessage());
-        }
+        doRename(src, dest);
     }
 
     /**
-     * Move/rename a file or directory, calling {@code callback(err)} when done.
+     * Move/rename a file or directory, calling {@code callback(err)} on the next tick.
      *
      * @param src      Source path.
      * @param dest     Destination path.
      * @param callback Called with {@code (err)}.
      * @throws ScriptException On argument errors.
-     * @cc-r.param callback {@code (err: string | null) => void}
+     * @cc-r.param callback {@code (err: Error | null) => void}
      */
     @ScriptFunction
     public final void rename(String src, String dest, Object callback) throws ScriptException {
         var fn = extractCallback(callback);
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            getFileSystem().move(src, dest);
-            callResult(fn, null);
-        } catch (FileSystemException e) {
-            callError(fn, e.getMessage());
-        }
+        withCallback(fn, () -> {
+            doRename(src, dest);
+            return null;
+        });
     }
 
     /**
      * Copy a file or directory to {@code dest}. Parent directories are created as needed.
      *
-     * @param src  Source path.
-     * @param dest Destination path.
+     * <p>Copying a directory requires {@code { recursive: true }}.
+     *
+     * @param src     Source path.
+     * @param dest    Destination path.
+     * @param options {@code { recursive?: boolean }}.
      * @throws ScriptException If the copy fails.
+     * @cc-r.params {@code src: string, dest: string, options?: { recursive?: boolean }}
      */
     @ScriptFunction
-    public final void cpSync(String src, String dest) throws ScriptException {
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            getFileSystem().copy(src, dest);
-        } catch (FileSystemException e) {
-            throw new ScriptException(e.getMessage());
-        }
+    public final void cpSync(String src, String dest, Optional<Map<?, ?>> options) throws ScriptException {
+        doCopy(src, dest, flag(options.orElse(null), "recursive"));
     }
 
     /**
-     * Copy a file or directory, calling {@code callback(err)} when done.
-     * Accepts an optional {@code options} object (ignored; copy is always recursive).
+     * Copy a file or directory, calling {@code callback(err)} on the next tick. See {@link #cpSync} for the
+     * options.
      *
      * @param args {@code (src, dest, callback)} or {@code (src, dest, options, callback)}.
      * @throws ScriptException On argument errors.
-     * @cc-r.params {@code src: string, dest: string, optionsOrCallback: Record<string, unknown> | ((err: string | null) => void), callback?: (err: string | null) => void}
+     * @cc-r.params {@code src: string, dest: string, optionsOrCallback: { recursive?: boolean } | ((err: Error | null) => void), callback?: (err: Error | null) => void}
      */
     @ScriptFunction
     public final void cp(IArguments args) throws ScriptException {
         if (args.count() < 3) throw new ScriptException("Expected (src, dest, [options,] callback)");
         var src = args.getString(0);
         var dest = args.getString(1);
+        var options = optionsAt(args, 2);
         var callback = extractCallback(args.get(args.count() - 1));
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            getFileSystem().copy(src, dest);
-            callResult(callback, null);
-        } catch (FileSystemException e) {
-            callError(callback, e.getMessage());
-        }
+        var recursive = flag(options, "recursive");
+        withCallback(callback, () -> {
+            doCopy(src, dest, recursive);
+            return null;
+        });
     }
 
     /**
-     * Copy a single file to {@code dest}. Delegates to {@link #cpSync} (CC has no file-only copy).
+     * Copy a single file to {@code dest}. Fails if {@code src} is a directory.
      *
      * @param src  Source file path.
      * @param dest Destination path.
@@ -426,27 +359,25 @@ public class FSAPI implements IComputerAPI {
      */
     @ScriptFunction
     public final void copyFileSync(String src, String dest) throws ScriptException {
-        cpSync(src, dest);
+        doCopy(src, dest, false);
     }
 
     /**
-     * Copy a single file, calling {@code callback(err)} when done.
+     * Copy a single file, calling {@code callback(err)} on the next tick.
      *
      * @param src      Source file path.
      * @param dest     Destination path.
      * @param callback Called with {@code (err)}.
      * @throws ScriptException On argument errors.
-     * @cc-r.param callback {@code (err: string | null) => void}
+     * @cc-r.param callback {@code (err: Error | null) => void}
      */
     @ScriptFunction
     public final void copyFile(String src, String dest, Object callback) throws ScriptException {
         var fn = extractCallback(callback);
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            getFileSystem().copy(src, dest);
-            callResult(fn, null);
-        } catch (FileSystemException e) {
-            callError(fn, e.getMessage());
-        }
+        withCallback(fn, () -> {
+            doCopy(src, dest, false);
+            return null;
+        });
     }
 
     // ── Querying ──────────────────────────────────────────────────────────────
@@ -477,29 +408,21 @@ public class FSAPI implements IComputerAPI {
      */
     @ScriptFunction
     public final Stats statSync(String path) throws ScriptException {
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            return buildStats(path);
-        } catch (FileSystemException e) {
-            throw new ScriptException(e.getMessage());
-        }
+        return doStat(path);
     }
 
     /**
-     * Stat a path, calling {@code callback(err, stats)} when done.
+     * Stat a path, calling {@code callback(err, stats)} on the next tick.
      *
      * @param path     The path to stat.
      * @param callback Called with {@code (err, Stats)}.
-     * @cc-r.param callback {@code (err: string | null, stats: Stats) => void}
+     * @cc-r.param callback {@code (err: Error | null, stats: Stats) => void}
      * @throws ScriptException On argument errors.
      */
     @ScriptFunction
     public final void stat(String path, Object callback) throws ScriptException {
         var fn = extractCallback(callback);
-        try (var ignored = environment.time(Metrics.FS_OPS)) {
-            callResult(fn, buildStats(path));
-        } catch (FileSystemException e) {
-            callError(fn, e.getMessage());
-        }
+        withCallback(fn, () -> doStat(path));
     }
 
     /**
@@ -662,17 +585,128 @@ public class FSAPI implements IComputerAPI {
         return fn;
     }
 
-    private static void callResult(Function fn, @Nullable Object javaResult) {
-        var cx = Context.getCurrentContext();
-        var scope = fn.getParentScope();
-        var jsResult = JSValues.toJs(cx, scope, javaResult);
-        fn.call(cx, scope, scope, new Object[]{ null, jsResult });
+    private static @Nullable Map<?, ?> optionsAt(IArguments args, int index) throws ScriptException {
+        // The options object is optional: it is only present when there is another argument (the callback) after it.
+        if (args.count() <= index + 1) return null;
+        return args.get(index) instanceof Map<?, ?> map ? map : null;
     }
 
-    private static void callError(Function fn, @Nullable String message) {
+    private static boolean flag(@Nullable Map<?, ?> options, String name) {
+        return options != null && Boolean.TRUE.equals(options.get(name));
+    }
+
+    /** An error message in the same {@code /path: reason} form as {@link FileSystemException}. */
+    private static ScriptException pathError(String path, String reason) {
+        return new ScriptException("/" + FileSystem.sanitizePath(path, false) + ": " + reason);
+    }
+
+    // ── Operations shared by the sync and callback variants ───────────────────
+
+    private Object doReadFile(String path, boolean binary) throws ScriptException {
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            var bytes = doReadBytes(path);
+            return binary ? bytes : new String(bytes, StandardCharsets.UTF_8);
+        } catch (FileSystemException | IOException e) {
+            throw new ScriptException(e.getMessage());
+        }
+    }
+
+    private void doWriteFile(String path, byte[] bytes, Set<OpenOption> options) throws ScriptException {
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            doWriteBytes(path, bytes, options);
+        } catch (FileSystemException | IOException e) {
+            throw new ScriptException(e.getMessage());
+        }
+    }
+
+    private List<String> doReaddir(String path) throws ScriptException {
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            return getFileSystem().list(path);
+        } catch (FileSystemException e) {
+            throw new ScriptException(e.getMessage());
+        }
+    }
+
+    private void doMkdir(String path, boolean recursive) throws ScriptException {
+        var fs = getFileSystem();
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            if (!recursive) {
+                if (fs.exists(path)) throw pathError(path, FILE_EXISTS);
+                var parent = FileSystem.getDirectory(path);
+                if (!fs.exists(parent)) throw pathError(parent, NO_SUCH_FILE);
+                if (!fs.isDir(parent)) throw pathError(parent, NOT_A_DIRECTORY);
+            }
+            // makeDir creates missing parents and accepts an existing directory.
+            fs.makeDir(path);
+        } catch (FileSystemException e) {
+            throw new ScriptException(e.getMessage());
+        }
+    }
+
+    private void doRm(String path, boolean recursive, boolean force) throws ScriptException {
+        var fs = getFileSystem();
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            // Mounts silently ignore deleting a missing path, so "not found" has to be detected here.
+            if (!fs.exists(path)) {
+                if (force) return;
+                throw pathError(path, NO_SUCH_FILE);
+            }
+            if (!recursive && fs.isDir(path)) throw pathError(path, IS_A_DIRECTORY);
+            fs.delete(path);
+        } catch (FileSystemException e) {
+            throw new ScriptException(e.getMessage());
+        }
+    }
+
+    private void doRename(String src, String dest) throws ScriptException {
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            getFileSystem().move(src, dest);
+        } catch (FileSystemException e) {
+            throw new ScriptException(e.getMessage());
+        }
+    }
+
+    private void doCopy(String src, String dest, boolean recursive) throws ScriptException {
+        var fs = getFileSystem();
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            if (!recursive && fs.isDir(src)) throw pathError(src, IS_A_DIRECTORY);
+            fs.copy(src, dest);
+        } catch (FileSystemException e) {
+            throw new ScriptException(e.getMessage());
+        }
+    }
+
+    private Stats doStat(String path) throws ScriptException {
+        try (var ignored = environment.time(Metrics.FS_OPS)) {
+            return buildStats(path);
+        } catch (FileSystemException e) {
+            throw new ScriptException(e.getMessage());
+        }
+    }
+
+    // ── Callback delivery ─────────────────────────────────────────────────────
+
+    @FunctionalInterface
+    private interface Operation {
+        @Nullable
+        Object run() throws ScriptException;
+    }
+
+    /**
+     * Run {@code operation} now and deliver its outcome as {@code callback(err, result)} on the next event-loop
+     * tick. Deferring (rather than calling the callback from this Java frame) lets the callback use blocking APIs
+     * and guarantees it never runs before the fs call has returned.
+     */
+    private static void withCallback(Function callback, Operation operation) {
         var cx = Context.getCurrentContext();
-        var scope = fn.getParentScope();
-        var err = cx.newObject(scope, "Error", new Object[]{ message != null ? message : "Unknown error" });
-        fn.call(cx, scope, scope, new Object[]{ err, null });
+        var scope = ScriptableObject.getTopLevelScope(callback);
+        Object err = null, result = null;
+        try {
+            result = JSValues.toJs(cx, scope, operation.run());
+        } catch (ScriptException e) {
+            var message = e.getMessage();
+            err = cx.newObject(scope, "Error", new Object[]{ message != null ? message : "Unknown error" });
+        }
+        JSScheduler.callLater(callback, err, result);
     }
 }

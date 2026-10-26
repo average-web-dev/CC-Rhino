@@ -8,6 +8,8 @@ import dan200.computercraft.api.scripting.IContext;
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.core.methods.ApiMethod;
 import org.mozilla.javascript.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Wraps a single {@link ApiMethod} as a Rhino {@link BaseFunction}.
@@ -19,6 +21,10 @@ import org.mozilla.javascript.*;
 @SuppressWarnings("serial") // BaseFunction is Serializable but our fields aren't — serialization is never used here
 final class JSMethodBridge extends BaseFunction {
     private static final long serialVersionUID = 1L;
+    private static final Logger LOG = LoggerFactory.getLogger(JSMethodBridge.class);
+
+    /** Message of the JS {@code Error} thrown when a native method fails unexpectedly (i.e. not a ScriptException). */
+    static final String INTERNAL_ERROR_MESSAGE = "Internal error in native method";
 
     private final ApiMethod method;
     private final Object target;
@@ -42,12 +48,20 @@ final class JSMethodBridge extends BaseFunction {
             var pending = cx.captureContinuation();
             pending.setApplicationState(mr);
             throw pending;
-        } catch (ContinuationPending e) {
+        } catch (ContinuationPending | RhinoException e) {
+            // Continuations, aborts and JS errors raised by callbacks pass through unchanged.
             throw e;
         } catch (ScriptException e) {
-            throw Context.throwAsScriptRuntimeEx(e);
+            // An intentional API error: surface it as a plain JS Error carrying just the message.
+            throw jsError(cx, scope, e.getMessage() != null ? e.getMessage() : "Unknown error");
         } catch (Exception e) {
-            throw Context.throwAsScriptRuntimeEx(e);
+            // A bug in the native method. Log the details, but don't leak Java class names or messages to scripts.
+            LOG.error("Unexpected exception in native method", e);
+            throw jsError(cx, scope, INTERNAL_ERROR_MESSAGE);
         }
+    }
+
+    private static JavaScriptException jsError(Context cx, Scriptable scope, String message) {
+        return ScriptRuntime.throwError(cx, ScriptableObject.getTopLevelScope(scope), message);
     }
 }
