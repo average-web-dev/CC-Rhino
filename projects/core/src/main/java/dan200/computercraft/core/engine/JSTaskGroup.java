@@ -5,15 +5,15 @@
 package dan200.computercraft.core.engine;
 
 import org.mozilla.javascript.Callable;
-import org.mozilla.javascript.ContinuationPending;
 import org.mozilla.javascript.Undefined;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The threads started by one {@code parallel.waitForAll/waitForAny/waitForN} call, plus the caller's parked
- * continuation, which is resumed once the group settles.
+ * The threads started by one {@code parallel.waitForAll/waitForAny/waitForN} call, plus whatever waits for them: the
+ * caller's parked continuation, or the promise returned by {@code parallel/promises}. It is woken once the group
+ * settles.
  *
  * <p>A group settles when {@link #needed} of its threads have returned, or as soon as one of them fails. Either way the
  * threads still running are killed, so a finished {@code waitFor*} never leaves work behind.
@@ -37,19 +37,20 @@ final class JSTaskGroup {
 
     final Mode mode;
     final int needed;
+    /** The strand that made the call (a non-main strand of the calling thread for {@code parallel/promises}). */
     final Strand waiter;
-    final ContinuationPending pending;
+    final Waiter wake;
     final List<JSThread> threads = new ArrayList<>();
 
     private int returned = 0;
     private int first = -1;
     boolean settled = false;
 
-    JSTaskGroup(Mode mode, int needed, Strand waiter, ContinuationPending pending) {
+    JSTaskGroup(Mode mode, int needed, Strand waiter, Waiter wake) {
         this.mode = mode;
         this.needed = needed;
         this.waiter = waiter;
-        this.pending = pending;
+        this.wake = wake;
     }
 
     /** Record that {@code thread} returned. Returns {@code true} if the group is now complete. */

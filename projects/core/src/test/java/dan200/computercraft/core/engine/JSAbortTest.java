@@ -106,6 +106,21 @@ class JSAbortTest {
         assertSame(MachineResult.TIMEOUT, handle(boot("events.queueMicrotask(function () { abort.hard(); spin(); });"), null));
     }
 
+    /** Rhino's promise machinery catches the abort like any JS error; the event loop must still stop the machine. */
+    @Test
+    void in_a_promise_reaction() throws IOException {
+        assertSame(MachineResult.TIMEOUT, handle(boot("""
+            Promise.resolve().then(function () { abort.hard(); spin(); })['catch'](function () {});
+            """), null));
+    }
+
+    @Test
+    void in_a_promise_executor() throws IOException {
+        assertSame(MachineResult.TIMEOUT, handle(boot("""
+            new Promise(function () { abort.hard(); spin(); });
+            """), null));
+    }
+
     @Test
     void in_a_listener() throws IOException {
         assertTimeoutOn("events.on('go', function () { abort.hard(); spin(); });", "go");
