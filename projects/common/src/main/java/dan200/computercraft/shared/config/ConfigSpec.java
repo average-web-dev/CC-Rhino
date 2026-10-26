@@ -40,6 +40,8 @@ public final class ConfigSpec {
     public static final ConfigFile.Value<Integer> computerThreads;
     public static final ConfigFile.Value<Integer> maxMainGlobalTime;
     public static final ConfigFile.Value<Integer> maxMainComputerTime;
+    public static final ConfigFile.Value<Integer> jsMaxStackDepth;
+    public static final ConfigFile.Value<Integer> jsMaxStringLength;
 
     public static final ConfigFile.Value<Boolean> httpEnabled;
     public static final ConfigFile.Value<Boolean> httpWebsocketEnabled;
@@ -181,6 +183,19 @@ public final class ConfigSpec {
                     Note, we will quite possibly go over this limit, as there's no way to tell how
                     long a will take - this aims to be the upper bound of the average time.""")
                 .defineInRange("max_main_computer_time", (int) TimeUnit.NANOSECONDS.toMillis(MainThreadConfig.DEFAULT_MAX_COMPUTER_TIME), 1, Integer.MAX_VALUE);
+
+            jsMaxStackDepth = builder
+                .comment("""
+                    The maximum number of nested JavaScript function calls on a computer. Deeper
+                    recursion throws a catchable error instead of consuming server memory.""")
+                .defineInRange("js_max_stack_depth", CoreConfig.jsMaxStackDepth, 100, 100_000);
+
+            jsMaxStringLength = builder
+                .comment("""
+                    The maximum length (in UTF-16 code units) of a string built in one step by
+                    String.prototype.repeat, padStart and padEnd. Longer results throw a catchable
+                    RangeError.""")
+                .defineInRange("js_max_string_length", CoreConfig.jsMaxStringLength, 1024, Integer.MAX_VALUE);
 
             builder.pop();
         }
@@ -411,6 +426,10 @@ public final class ConfigSpec {
         CoreConfig.maximumFilesOpen = maximumFilesOpen.get();
         CoreConfig.defaultComputerSettings = defaultComputerSettings.get();
         Config.commandRequireCreative = commandRequireCreative.get();
+
+        // Execution. The stack depth is read when a computer's JS context is created, so it applies on the next boot.
+        CoreConfig.jsMaxStackDepth = jsMaxStackDepth.get();
+        CoreConfig.jsMaxStringLength = jsMaxStringLength.get();
 
         // Update our log filter if needed.
         var logFilter = MarkerFilter.createFilter(
