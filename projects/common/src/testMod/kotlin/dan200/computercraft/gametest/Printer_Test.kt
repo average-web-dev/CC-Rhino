@@ -5,7 +5,9 @@
 package dan200.computercraft.gametest
 
 import dan200.computercraft.api.scripting.Coerced
+import dan200.computercraft.api.scripting.Result as ScriptResult
 import dan200.computercraft.api.scripting.ScriptException
+import dan200.computercraft.core.apis.TermMethods
 import dan200.computercraft.gametest.api.*
 import dan200.computercraft.shared.ModRegistry
 import dan200.computercraft.shared.media.items.PrintoutData
@@ -96,19 +98,19 @@ class Printer_Test {
             val peripheral = printer.peripheral() as PrinterPeripheral
 
             // Try to print with no pages
-            assertFalse(peripheral.newPage(), "newPage fails with no items")
+            assertEquals(ScriptResult.fail("No ink"), peripheral.newPage(), "newPage fails with no items")
 
             // Try to print with just ink
             printer.setItem(0, ItemStack(Items.BLUE_DYE))
             printer.setChanged()
-            assertFalse(peripheral.newPage(), "newPage fails with no paper")
+            assertEquals(ScriptResult.fail("No paper"), peripheral.newPage(), "newPage fails with no paper")
 
             printer.clearContent()
 
             // Try to print with just paper
             printer.setItem(1, ItemStack(Items.PAPER))
             printer.setChanged()
-            assertFalse(peripheral.newPage(), "newPage fails with no ink")
+            assertEquals(ScriptResult.fail("No ink"), peripheral.newPage(), "newPage fails with no ink")
 
             printer.clearContent()
 
@@ -116,22 +118,22 @@ class Printer_Test {
             printer.setItem(0, ItemStack(Items.BLUE_DYE))
             printer.setItem(1, ItemStack(Items.PAPER))
             printer.setChanged()
-            assertTrue(peripheral.newPage(), "newPage succeeds")
+            assertEquals(ScriptResult.succeed(), peripheral.newPage(), "newPage succeeds")
 
             // newPage() should consume both items and update the block state
             helper.assertContainerEmpty(pos)
             helper.assertBlockHas(pos, PrinterBlock.TOP, false, message = "Empty")
             helper.assertBlockHas(pos, PrinterBlock.BOTTOM, false, message = "Empty")
 
-            assertFalse(peripheral.newPage(), "Cannot start a page when already printing")
+            assertEquals(ScriptResult.fail("No ink"), peripheral.newPage(), "Cannot start a page when already printing")
 
             peripheral.setPageTitle(Optional.of("New Page"))
             peripheral.write(Coerced("Hello, world!"))
-            peripheral.setCursorPos(5, 2)
+            peripheral.setCursorPos(TermMethods.CursorPosition(4, 1))
             peripheral.write(Coerced("Second line"))
 
             // Try to finish the page
-            assertTrue(peripheral.endPage(), "endPage prints item")
+            assertEquals(ScriptResult.succeed(), peripheral.endPage(), "endPage prints item")
 
             // endPage() should
             helper.assertBlockHas(pos, PrinterBlock.TOP, false, message = "Empty")
@@ -171,8 +173,8 @@ class Printer_Test {
         thenExecute {
             val printer = helper.getBlockEntity(pos, ModRegistry.BlockEntities.PRINTER.get())
             val peripheral = printer.peripheral() as PrinterPeripheral
-            assertTrue(peripheral.newPage())
-            assertFalse(peripheral.endPage(), "Cannot print when full")
+            assertEquals(ScriptResult.succeed(), peripheral.newPage())
+            assertEquals(ScriptResult.fail("Output tray is full"), peripheral.endPage(), "Cannot print when full")
         }
     }
 

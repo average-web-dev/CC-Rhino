@@ -69,6 +69,7 @@ public class RedstoneAPI extends RedstoneMethods implements IComputerAPI {
      *
      * @return A table of valid sides.
      * @cc.since 1.2
+     * @cc-r.return ComputerSide[]
      */
     @ScriptFunction
     public final List<String> getSides() {

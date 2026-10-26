@@ -58,7 +58,7 @@ public class ReadHandle extends AbstractHandle {
      */
     @Override
     @ScriptFunction
-    public final @Nullable Object seek(Optional<String> whence, Optional<Long> offset) throws ScriptException {
+    public final long seek(Optional<String> whence, Optional<Long> offset) throws ScriptException {
         return super.seek(whence, offset);
     }
 }

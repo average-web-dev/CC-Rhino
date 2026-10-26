@@ -88,7 +88,6 @@ try {
     // }
 
     bash.start();
-    // @ts-ignore
 } catch (error: any) {
     print(formatError('/rom/bin/bash.js', error));
 }

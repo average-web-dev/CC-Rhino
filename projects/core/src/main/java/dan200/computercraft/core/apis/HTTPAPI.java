@@ -10,10 +10,12 @@ import dan200.computercraft.core.apis.http.*;
 import dan200.computercraft.core.apis.http.request.HttpRequest;
 import dan200.computercraft.core.apis.http.websocket.Websocket;
 import dan200.computercraft.core.apis.http.websocket.WebsocketClient;
+import dan200.computercraft.core.util.ScriptUtil;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
+import org.jspecify.annotations.Nullable;
 
 import java.nio.ByteBuffer;
 import java.util.Locale;
@@ -69,12 +71,44 @@ public class HTTPAPI implements IComputerAPI {
     }
 
     /**
+     * The options-object form of {@link #request}'s arguments.
+     *
+     * @param url      The URL to request.
+     * @param body     The request body; its presence makes the default method {@code POST}.
+     * @param headers  Additional request headers.
+     * @param binary   Whether to read the response in binary mode.
+     * @param method   The HTTP method, e.g. {@code "PUT"}. Defaults to {@code GET}, or {@code POST} with a body.
+     * @param redirect Whether to follow redirects (default {@code true}).
+     * @param timeout  The request timeout, in seconds.
+     * @cc-r.interface
+     * @cc-r.options
+     */
+    public record HttpRequestOptions(
+        String url, @Nullable String body, @Nullable Map<String, String> headers, @Nullable Boolean binary,
+        @Nullable String method, @Nullable Boolean redirect, @Nullable Double timeout
+    ) {
+    }
+
+    /**
+     * The options-object form of {@link #websocket}'s arguments.
+     *
+     * @param url     The WebSocket URL to connect to.
+     * @param headers Additional headers for the handshake request.
+     * @param timeout The connection timeout, in seconds.
+     * @cc-r.interface
+     * @cc-r.options
+     */
+    public record WebsocketOptions(String url, @Nullable Map<String, String> headers, @Nullable Double timeout) {
+    }
+
+    /**
      * Make an HTTP request to a website, returning once it has been queued.
      *
      * @param args The request URL (or an options table), and optionally a body, headers, and binary flag.
      * @return Whether the request was successfully queued.
      * @throws ScriptException If the request is malformed.
-     * @cc-r.params {@code url: string | { url: string; body?: string; headers?: Record<string, string>; binary?: boolean; method?: string; redirect?: boolean; timeout?: number }, body?: string | number[], headers?: Record<string, string>, binary?: boolean}
+     * @cc-r.overload {@code (options: HttpRequestOptions): Result}
+     * @cc-r.overload {@code (url: string, body?: string | null, headers?: Record<string, string> | null, binary?: boolean): Result}
      */
     @ScriptFunction
     public final Result request(IArguments args) throws ScriptException {
@@ -84,15 +118,15 @@ public class HTTPAPI implements IComputerAPI {
         boolean binary, redirect;
         Optional<Double> timeoutArg;
 
-        if (args.get(0) instanceof Map) {
-            var options = new ObjectTable(args.getTable(0));
-            address = options.getString("url");
-            postBody = options.optString("body").map(ScriptValues::encode).orElse(null);
-            headerTable = options.optTable("headers").orElse(Map.of());
-            binary = options.optBoolean("binary").orElse(false);
-            requestMethod = options.optString("method").orElse(null);
-            redirect = options.optBoolean("redirect").orElse(true);
-            timeoutArg = options.optFiniteDouble("timeout");
+        if (args.get(0) instanceof Map<?, ?> table) {
+            var options = ScriptUtil.toRecord(table, HttpRequestOptions.class);
+            address = options.url();
+            postBody = options.body() == null ? null : ScriptValues.encode(options.body());
+            headerTable = options.headers() == null ? Map.of() : options.headers();
+            binary = Boolean.TRUE.equals(options.binary());
+            requestMethod = options.method();
+            redirect = !Boolean.FALSE.equals(options.redirect());
+            timeoutArg = optFinite(options.timeout());
         } else {
             // Get URL and post information
             address = args.getString(0);
@@ -132,6 +166,14 @@ public class HTTPAPI implements IComputerAPI {
         }
     }
 
+    /**
+     * Check whether a URL may be requested, without making the request. The answer arrives as an
+     * {@code http_check} event; this only reports whether the check could be queued.
+     *
+     * @param address The URL to check.
+     * @return Whether the check was queued, or why the URL is invalid or blocked.
+     * @throws ScriptException If too many checks are already running.
+     */
     @ScriptFunction
     public final Result checkURL(String address) throws ScriptException {
         try {
@@ -152,7 +194,8 @@ public class HTTPAPI implements IComputerAPI {
      * @param args The WebSocket URL (or an options table), and optionally headers.
      * @return Whether the connection was successfully queued.
      * @throws ScriptException If WebSocket connections are disabled or the URL is malformed.
-     * @cc-r.params {@code url: string | { url: string; headers?: Record<string, string>; timeout?: number }, headers?: Record<string, string>}
+     * @cc-r.overload {@code (options: WebsocketOptions): Result}
+     * @cc-r.overload {@code (url: string, headers?: Record<string, string> | null): Result}
      */
     @ScriptFunction
     public final Result websocket(IArguments args) throws ScriptException {
@@ -164,11 +207,11 @@ public class HTTPAPI implements IComputerAPI {
         Map<?, ?> headerTable;
         Optional<Double> timeoutArg;
 
-        if (args.get(0) instanceof Map) {
-            var options = new ObjectTable(args.getTableUnsafe(0));
-            address = options.getString("url");
-            headerTable = options.optTable("headers").orElse(Map.of());
-            timeoutArg = options.optFiniteDouble("timeout");
+        if (args.get(0) instanceof Map<?, ?> table) {
+            var options = ScriptUtil.toRecord(table, WebsocketOptions.class);
+            address = options.url();
+            headerTable = options.headers() == null ? Map.of() : options.headers();
+            timeoutArg = optFinite(options.timeout());
         } else {
             address = args.getString(0);
             headerTable = args.optTable(1, Map.of());
@@ -207,6 +250,12 @@ public class HTTPAPI implements IComputerAPI {
             headers.set(HttpHeaderNames.USER_AGENT, apiEnvironment.getGlobalEnvironment().getUserAgent());
         }
         return headers;
+    }
+
+    private static Optional<Double> optFinite(@Nullable Double value) throws ScriptException {
+        if (value == null) return Optional.empty();
+        if (!Double.isFinite(value)) throw new ScriptException("bad field 'timeout' (number expected, got " + value + ")");
+        return Optional.of(value);
     }
 
     /**

@@ -26,6 +26,7 @@ import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,15 +53,33 @@ public class CommandAPI implements IComputerAPI {
         return new String[]{ "commands" };
     }
 
-    private static Object createOutput(String output) {
-        return new Object[]{ output };
+    /**
+     * The result of running a command with {@link #exec} (or, as the {@code task_complete} result, {@link #execAsync}).
+     *
+     * @param success  Whether the command executed successfully.
+     * @param output   The output of the command, as a list of lines.
+     * @param affected The number of "affected" objects (the definition varies from command to command), or
+     *                 {@code null} if the command could not be run at all.
+     */
+    public record CommandResult(boolean success, List<String> output, @Nullable Integer affected) {
+        static CommandResult fail(String message) {
+            return new CommandResult(false, List.of(message), null);
+        }
     }
 
-    private Object[] doCommand(String command) {
+    /**
+     * A block position in the world.
+     *
+     * @param x The x coordinate.
+     * @param y The y coordinate.
+     * @param z The z coordinate.
+     */
+    public record BlockPosition(int x, int y, int z) {
+    }
+
+    private CommandResult doCommand(String command) {
         var server = computer.getLevel().getServer();
-        if (!server.isCommandBlockEnabled()) {
-            return new Object[]{ false, createOutput("Command blocks disabled by server") };
-        }
+        if (!server.isCommandBlockEnabled()) return CommandResult.fail("Command blocks disabled by server");
 
         var commandManager = server.getCommands();
         try {
@@ -70,10 +89,10 @@ public class CommandAPI implements IComputerAPI {
                 if (success) state.successes++;
             });
             commandManager.performPrefixedCommand(source, command);
-            return new Object[]{ state.successes > 0, receiver.copyOutput(), state.successes };
+            return new CommandResult(state.successes > 0, receiver.copyOutput(), state.successes);
         } catch (Throwable t) {
             LOG.error(Logging.JAVA_ERROR, "Error running command.", t);
-            return new Object[]{ false, createOutput("Java Exception Thrown: " + t) };
+            return CommandResult.fail("Java Exception Thrown: " + t);
         }
     }
 
@@ -96,11 +115,7 @@ public class CommandAPI implements IComputerAPI {
      * Execute a specific command.
      *
      * @param command The command to execute.
-     * @return See {@code cc.treturn}.
-     * @cc.treturn boolean Whether the command executed successfully.
-     * @cc.treturn { string... } The output of this command, as a list of lines.
-     * @cc.treturn number|nil The number of "affected" objects, or `nil` if the command failed. The definition of this
-     * varies from command to command.
+     * @return Whether the command succeeded, its output, and the number of objects it affected.
      * @cc.changed 1.71 Added return value with command output.
      * @cc.changed 1.85.0 Added return value with the number of affected objects.
      * @cc.usage Set the block above the command computer to stone.
@@ -109,7 +124,7 @@ public class CommandAPI implements IComputerAPI {
      * }</pre>
      */
     @ScriptFunction(mainThread = true)
-    public final Object[] exec(String command) {
+    public final CommandResult exec(String command) {
         return doCommand(command);
     }
 
@@ -120,9 +135,8 @@ public class CommandAPI implements IComputerAPI {
      * command to execute. This allows you to run multiple commands at the same
      * time.
      * <p>
-     * When this command has finished executing, it will queue a `task_complete`
-     * event containing the result of executing this command (what {@link #exec} would
-     * return).
+     * When this command has finished executing, it will queue a {@code task_complete}
+     * event whose result is the {@link CommandResult} {@link #exec} would return.
      *
      * @param context The context this command executes under.
      * @param command The command to execute.
@@ -178,19 +192,17 @@ public class CommandAPI implements IComputerAPI {
         return computer.getLevel().dimension().location().toString();
     }
 
-    // TODO: gps TYPE
     /**
      * Get the position of the current command computer.
      *
      * @return The block's position.
-     * @cc-r.return [ x: number, y: number, z: number ]
      * @cc.see gps.locate To get the position of a non-command computer.
      * @see #getDimension()
      */
     @ScriptFunction
-    public final Object[] getBlockPosition() {
+    public final BlockPosition getBlockPosition() {
         var pos = computer.getPosition();
-        return new Object[]{ pos.getX(), pos.getY(), pos.getZ() };
+        return new BlockPosition(pos.getX(), pos.getY(), pos.getZ());
     }
 
     /**
@@ -210,6 +222,7 @@ public class CommandAPI implements IComputerAPI {
      * @param maxZ      The end z coordinate of the range to query.
      * @param dimension The dimension to query (e.g. "minecraft:overworld"). Defaults to the current dimension.
      * @return A list of information about each block.
+     * @cc-r.return BlockInfo[]
      * @throws ScriptException If the coordinates are not within the world.
      * @throws ScriptException If trying to get information about more than 4096 blocks.
      * @cc.since 1.76
@@ -278,6 +291,7 @@ public class CommandAPI implements IComputerAPI {
      * @param z         The z position of the block to query.
      * @param dimension The dimension to query (e.g. "minecraft:overworld"). Defaults to the current dimension.
      * @return The given block's information.
+     * @cc-r.return BlockInfo
      * @throws ScriptException If the coordinates are not within the world, or are not currently loaded.
      * @cc.changed 1.76 Added block state info to return value
      * @cc.changed 1.99 Added {@code dimension} argument.
@@ -296,6 +310,7 @@ public class CommandAPI implements IComputerAPI {
      * @param selector An <a href="https://minecraft.wiki/w/Target_selectors">entity selector</a>, such as
      *                 <code>@p</code> or <code>@a</code>.
      * @return A list of information about all matching entities.
+     * @cc-r.return EntityDetail[]
      * @throws ScriptException If the entity selector canont be parsed.
      * @cc.since 1.118.0
      * @cc.usage Print the name of all entities within 10 blocks of the command computer.

@@ -10,8 +10,10 @@ import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.terminal.Palette;
 import dan200.computercraft.core.terminal.Terminal;
+import dan200.computercraft.core.util.ScriptUtil;
 
 import java.nio.ByteBuffer;
+import java.util.Map;
 
 /**
  * A base class for all objects which interact with a terminal. Namely the {@link TermAPI} and monitors.
@@ -305,12 +307,18 @@ public abstract class TermMethods {
      * @cc.see colors.unpackRGB To convert from the 24-bit format to three separate channels.
      * @cc.see colors.packRGB To convert from three separate channels to the 24-bit format.
      * @cc.since 1.80pr1
-     * @cc-r.params {@code colour: number, hexOrR: number, g?: number, b?: number}
+     * @cc-r.overload {@code (colour: number, rgb: number): void}
+     * @cc-r.overload {@code (colour: number, rgb: RGB): void}
+     * @cc-r.overload {@code (colour: number, r: number, g: number, b: number): void}
      */
     @ScriptFunction({ "setPaletteColour", "setPaletteColor" })
     public final void setPaletteColour(IArguments args) throws ScriptException {
         var colour = 15 - parseColour(args.getInt(0));
-        if (args.count() == 2) {
+        if (args.get(1) instanceof Map<?, ?> table) {
+            // The shape getPaletteColour returns, so a palette entry can be copied directly.
+            var rgb = ScriptUtil.toRecord(table, RGB.class);
+            setColour(getTerminal(), colour, rgb.r(), rgb.g(), rgb.b());
+        } else if (args.count() == 2) {
             var hex = args.getInt(1);
             var rgb = Palette.decodeRGB8(hex);
             setColour(getTerminal(), colour, rgb[0], rgb[1], rgb[2]);

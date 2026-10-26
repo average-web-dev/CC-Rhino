@@ -38,12 +38,11 @@ public abstract class AbstractFluidMethods<T> implements GenericPeripheral {
      * Each tank either contains some amount of fluid or is empty. Tanks with fluids inside will return some basic
      * information about the fluid, including its name and amount.
      * <p>
-     * The returned table is sparse, and so empty tanks will be `nil` - it is recommended to loop over using [`pairs`]
-     * rather than [`ipairs`].
+     * The returned object is keyed by (1-based) tank number and only has entries for non-empty tanks.
      *
      * @param fluids The current fluid storage.
      * @return All tanks.
-     * @cc.treturn { (table|nil)... } Basic information about all fluids in this fluid storage.
+     * @cc-r.return Record<number, FluidBasicDetail>
      * @cc-r.hide fluids
      */
     @ScriptFunction(mainThread = true)

@@ -5,6 +5,7 @@
 package dan200.computercraft.shared.peripheral.speaker;
 
 import dan200.computercraft.api.scripting.IContext;
+import dan200.computercraft.api.scripting.Result;
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.scripting.ScriptTable;
@@ -191,8 +192,8 @@ public abstract class SpeakerPeripheral implements IPeripheral {
      * number of clicks on a note block. For reference, 0, 12, and 24 map to F#,
      * and 6 and 18 map to C.
      * <p>
-     * A maximum of 8 notes can be played in a single tick. If this limit is hit, this function will return
-     * {@literal false}.
+     * A maximum of 8 notes can be played in a single tick. If this limit is hit, this function fails with
+     * {@code "Too many notes"}.
      * <p>
      * ### Valid instruments
      * The speaker supports [all of Minecraft's noteblock instruments](https://minecraft.wiki/w/Note_Block#Instruments).
@@ -206,11 +207,11 @@ public abstract class SpeakerPeripheral implements IPeripheral {
      * @param instrumentA The instrument to use to play this note.
      * @param volumeA     The volume to play the note at, from 0.0 to 3.0. Defaults to 1.0.
      * @param pitchA      The pitch to play the note at in semitones, from 0 to 24. Defaults to 12.
-     * @return Whether the note could be played as the limit was reached.
+     * @return Whether the note could be played, or why not.
      * @throws ScriptException If the instrument doesn't exist.
      */
     @ScriptFunction
-    public final boolean playNote(IContext context, String instrumentA, Optional<Double> volumeA, Optional<Double> pitchA) throws ScriptException {
+    public final Result playNote(IContext context, String instrumentA, Optional<Double> volumeA, Optional<Double> pitchA) throws ScriptException {
         var volume = (float) clampVolume(checkFinite(1, volumeA.orElse(1.0)));
         var pitch = (float) checkFinite(2, pitchA.orElse(1.0));
 
@@ -226,10 +227,10 @@ public abstract class SpeakerPeripheral implements IPeripheral {
         if (instrument == null) throw new ScriptException("Invalid instrument, \"" + instrument + "\"!");
 
         synchronized (pendingNotes) {
-            if (pendingNotes.size() >= Config.maxNotesPerTick) return false;
+            if (pendingNotes.size() >= Config.maxNotesPerTick) return Result.fail("Too many notes");
             pendingNotes.add(new PendingSound<>(instrument.getSoundEvent(), volume, (float) Math.pow(2.0, (pitch - 12.0) / 12.0)));
         }
-        return true;
+        return Result.succeed();
     }
 
     /**
@@ -238,14 +239,14 @@ public abstract class SpeakerPeripheral implements IPeripheral {
      * This takes the name of a [vanilla Minecraft](https://minecraft.wiki/w/Sounds.json) or modded sound, such as
      * {@code "minecraft:block.note_block.harp"}, as well as an optional volume and pitch.
      * <p>
-     * Only one sound can be played at once. This function will return {@literal false} if another sound was started
-     * this tick, or if some {@link #playAudio audio} is still playing.
+     * Only one sound can be played at once. This function fails if another sound was started this tick, or if some
+     * {@link #playAudio audio} is still playing. Music discs cannot be played.
      *
      * @param context The Lua context
      * @param name    The name of the sound to play.
      * @param volumeA The volume to play the sound at, from 0.0 to 3.0. Defaults to 1.0.
      * @param pitchA  The speed to play the sound at, from 0.5 to 2.0. Defaults to 1.0.
-     * @return Whether the sound could be played.
+     * @return Whether the sound could be played, or why not.
      * @throws ScriptException If the sound name was invalid.
      * @cc.usage Play a creeper hiss with the speaker.
      *
@@ -255,7 +256,7 @@ public abstract class SpeakerPeripheral implements IPeripheral {
      * }</pre>
      */
     @ScriptFunction
-    public final boolean playSound(IContext context, String name, Optional<Double> volumeA, Optional<Double> pitchA) throws ScriptException {
+    public final Result playSound(IContext context, String name, Optional<Double> volumeA, Optional<Double> pitchA) throws ScriptException {
         var volume = (float) clampVolume(checkFinite(1, volumeA.orElse(1.0)));
         var pitch = (float) checkFinite(2, pitchA.orElse(1.0));
 
@@ -269,14 +270,16 @@ public abstract class SpeakerPeripheral implements IPeripheral {
         // TODO: Build a set of sound events at server startup, and cache this.
         var level = getLevel();
         if (soundEvent != null && level.registryAccess().registryOrThrow(Registries.JUKEBOX_SONG).stream().anyMatch(x -> x.soundEvent().value() == soundEvent)) {
-            return false;
+            return Result.fail("Cannot play music discs");
         }
 
         synchronized (lock) {
-            if (pendingSound != null || (dfpwmState != null && dfpwmState.isPlaying())) return false;
+            if (pendingSound != null || (dfpwmState != null && dfpwmState.isPlaying())) {
+                return Result.fail("Another sound is already playing");
+            }
             dfpwmState = null;
             pendingSound = new PendingSound<>(identifier, volume, pitch);
-            return true;
+            return Result.succeed();
         }
     }
 
@@ -284,8 +287,8 @@ public abstract class SpeakerPeripheral implements IPeripheral {
      * Attempt to stream some audio data to the speaker.
      * <p>
      * This accepts a list of audio samples as amplitudes between -128 and 127. These are stored in an internal buffer
-     * and played back at 48kHz. If this buffer is full, this function will return {@literal false}. Programs should
-     * wait for a [`speaker_audio_empty`] event before trying to play audio again.
+     * and played back at 48kHz. If this buffer is full, this function fails with {@code "Audio buffer is full"}.
+     * Programs should wait for a {@code speaker_audio_empty} event before trying to play audio again.
      * <p>
      * The speaker only buffers a single call to {@link #playAudio} at once. This means if you try to play a small
      * number of samples, you'll have a lot of stutter. You should try to play as many samples in one call as possible
@@ -300,7 +303,7 @@ public abstract class SpeakerPeripheral implements IPeripheral {
      * @param context The Lua context.
      * @param audio   The audio data to play.
      * @param volume  The volume to play this audio at.
-     * @return If there was room to accept this audio data.
+     * @return Whether there was room to accept this audio data.
      * @throws ScriptException If the audio data is malformed.
      * @cc.tparam {number...} audio A list of amplitudes.
      * @cc.tparam [opt] number volume The volume to play this audio at. If not given, defaults to the previous volume
@@ -327,7 +330,7 @@ public abstract class SpeakerPeripheral implements IPeripheral {
      * @cc.see speaker_audio For a more complete introduction to the {@link #playAudio} function.
      */
     @ScriptFunction(unsafe = true)
-    public final boolean playAudio(IContext context, ScriptTable<?, ?> audio, Optional<Double> volume) throws ScriptException {
+    public final Result playAudio(IContext context, ScriptTable<?, ?> audio, Optional<Double> volume) throws ScriptException {
         checkFinite(1, volume.orElse(0.0));
 
         // TODO: Use ArgumentHelpers instead?
@@ -343,7 +346,7 @@ public abstract class SpeakerPeripheral implements IPeripheral {
             pendingSound = null;
         }
 
-        return state.pushBuffer(audio, length, volume);
+        return state.pushBuffer(audio, length, volume) ? Result.succeed() : Result.fail("Audio buffer is full");
     }
 
     /**

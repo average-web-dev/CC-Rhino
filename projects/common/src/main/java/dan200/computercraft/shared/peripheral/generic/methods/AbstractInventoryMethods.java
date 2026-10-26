@@ -51,13 +51,12 @@ public abstract class AbstractInventoryMethods<T> implements GenericPeripheral {
      * `count` and an a (potentially nil) hash of the item's `nbt.` This NBT data doesn't contain anything useful, but
      * allows you to distinguish identical items.
      * <p>
-     * The returned table is sparse, and so empty slots will be `nil` - it is recommended to loop over using [`pairs`]
-     * rather than [`ipairs`].
+     * The returned object is keyed by (1-based) slot number and only has entries for non-empty slots.
      *
      * @param inventory The current inventory.
      * @return Basic information about all items in this inventory.
      * @cc-r.hide inventory
-     * @cc.treturn { (table|nil)... } Basic information about all items in this inventory.
+     * @cc-r.return Record<number, ItemBasicDetail>
      * @cc.usage Find an adjacent chest and print all items in it.
      *
      * <pre>{@code
@@ -78,8 +77,9 @@ public abstract class AbstractInventoryMethods<T> implements GenericPeripheral {
      * @param slot      The slot to get information about.
      * @return Information about the item in this slot, or {@code nil} if it is empty.
      * @throws ScriptException If the slot is out of range.
-     * @cc.usage Print some information about the first in a chest.
      * @cc-r.hide inventory
+     * @cc-r.return ItemDetail | null
+     * @cc.usage Print some information about the first in a chest.
      *
      * <pre>{@code
      * local chest = peripheral.find("minecraft:chest")

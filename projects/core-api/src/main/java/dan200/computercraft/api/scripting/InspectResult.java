@@ -13,7 +13,7 @@ import java.util.Map;
  *
  * <p>Use {@link #found(Map)} / {@link #notFound(String)} to construct.
  *
- * @cc-r.union {@code { success: true; data: { name: string; mapColor: number; mapColour: number; state: Record<string, unknown>; tags: Record<string, boolean> } } | { success: false; reason: string }}
+ * @cc-r.union {@code { success: true; data: BlockDetail } | { success: false; reason: string }}
  */
 public record InspectResult(boolean success, @Nullable Map<?, ?> data, @Nullable String reason) {
     /** A successful inspect — a block was found and its details are in {@code data}. */

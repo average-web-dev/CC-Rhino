@@ -5,9 +5,12 @@
 package dan200.computercraft.shared.peripheral.printer;
 
 import dan200.computercraft.api.scripting.Coerced;
+import dan200.computercraft.api.scripting.Result;
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.peripheral.IPeripheral;
+import dan200.computercraft.core.apis.TermMethods.CursorPosition;
+import dan200.computercraft.core.apis.TermMethods.TermSize;
 import dan200.computercraft.core.terminal.Terminal;
 import dan200.computercraft.core.util.StringUtil;
 import org.jspecify.annotations.Nullable;
@@ -89,64 +92,58 @@ public class PrinterPeripheral implements IPeripheral {
     /**
      * Returns the current position of the cursor on the page.
      *
-     * @return The position of the cursor.
+     * @return The position of the cursor. Like {@code term}, coordinates are 0-based.
      * @throws ScriptException If a page isn't being printed.
-     * @cc-r.return [ x: number, y: number ]
      */
     @ScriptFunction
-    public final Object[] getCursorPos() throws ScriptException {
+    public final CursorPosition getCursorPos() throws ScriptException {
         var page = getCurrentPage();
-        var x = page.getCursorX();
-        var y = page.getCursorY();
-        return new Object[]{ x + 1, y + 1 };
+        return new CursorPosition(page.getCursorX(), page.getCursorY());
     }
 
     /**
      * Sets the position of the cursor on the page.
      *
-     * @param x The X coordinate to set the cursor at.
-     * @param y The Y coordinate to set the cursor at.
+     * @param pos The position to move the cursor to, as returned by {@link #getCursorPos}.
      * @throws ScriptException If a page isn't being printed.
      */
     @ScriptFunction
-    public final void setCursorPos(int x, int y) throws ScriptException {
+    public final void setCursorPos(CursorPosition pos) throws ScriptException {
         var page = getCurrentPage();
-        page.setCursorPos(x - 1, y - 1);
+        page.setCursorPos(pos.x(), pos.y());
     }
 
     /**
      * Returns the size of the current page.
      *
-     * @return The size of the page.
+     * @return The size of the page, in characters.
      * @throws ScriptException If a page isn't being printed.
-     * @cc-r.return [ width: number, height: number].
      */
     @ScriptFunction
-    public final Object[] getPageSize() throws ScriptException {
+    public final TermSize getPageSize() throws ScriptException {
         var page = getCurrentPage();
-        var width = page.getWidth();
-        var height = page.getHeight();
-        return new Object[]{ width, height };
+        return new TermSize(page.getWidth(), page.getHeight());
     }
 
     /**
      * Starts printing a new page.
      *
-     * @return Whether a new page could be started.
+     * @return Whether a new page could be started, or why not ({@code "No ink"}, {@code "No paper"} or
+     * {@code "Output tray is full"}).
      */
     @ScriptFunction(mainThread = true)
-    public final boolean newPage() {
+    public final Result newPage() {
         return printer.startNewPage();
     }
 
     /**
      * Finalizes printing of the current page and outputs it to the tray.
      *
-     * @return Whether the page could be successfully finished.
+     * @return Whether the page could be output, or why not ({@code "Output tray is full"}).
      * @throws ScriptException If a page isn't being printed.
      */
     @ScriptFunction(mainThread = true)
-    public final boolean endPage() throws ScriptException {
+    public final Result endPage() throws ScriptException {
         getCurrentPage();
         return printer.endCurrentPage();
     }

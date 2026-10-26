@@ -71,14 +71,12 @@ public abstract class AbstractHandle {
      * @param whence Where the offset is relative to.
      * @param offset The offset to seek to.
      * @return The new position.
-     * @throws ScriptException If the file has been closed.
-     * @cc.treturn [1] number The new position.
-     * @cc.treturn [2] nil If seeking failed.
-     * @cc.treturn string The reason seeking failed.
+     * @throws ScriptException If the file has been closed, {@code whence} is invalid, or seeking failed (for instance
+     *                         because the new position would be negative).
      * @cc.since 1.80pr1.9
      * @cc.changed 1.109.0 Now available on all file handles, not just binary-mode handles.
      */
-    public @Nullable Object seek(Optional<String> whence, Optional<Long> offset) throws ScriptException {
+    public long seek(Optional<String> whence, Optional<Long> offset) throws ScriptException {
         checkOpen();
         long actualOffset = offset.orElse(0L);
         try {
@@ -86,14 +84,14 @@ public abstract class AbstractHandle {
                 case "set" -> channel.position(actualOffset);
                 case "cur" -> channel.position(channel.position() + actualOffset);
                 case "end" -> channel.position(channel.size() + actualOffset);
-                default -> throw new ScriptException("bad argument #1 to 'seek' (invalid option '" + whence + "'");
+                default -> throw new ScriptException("bad argument #1 to 'seek' (invalid option '" + whence.orElse("cur") + "')");
             }
 
             return channel.position();
         } catch (IllegalArgumentException e) {
-            return new Object[]{ null, "Position is negative" };
+            throw new ScriptException("Position is negative");
         } catch (IOException e) {
-            return null;
+            throw new ScriptException(e.getMessage() == null ? "Cannot seek" : e.getMessage());
         }
     }
 
@@ -102,13 +100,12 @@ public abstract class AbstractHandle {
      *
      * @param countArg The number of bytes to read. This may be 0 to determine we are at the end of the file. When
      *                 absent, a single byte will be read.
-     * @return The read bytes.
+     * @return The bytes read, as a (binary) string; with no {@code count} on a binary-mode handle, the value of the
+     * single byte read as a number. {@code null} at the end of the file.
      * @throws ScriptException When trying to read a negative number of bytes.
      * @throws ScriptException If the file has been closed.
-     * @cc.treturn [1] nil If we are at the end of the file.
-     * @cc.treturn [2] number The value of the byte read. This is returned if the file is opened in binary mode and
-     * {@code count} is absent
-     * @cc.treturn [3] string The bytes read as a string. This is returned when the {@code count} is given.
+     * @cc-r.overload {@code (): string | number | null}
+     * @cc-r.overload {@code (count: number): string | null}
      * @cc.changed 1.80pr1 Now accepts an integer argument to read multiple bytes, returning a string instead of a number.
      */
     public @Nullable Object read(Optional<Integer> countArg) throws ScriptException {

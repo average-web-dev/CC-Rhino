@@ -19,6 +19,7 @@ import java.util.Map;
  * specific methods.
  *
  * @cc.module http.Response
+ * @cc-r.extends ReadHandle
  * @see HTTPAPI#request(IArguments)  On how to make a http request.
  */
 public class HttpResponseHandle implements ObjectSource {
@@ -35,15 +36,23 @@ public class HttpResponseHandle implements ObjectSource {
     }
 
     /**
+     * The HTTP status code and reason phrase of a response.
+     *
+     * @param code    The status code, e.g. {@code 200}.
+     * @param message The reason phrase, e.g. {@code "OK"}.
+     */
+    public record HttpStatus(int code, String message) {
+    }
+
+    /**
      * Returns the response code and response message returned by the server.
      *
      * @return The response code and message.
-     * @cc-r.return [ responseCode: number, responseStatus: string ]
      * @cc.changed 1.80pr1.13 Added response message return value.
      */
     @ScriptFunction
-    public final Object[] getResponseCode() {
-        return new Object[]{ responseCode, responseStatus };
+    public final HttpStatus getResponseCode() {
+        return new HttpStatus(responseCode, responseStatus);
     }
 
     /**
