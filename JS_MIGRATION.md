@@ -303,7 +303,7 @@ so the TypeScript compiler can check all ROM/bios sources against the actual CC 
 Defer until the API surface has stabilised (after Phase 9).
 
 - [x] **10.1** Typed module declarations for all CC native modules live in `projects/core/src/ts/types/` — one `.d.ts` per module (`fs`, `path`, `process`, `events`, `http`, `term`, `redstone`, `peripheral`, `turtle`, `commands`, `pocket`), plus `globals.d.ts` (`require` overloads, timers, `sleep`) and `modules.d.ts` (ambient `declare module` for `import` syntax). The `bundleTypeDeclarations` Gradle task collects all `.d.ts` into `build/generated/types/` for publishing as an npm types package. See [JS_API_REDESIGN.md](JS_API_REDESIGN.md).
-- [x] **10.2** Model blocking calls as plain synchronous return types — "can-fail" actions return `Result` `{ success: boolean, reason?: string }` (not a tuple, not a Promise)
+- [x] **10.2** Model blocking calls as plain synchronous return types — "can-fail" actions return `Result` `{ success: boolean, reason?: string }` (not a tuple, not a Promise; the generated `<module>/promises` flavour wraps the same types in `Promise<T>`, #35)
 - [x] **10.3** Keep `.d.ts` in sync as Phase 11 / Phase 9 reshape the API surface — `transpileTypeScript` (part of `assemble`) type-checks the ROM against freshly generated types, and the tsdoclet fails on undocumented `unknown`s
 - [x] **10.4** Audit every `@LuaFunction` method across all API classes (`TurtleMethods`, `FsMethods`, `RedstoneMethods`, `PeripheralAPI`, `HttpMethods`, `PocketAPI`, `CommandsMethods`, etc.) and migrate:
   - **Complex return types** — any method returning `Map<String, ?>`, `Object[]` tuple, or multi-value `MethodResult` that represents a structured value should instead return a typed Java record. The `JSValues.toJs()` record branch and `LuaUtil.toRecord()` infrastructure is already in place.
@@ -553,7 +553,8 @@ Each continuation is bucketed by its phase rather than kept in a single flat lis
 | Security | `cx.setClassShutter(name -> false)`, strip `Packages`/`java` globals |
 | Globals | `require` only — all APIs (`process`, `events`, `turtle`, `term`, `fs`, …) must be loaded with `require()` |
 | Event model | `var events = require('events'); events.on(event, cb)` — synchronous callbacks in `handleEvent()` |
-| Sync ops | `turtle.dig()` returns value directly (`{ ok, reason? }`); no `await`, no Promise |
+| Sync ops | `turtle.dig()` returns value directly (`{ success, reason? }`); blocking is the default |
+| Async ops (#35) | `require('turtle/promises').dig()` returns a `Promise`; promise jobs run in Phase 3; `async.run` / `async.unwrap` bridge the styles; TS `async` compiles to generators + native `tslib` (see `JS_API_REDESIGN.md`, "Async model") |
 | Modules | `require(id)`: checks native registry first, then CC filesystem; `require.paths = ["/rom/lib", "/rom/bin"]` |
 | Native modules | Java APIs registered by name in `JSRequire.nativeModules`; CC `os` split into `process` + `events` modules; engine internals (emitter, scheduler) exposed via `require('events')` through `EventsAPI` |
 | Continuation routing | `MethodResult.Bucket` enum encodes the event-loop phase: `TIMER` → Phase 1 timer map; `IO` → Phase 2 I/O map; `YIELD` → Phase 4 yield queue; `null` → return immediately (no continuation captured) |
@@ -747,6 +748,9 @@ Work done after this plan was written, mostly from the code review in October 20
   #29); Ctrl+T terminates the foreground program (#25). No public `pullEvent`/`queueEvent` (decision in #29).
 - **APIs:** Node-compatible `fs` with Node error codes, callbacks via the event loop (#27); `transferEnergy` /
   `absorbEnergy` exploit fixed (#21); alarms (#31).
-- **Planned:** async model with `require('<module>/promises')` (#35); native array loops ignoring aborts (#37);
-  compatibility layer for CC: Tweaked addons (#33).
+- **Async model (#35):** Rhino promise jobs drained in the microtask phase; engine-generated
+  `require('<module>/promises')` modules (with `.d.ts` from tsdoclet); `require('async')` (`run`, `unwrap`) and a
+  native `tslib`, so TS `async` functions work (ROM `target: es2015` + `importHelpers`); blocking calls inside async
+  code throw a clear error; promise reactions owned by the registering thread (`JSPromises`, `Waiter`).
+- **Planned:** native array loops ignoring aborts (#37); compatibility layer for CC: Tweaked addons (#33).
 
