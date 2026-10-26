@@ -8,6 +8,7 @@ import dan200.computercraft.api.scripting.IContext;
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.scripting.ScriptTask;
 import dan200.computercraft.core.Logging;
+import dan200.computercraft.core.apis.events.CoreEvents;
 import dan200.computercraft.core.filesystem.FileSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,16 +31,12 @@ class JSContext implements IContext {
         final Runnable iTask = () -> {
             try {
                 var result = task.execute();
-                if (result != null) {
-                    computer.queueEvent("task_complete", new Object[]{ taskID, true, result });
-                } else {
-                    computer.queueEvent("task_complete", new Object[]{ taskID, true });
-                }
+                computer.queueEvent(new CoreEvents.TaskComplete(taskID, true, result));
             } catch (ScriptException e) {
-                computer.queueEvent("task_complete", new Object[]{ taskID, false, e.getMessage() });
+                computer.queueEvent(new CoreEvents.TaskComplete(taskID, false, e.getMessage()));
             } catch (Exception t) {
                 LOG.error(Logging.JAVA_ERROR, "Error running task", t);
-                computer.queueEvent("task_complete", new Object[]{ taskID, false, "Java Exception Thrown: " + t });
+                computer.queueEvent(new CoreEvents.TaskComplete(taskID, false, "Java Exception Thrown: " + t));
             }
         };
         if (computer.queueMainThread(iTask)) {

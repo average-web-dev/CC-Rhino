@@ -4,6 +4,10 @@
 
 package dan200.computercraft.core.input;
 
+import dan200.computercraft.api.scripting.Events;
+import dan200.computercraft.core.apis.events.CharEvent;
+import dan200.computercraft.core.apis.events.CoreEvents;
+import dan200.computercraft.core.apis.events.KeyEvent;
 import dan200.computercraft.core.computer.Computer;
 import org.jspecify.annotations.Nullable;
 
@@ -25,42 +29,42 @@ public final class EventComputerInput implements ComputerInput {
 
     @Override
     public void keyDown(int key, boolean repeat) {
-        receiver.queueEvent("key", new Object[]{ key, repeat });
+        receiver.queueEvent(new KeyEvent(key, repeat));
     }
 
     @Override
     public void keyUp(int key) {
-        receiver.queueEvent("key_up", new Object[]{ key });
+        receiver.queueEvent(new CoreEvents.KeyUp(key));
     }
 
     @Override
     public void charTyped(byte chr) {
-        receiver.queueEvent("char", new Object[]{ new byte[]{ chr } });
+        receiver.queueEvent(new CharEvent(String.valueOf((char) (chr & 0xFF))));
     }
 
     @Override
     public void paste(ByteBuffer contents) {
-        receiver.queueEvent("paste", new Object[]{ contents });
+        receiver.queueEvent(new CoreEvents.Paste(contents));
     }
 
     @Override
     public void mouseClick(int button, int x, int y) {
-        receiver.queueEvent("mouse_click", new Object[]{ button, x, y });
+        receiver.queueEvent(new CoreEvents.MouseClick(button, x, y));
     }
 
     @Override
     public void mouseUp(int button, int x, int y) {
-        receiver.queueEvent("mouse_up", new Object[]{ button, x, y });
+        receiver.queueEvent(new CoreEvents.MouseUp(button, x, y));
     }
 
     @Override
     public void mouseDrag(int button, int x, int y) {
-        receiver.queueEvent("mouse_drag", new Object[]{ button, x, y });
+        receiver.queueEvent(new CoreEvents.MouseDrag(button, x, y));
     }
 
     @Override
     public void mouseScroll(int direction, int x, int y) {
-        receiver.queueEvent("mouse_scroll", new Object[]{ direction, x, y });
+        receiver.queueEvent(new CoreEvents.MouseScroll(direction, x, y));
     }
 
     /**
@@ -69,5 +73,10 @@ public final class EventComputerInput implements ComputerInput {
     @FunctionalInterface
     public interface QueueEvent {
         void queueEvent(String event, @Nullable Object @Nullable [] arguments);
+
+        /** Queue an {@link dan200.computercraft.api.scripting.Event @Event} record (see {@link Events}). */
+        default void queueEvent(Record event) {
+            queueEvent(Events.name(event), Events.arguments(event));
+        }
     }
 }

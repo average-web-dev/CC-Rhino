@@ -5,6 +5,7 @@
 package dan200.computercraft.core.apis.http;
 
 import dan200.computercraft.core.apis.IAPIEnvironment;
+import dan200.computercraft.core.apis.events.CoreEvents;
 import org.jspecify.annotations.Nullable;
 
 import java.net.URI;
@@ -16,8 +17,6 @@ import java.util.concurrent.Future;
  * This requires a DNS lookup, and so needs to occur off-thread.
  */
 public class CheckUrl extends Resource<CheckUrl> {
-    private static final String EVENT = "http_check";
-
     private @Nullable Future<?> future;
 
     private final IAPIEnvironment environment;
@@ -45,9 +44,9 @@ public class CheckUrl extends Resource<CheckUrl> {
             var netAddress = NetworkUtils.getAddress(uri, ssl);
             NetworkUtils.getOptions(uri.getHost(), netAddress);
 
-            if (tryClose()) environment.queueEvent(EVENT, address, true);
+            if (tryClose()) environment.queueEvent(new CoreEvents.HttpCheck(address, true, null));
         } catch (HTTPRequestException e) {
-            if (tryClose()) environment.queueEvent(EVENT, address, false, NetworkUtils.toFriendlyError(e));
+            if (tryClose()) environment.queueEvent(new CoreEvents.HttpCheck(address, false, NetworkUtils.toFriendlyError(e)));
         }
     }
 

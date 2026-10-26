@@ -6,10 +6,11 @@ package dan200.computercraft.core.apis;
 
 import dan200.computercraft.api.filesystem.Mount;
 import dan200.computercraft.api.filesystem.WritableMount;
-import dan200.computercraft.api.scripting.*;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.api.peripheral.NotAttachedException;
 import dan200.computercraft.api.peripheral.WorkMonitor;
+import dan200.computercraft.api.scripting.*;
+import dan200.computercraft.core.apis.events.CoreEvents;
 import dan200.computercraft.core.computer.ComputerSide;
 import dan200.computercraft.core.computer.GuardedContext;
 import dan200.computercraft.core.methods.MethodSupplier;
@@ -208,7 +209,7 @@ public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralC
                 if (wrapper.isAttached()) wrapper.detach();
 
                 // Queue a detachment event
-                environment.queueEvent("peripheral_detach", side.getName());
+                environment.queueEvent(new CoreEvents.PeripheralDetach(side.getName()));
             }
 
             // Assign the new peripheral
@@ -221,7 +222,7 @@ public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralC
                 if (running && !wrapper.isAttached()) wrapper.attach();
 
                 // Queue an attachment event
-                environment.queueEvent("peripheral", side.getName());
+                environment.queueEvent(new CoreEvents.PeripheralAttach(side.getName()));
             }
         }
     }

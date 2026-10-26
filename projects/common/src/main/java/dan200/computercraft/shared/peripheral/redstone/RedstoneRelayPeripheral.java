@@ -8,6 +8,7 @@ import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.core.apis.RedstoneAPI;
 import dan200.computercraft.core.apis.RedstoneMethods;
+import dan200.computercraft.core.apis.events.RedstoneEvent;
 import dan200.computercraft.core.redstone.RedstoneAccess;
 import org.jspecify.annotations.Nullable;
 
@@ -65,6 +66,6 @@ public final class RedstoneRelayPeripheral extends RedstoneMethods implements IP
     }
 
     void queueRedstoneEvent(String side, int strength) {
-        computers.queueEvent("redstone", side, strength);
+        computers.queueEvent(new RedstoneEvent(side, strength));
     }
 }

@@ -21,6 +21,7 @@ import dan200.computercraft.shared.computer.core.ServerComputer;
 import dan200.computercraft.shared.computer.core.TerminalSize;
 import dan200.computercraft.shared.config.Config;
 import dan200.computercraft.shared.container.BasicContainer;
+import dan200.computercraft.shared.peripheral.PeripheralEvents;
 import dan200.computercraft.shared.platform.PlatformHelper;
 import dan200.computercraft.shared.turtle.TurtleOverlay;
 import dan200.computercraft.shared.turtle.core.TurtleBrain;
@@ -106,7 +107,7 @@ public class TurtleBlockEntity extends AbstractComputerBlockEntity implements Ba
         brain.update();
         if (inventoryChanged) {
             var computer = getServerComputer();
-            if (computer != null) computer.queueEvent("turtle_inventory");
+            if (computer != null) computer.queueEvent(new PeripheralEvents.TurtleInventory());
             inventoryChanged = false;
         }
     }

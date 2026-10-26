@@ -8,6 +8,7 @@ import com.google.common.base.Strings;
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.core.Logging;
 import dan200.computercraft.core.apis.IAPIEnvironment;
+import dan200.computercraft.core.apis.events.CoreEvents;
 import dan200.computercraft.core.apis.http.*;
 import dan200.computercraft.core.apis.http.options.Options;
 import dan200.computercraft.core.metrics.Metrics;
@@ -139,21 +140,21 @@ public class Websocket extends Resource<Websocket> implements WebsocketClient {
 
 
         var handle = new WebsocketHandle(environment, address, this, headers, options);
-        environment().queueEvent(SUCCESS_EVENT, address, handle);
+        environment().queueEvent(new CoreEvents.WebsocketSuccess(address, handle));
         createOwnerReference(handle);
 
         checkClosed();
     }
 
     void failure(String message) {
-        if (tryClose()) environment.queueEvent(FAILURE_EVENT, address, message);
+        if (tryClose()) environment.queueEvent(new CoreEvents.WebsocketFailure(address, message));
     }
 
     void close(int status, String reason) {
         if (tryClose()) {
-            environment.queueEvent(CLOSE_EVENT, address,
+            environment.queueEvent(new CoreEvents.WebsocketClosed(address,
                 Strings.isNullOrEmpty(reason) ? null : reason,
-                status < 0 ? null : status);
+                status < 0 ? null : status));
         }
     }
 

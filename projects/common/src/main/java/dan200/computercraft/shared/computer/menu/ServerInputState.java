@@ -4,6 +4,7 @@
 
 package dan200.computercraft.shared.computer.menu;
 
+import dan200.computercraft.core.apis.events.CoreEvents;
 import dan200.computercraft.core.apis.handles.ByteBufferChannel;
 import dan200.computercraft.core.apis.transfer.TransferredFile;
 import dan200.computercraft.core.apis.transfer.TransferredFiles;
@@ -89,15 +90,15 @@ public class ServerInputState implements ServerInputHandler {
             }
         }
 
-        computer.queueEvent(TransferredFiles.EVENT, new Object[]{
+        computer.queueEvent(new CoreEvents.FileTransfer(
             new TransferredFiles(
                 toUpload.stream().map(x -> new TransferredFile(x.getName(), new ByteBufferChannel(x.getBytes()))).toList(),
                 () -> {
                     if (player.isAlive() && player.containerMenu == owner) {
                         ServerNetworking.sendToPlayer(UploadResultMessage.consumed(owner), player);
                     }
-                }),
-        });
+                })
+        ));
         return UploadResultMessage.queued(owner);
     }
 

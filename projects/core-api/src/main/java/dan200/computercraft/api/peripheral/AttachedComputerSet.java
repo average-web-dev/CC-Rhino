@@ -94,6 +94,16 @@ public final class AttachedComputerSet {
     }
 
     /**
+     * {@linkplain IComputerAccess#queueEvent(Record) Queue an event record} on all computers.
+     *
+     * @param event The event to queue.
+     * @see IComputerAccess#queueEvent(Record)
+     */
+    public void queueEvent(Record event) {
+        forEach(c -> c.queueEvent(event));
+    }
+
+    /**
      * Determine if this collection contains any computers.
      * <p>
      * This method is primarily intended for presentation purposes (such as rendering an icon in the UI if a computer

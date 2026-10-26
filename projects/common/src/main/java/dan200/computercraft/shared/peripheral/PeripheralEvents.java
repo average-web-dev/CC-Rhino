@@ -57,4 +57,9 @@ public final class PeripheralEvents {
     @Event("turtle_inventory")
     public record TurtleInventory() {
     }
+
+    /** A command computer was sent arguments with {@code /computercraft queue}: one event argument per word. */
+    @Event("computer_command")
+    public record ComputerCommand(String... args) {
+    }
 }

@@ -4,14 +4,14 @@
 
 package dan200.computercraft.shared.peripheral.speaker;
 
+import dan200.computercraft.api.peripheral.AttachedComputerSet;
+import dan200.computercraft.api.peripheral.IComputerAccess;
+import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.api.scripting.IContext;
 import dan200.computercraft.api.scripting.Result;
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.scripting.ScriptTable;
-import dan200.computercraft.api.peripheral.AttachedComputerSet;
-import dan200.computercraft.api.peripheral.IComputerAccess;
-import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.core.util.Nullability;
 import dan200.computercraft.shared.config.Config;
 import dan200.computercraft.shared.network.client.SpeakerAudioClientMessage;
@@ -19,6 +19,7 @@ import dan200.computercraft.shared.network.client.SpeakerMoveClientMessage;
 import dan200.computercraft.shared.network.client.SpeakerPlayClientMessage;
 import dan200.computercraft.shared.network.client.SpeakerStopClientMessage;
 import dan200.computercraft.shared.network.server.ServerNetworking;
+import dan200.computercraft.shared.peripheral.PeripheralEvents;
 import dan200.computercraft.shared.util.PauseAwareTimer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
@@ -148,7 +149,7 @@ public abstract class SpeakerPeripheral implements IPeripheral {
             syncedPosition(position);
 
             // And notify computers that we have space for more audio.
-            computers.forEach(c -> c.queueEvent("speaker_audio_empty", c.getAttachmentName()));
+            computers.forEach(c -> c.queueEvent(new PeripheralEvents.SpeakerAudioEmpty(c.getAttachmentName())));
         }
 
         // Push position updates to any speakers which have ever played a note,

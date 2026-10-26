@@ -6,6 +6,7 @@ package dan200.computercraft.api.peripheral;
 
 import dan200.computercraft.api.filesystem.Mount;
 import dan200.computercraft.api.filesystem.WritableMount;
+import dan200.computercraft.api.scripting.Events;
 import dan200.computercraft.api.scripting.ICallback;
 import dan200.computercraft.api.scripting.IContext;
 import dan200.computercraft.api.scripting.ScriptTask;
@@ -137,6 +138,19 @@ public interface IComputerAccess {
      * @see MethodResult#pullEvent(String, ICallback)
      */
     void queueEvent(String event, @Nullable Object... arguments);
+
+    /**
+     * Queue an event declared as an {@link dan200.computercraft.api.scripting.Event @Event} record: its name comes from
+     * the annotation and its arguments from the record's components, so the event always matches its declaration
+     * (and the generated TypeScript {@code EventMap}).
+     *
+     * @param event The event to queue.
+     * @throws NotAttachedException If the peripheral has been detached.
+     * @see dan200.computercraft.api.scripting.Events
+     */
+    default void queueEvent(Record event) {
+        queueEvent(Events.name(event), Events.arguments(event));
+    }
 
     /**
      * Get a string, unique to the computer, by which the computer refers to this peripheral.
