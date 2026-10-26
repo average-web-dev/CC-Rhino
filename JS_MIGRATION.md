@@ -259,7 +259,7 @@ after `JS_ROM_FEATURES.md` defines the feature contracts.
 
 - [x] **7.5.1** Create `projects/core/src/ts/rom/` (empty placeholder; populated in Phase 11)
 - [x] **7.5.2** Update `ComputerExecutor` to mount `js/rom` at `/rom` in the CC filesystem
-- [ ] **7.5.3** Update `bios.ts` to attempt `require("/startup")` (silently ignores `MODULE_NOT_FOUND`) then boot `/rom/programs/shell.js`
+- [ ] **7.5.3** Update `bios.ts` to attempt `require("/startup")` (silently ignores `MODULE_NOT_FOUND`) then boot `/rom/programs/shell.js` — *bios now boots `/rom/os` → `/rom/bin/bash`; startup scripts are tracked in #1*
 - [ ] **Commit** — stage Phase 7.5 files; propose commit message; wait for user approval
 
 ---
@@ -272,7 +272,7 @@ after `JS_ROM_FEATURES.md` defines the feature contracts.
 - [x] **8.4** `JSConcurrentEventTest.java` — while a continuation is pending (dig in progress), call `handleEvent("redstone", ...)` and verify the `os.on("redstone", cb)` callback fires without resuming the dig continuation; then `task_complete` resumes it.
 - [x] **8.5** `JSRequireTest.java` — write a virtual `.js` file to a `MemoryMount` filesystem; `require()` it from bios.js; verify it executes and `module.exports` is returned, is cached across requires, and that a missing module throws `MODULE_NOT_FOUND`.
 - [x] **8.6** `JSSafePointTest.java` — run `while(true){}` in user JS and trigger an abort from another thread; verify `MachineResult.TIMEOUT` (hard) / abort-message error (soft) is returned within a bounded time.
-- [ ] **8.7** Remove/adapt Cobalt-specific tests:
+- [x] **8.7** Remove/adapt Cobalt-specific tests: — *done: Cobalt tests deleted; `ComputerBootstrap`/`MethodTest`/`ComputerTest` ported to JS*
   - Delete `CobaltLuaTableTest.java`, `VarargArgumentsTest.java`, `ErrorInfoLibTest.java`
   - Adapt `ComputerTestDelegate.java` to use `JSMachine` instead of `CobaltLuaMachine`
   - Delete `LuaCoverage.java` (Lua-specific)
@@ -424,10 +424,10 @@ Implement in strict dependency order. Each item is a separate file commit.
 
 #### Tier 2 — OS layer + shell (depends on Tier 0–1)
 
-- [ ] **11.13** `src/ts/bios.ts` — hardware init only: terminal reset, banner, `require.paths`, boot `/rom/os`
-- [ ] **11.14** `src/ts/rom/os/index.ts` — device detection, PATH, aliases, completion registration, autorun, startup discovery, launch bash
+- [ ] **11.13** `src/ts/bios.ts` — hardware init only: terminal reset, banner, `require.paths`, boot `/rom/os` — *partial: boot menu, `require.paths`, boots `/rom/os`; globals leak tracked in #34*
+- [ ] **11.14** `src/ts/rom/os/index.ts` — device detection, PATH, aliases, completion registration, autorun, startup discovery, launch bash — *partial: device detection + `require.paths`; aliases/autorun/startup in #1*
 - [ ] **11.15** `src/ts/rom/lib/cc/shell/completion.ts` — completion handler factories (`file`, `program`, `help`, `peripheral`)
-- [ ] **11.16** `src/ts/rom/bin/bash.ts` — readline loop, PATH search, alias resolution, tab-complete, built-ins (cd, exit, alias, set, help, clear, pwd)
+- [ ] **11.16** `src/ts/rom/bin/bash.ts` — readline loop, PATH search, alias resolution, tab-complete, built-ins (cd, exit, alias, set, help, clear, pwd) — *partial: line editing, history, `$VAR`, tab completion, cd/exit/export/unset/env, Ctrl+T; rest in #4*
 
 #### Tier 3 — Peripheral + network libraries (depends on Tier 0–2)
 
@@ -445,8 +445,8 @@ Implement in strict dependency order. Each item is a separate file commit.
 
 #### Tier 5 — Built-in programs (depends on Tier 0–4)
 
-- [ ] **11.25** File management: `ls.ts`, `cp.ts`, `mv.ts`, `rm.ts`, `mkdir.ts`, `type.ts`, `drive.ts`
-- [ ] **11.26** Info/control: `id.ts`, `label.ts`, `reboot.ts`, `shutdown.ts`, `clear.ts`, `time.ts`, `about.ts`
+- [ ] **11.25** File management: `ls.ts`, `cp.ts`, `mv.ts`, `rm.ts`, `mkdir.ts`, `type.ts`, `drive.ts` — *partial: `ls`, `cp`, `mv`, `rm`, `mkdir`, `cat`, `echo` in `rom/os/bin`*
+- [ ] **11.26** Info/control: `id.ts`, `label.ts`, `reboot.ts`, `shutdown.ts`, `clear.ts`, `time.ts`, `about.ts` — *partial: `clear`*
 - [ ] **11.27** `help.ts` (program) — page help topics from `/rom/help/`; `programs.ts` — list available commands
 - [x] **11.28** `edit.ts` — full-screen text editor (MVP): load/create, cursor + scroll, insert/Enter/Backspace/Delete, paste, term_resize, Ctrl menu (Save/Exit). Established the **interactive-program model**: `main()` blocks on a `system.yield()` spin while its own `events.on('char'/'key'/'paste')` callbacks edit; `bash` suspends its own input listeners while a program runs. Follow-ups:
   - [ ] **11.28a** Syntax highlighting for `.ts`/`.js` — `term.blit` per line + a tokenizer in a shared `rom/lib/cc/syntax.ts` (keyword/string/template/number/comment/identifier → colour). Must thread a multiline carry state (block comments, template literals) from the top of the viewport down. Reused by `js.ts` (11.29).
@@ -458,7 +458,7 @@ Implement in strict dependency order. Each item is a separate file commit.
 - [ ] **11.30** `monitor.ts` — run a program redirecting its terminal output to an attached monitor peripheral
 - [ ] **11.31** Network programs: `wget.ts`, `pastebin.ts` (upload/download)
 - [ ] **11.32** Rednet programs: `chat.ts` (send/receive messages), `repeat.ts` (wireless relay daemon)
-- [ ] **11.33** Peripheral utilities: `peripherals.ts` (list attached), `redstone.ts` (inspect/set sides)
+- [ ] **11.33** Peripheral utilities: `peripherals.ts` (list attached), `redstone.ts` (inspect/set sides) — *partial: `peripherals`*
 - [ ] **11.34** Turtle programs: `go.ts`, `turn.ts`, `excavate.ts`, `tunnel.ts`, `refuel.ts`, `craft.ts`, `dance.ts`, `equip.ts`, `unequip.ts`
 - [ ] **11.35** Pocket programs: `equip.ts`, `unequip.ts`, `falling.ts`
 - [ ] **11.36** Command-computer programs: `commands.ts`, `exec.ts`
@@ -532,7 +532,7 @@ Each continuation is bucketed by its phase rather than kept in a single flat lis
 - [x] **12.5** Add `EventLoop.drainMicrotasks()` — called after Phase 1 and Phase 2; drains recursively so microtasks queued by microtasks also run before the next I/O phase
 - [x] **12.6** Expose `queueMicrotask(fn)` as a JS global backed by the microtask queue
 - [x] **12.7** Expose `setImmediate(fn)` / `clearImmediate(handle)` as JS globals backed by `checkMap`
-- [ ] **12.8** Verify: `os.sleep(0.05)` resumes exactly 1 tick later; multiple concurrent sleeps each fire at the right tick; `queueMicrotask` runs before the next I/O phase
+- [x] **12.8** Verify: `os.sleep(0.05)` resumes exactly 1 tick later; multiple concurrent sleeps each fire at the right tick; `queueMicrotask` runs before the next I/O phase — *done: `JSEventLoopTimingTest` (#13)*
 - [x] **12.9** Update `JS_MIGRATION.md` cross-cutting reference table with event loop model
 
 - [ ] **Commit** — stage Phase 12 files; propose commit message; wait for user approval
@@ -618,7 +618,7 @@ Unified model:
 - **`JSMachine.handleEvent()`** — no structural change; it already calls `emitter.emit()` for all CC-queue events. It remains the bridge for cross-thread events.
 - **`IAPIEnvironment` / `SystemAPI`** — audit all `queueEvent()` call sites: classify each as same-context (can switch to `fireNow`) or cross-thread (must stay as `queueEvent`).
 
-- [ ] **13.1** Remove the redundant `apiEnvironment.queueEvent("cc:yield", …)` from `OSAPI.doYield()` — the `MethodResult.YIELD` bucket already handles the yield without needing a CC event
+- [x] **13.1** Remove the redundant `apiEnvironment.queueEvent("cc:yield", …)` from `OSAPI.doYield()` — the `MethodResult.YIELD` bucket already handles the yield without needing a CC event — *done: `SystemAPI.doYield` only returns `MethodResult.yield()`*
 - [ ] **13.2** Add `JSEventEmitter.fireNow(Context, Scriptable, String, Object[])` — `JSValues`-converting wrapper around `emit()` for Java callers inside the JS execution context
 - [ ] **13.3** Expose `events.emit(event, ...args)` in `EventsAPI` backed by `fireNow`
 - [ ] **13.4** Audit all `apiEnvironment.queueEvent()` call sites across all API classes; annotate each as `// cross-thread: must stay` or migrate to `fireNow`
@@ -707,7 +707,7 @@ computer keeps processing other events meanwhile — exactly as today, just on t
 - [x] **14.1** Add `TaskCompletion.await(long taskId)` helper alongside `TaskCallback` (park a `task_complete` IO pull for an externally-completed id; resume with the carried value, rethrow only on `[id, false, message]`)
 - [x] **14.2** `TurtleBrain.executeCommand` — allocate `ServerComputer.getUniqueTaskId()` (delegates to `Computer`, now public), enqueue `{taskId, command}`, return `TaskCompletion.await(taskId)`
 - [x] **14.3** `TurtleBrain.dispatchCommand` — emit `task_complete` `[taskId, true, value]`; emit `[taskId, false, message]` only for a thrown `command.execute` exception (also fixes the previously-hung continuation on such a throw)
-- [ ] **14.4** Move result shaping (Result / boolean / data) to the completion site; remove `@cc.treturn` tuples in favour of the shaped single value — **deferred**; 14.1–14.3 preserve the existing `[ok, …results]` value exactly, so shaping is an independent follow-up
+- [x] **14.4** Move result shaping (Result / boolean / data) to the completion site — *done in `0497a0e22` (queued turtle commands return `Result`)*
 - [x] **14.5** Delete `CommandCallback`, the `turtle_response` event, the `commandsIssued` counter, and its `callbackID` plumbing (`TurtleCommandQueueEntry.callbackID:int` → `taskId:long`); refresh the `ITurtleAccess.executeCommand` javadoc
 - [ ] **14.6** Verify at runtime: `turtle.forward()` halts and resumes via the standard continuation; multi-tick movement still lets other events dispatch — *Java compiles; value-equivalence reasoned through (`JSValues.toJs` deep-converts the nested array); no turtle integration test exists yet*
 - [ ] **Commit** — stage Phase 14 files; propose commit message; wait for user approval
@@ -730,3 +730,23 @@ function transferUntil(side: string, amount: number): number { /* loop transferE
 - [ ] **15.1** Add `absorbUntil`/`transferUntil` (and maybe `chargeToFull`/`drainEmpty`) helpers to the turtle ROM library
 - [ ] **15.2** Stop on `=== 0` (no progress) so they never hang when the neighbour can't supply/accept
 - [ ] **Commit** — stage Phase 15 files; propose commit message; wait for user approval
+
+---
+
+## Since the original plan (tracked as GitHub issues)
+
+Work done after this plan was written, mostly from the code review in October 2026 (see the issues for details):
+
+- **Engine:** catchable errors from failed blocking calls (`JSCallShim`, #23); cycle-safe Java⇄JS conversion and array
+  round-trips (#20, #26); returned Java objects with script methods are wrapped (`JSObjects`); stack-depth and
+  string-length limits exposed in the server config (#19, still open for a real memory budget); uniform abort mapping
+  (`JSAbort`, #30); `initSafeStandardObjects` + globals allow-list, no `Continuation`/`Script`/`With`/`Call` (#22).
+- **Modules / loader:** module cached before execution (cycles, #28); `require.uncached` / `require.resolve`, bash runs
+  programs uncached (#24); `getModuleName()` APIs are registered; `IFunction` return values are callable.
+- **Concurrency:** native `parallel` with real green threads and cancellation (`JSParallel`/`JSThread`/`JSTaskGroup`,
+  #29); Ctrl+T terminates the foreground program (#25). No public `pullEvent`/`queueEvent` (decision in #29).
+- **APIs:** Node-compatible `fs` with Node error codes, callbacks via the event loop (#27); `transferEnergy` /
+  `absorbEnergy` exploit fixed (#21); alarms (#31).
+- **Planned:** async model with `require('<module>/promises')` (#35); native array loops ignoring aborts (#37);
+  compatibility layer for CC: Tweaked addons (#33).
+
