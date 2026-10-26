@@ -55,16 +55,16 @@ public class BinaryReadableHandleTest {
     @Test
     public void testReadLine() throws ScriptException {
         var handle = new ReadHandle(new ArrayByteChannel("hello\r\nworld\r!".getBytes(StandardCharsets.UTF_8)), false);
-        assertArrayEquals("hello".getBytes(StandardCharsets.UTF_8), cast(byte[].class, handle.readLine(Optional.empty())));
-        assertArrayEquals("world\r!".getBytes(StandardCharsets.UTF_8), cast(byte[].class, handle.readLine(Optional.empty())));
+        assertEquals("hello", handle.readLine(Optional.empty()));
+        assertEquals("world\r!", handle.readLine(Optional.empty()));
         assertNull(handle.readLine(Optional.empty()));
     }
 
     @Test
     public void testReadLineTrailing() throws ScriptException {
         var handle = new ReadHandle(new ArrayByteChannel("hello\r\nworld\r!".getBytes(StandardCharsets.UTF_8)), false);
-        assertArrayEquals("hello\r\n".getBytes(StandardCharsets.UTF_8), cast(byte[].class, handle.readLine(Optional.of(true))));
-        assertArrayEquals("world\r!".getBytes(StandardCharsets.UTF_8), cast(byte[].class, handle.readLine(Optional.of(true))));
+        assertEquals("hello\r\n", handle.readLine(Optional.of(true)));
+        assertEquals("world\r!", handle.readLine(Optional.of(true)));
         assertNull(handle.readLine(Optional.of(true)));
     }
 
@@ -74,8 +74,8 @@ public class BinaryReadableHandleTest {
         return new ReadHandle(new ArrayByteChannel(input), true);
     }
 
-    private static <T> T cast(Class<T> type, @Nullable Object[] values) {
-        if (values == null || values.length < 1) throw new NullPointerException();
-        return type.cast(values[0]);
+    private static <T> T cast(Class<T> type, @Nullable Object value) {
+        if (value == null) throw new NullPointerException();
+        return type.cast(value);
     }
 }

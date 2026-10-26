@@ -54,14 +54,14 @@ class TestHttpApi {
             ScriptTaskRunner.runTest {
                 val url = "http://127.0.0.1:${server.port}"
                 val httpApi = addApi(HTTPAPI(environment))
-                assertThat("http.request succeeded", httpApi.request(ObjectArguments(url)), array(equalTo(true)))
+                assertThat("http.request succeeded", httpApi.request(ObjectArguments(url)).success, equalTo(true))
 
                 val result = pullEvent("http_success")
                 assertThat(result, array(equalTo("http_success"), equalTo(url), isA(HttpResponseHandle::class.java)))
 
                 val handle = result[2] as HttpResponseHandle
                 val reader = handle.extra.iterator().next() as ReadHandle
-                assertThat(reader.readAll(), array(equalTo("Hello, world!".toByteArray())))
+                assertThat(reader.readAll(), equalTo("Hello, world!"))
             }
         }
     }
@@ -72,7 +72,7 @@ class TestHttpApi {
             ScriptTaskRunner.runTest {
                 val url = "ws://127.0.0.1:${server.port}/ws"
                 val httpApi = addApi(HTTPAPI(environment))
-                assertThat("http.websocket succeeded", httpApi.websocket(ObjectArguments(url)), array(equalTo(true)))
+                assertThat("http.websocket succeeded", httpApi.websocket(ObjectArguments(url)).success, equalTo(true))
 
                 val connectEvent = pullEvent()
                 assertThat(connectEvent, array(equalTo("websocket_success"), equalTo(url), isA(WebsocketHandle::class.java)))
@@ -97,7 +97,7 @@ class TestHttpApi {
             ScriptTaskRunner.runTest {
                 val url = "ws://127.0.0.1:${server.port}/ws"
                 val httpApi = addApi(HTTPAPI(environment))
-                assertThat("http.websocket succeeded", httpApi.websocket(ObjectArguments(url)), array(equalTo(true)))
+                assertThat("http.websocket succeeded", httpApi.websocket(ObjectArguments(url)).success, equalTo(true))
 
                 val connectEvent = pullEvent()
                 assertThat(connectEvent, array(equalTo("websocket_success"), equalTo(url), isA(WebsocketHandle::class.java)))
@@ -122,7 +122,7 @@ class TestHttpApi {
             ScriptTaskRunner.runTest {
                 val url = "ws://127.0.0.1:${server.port}/ws"
                 val httpApi = addApi(HTTPAPI(environment))
-                assertThat("http.websocket succeeded", httpApi.websocket(ObjectArguments(url)), array(equalTo(true)))
+                assertThat("http.websocket succeeded", httpApi.websocket(ObjectArguments(url)).success, equalTo(true))
 
                 val connectEvent = pullEvent()
                 assertThat(connectEvent, array(equalTo("websocket_success"), equalTo(url), isA(WebsocketHandle::class.java)))
@@ -143,7 +143,7 @@ class TestHttpApi {
             ScriptTaskRunner.runTest {
                 val url = "ws://127.0.0.1:${server.port}/ws"
                 val httpApi = addApi(HTTPAPI(environment))
-                assertThat("http.websocket succeeded", httpApi.websocket(ObjectArguments(url)), array(equalTo(true)))
+                assertThat("http.websocket succeeded", httpApi.websocket(ObjectArguments(url)).success, equalTo(true))
 
                 val connectEvent = pullEvent()
                 assertThat(connectEvent, array(equalTo("websocket_success"), equalTo(url), isA(WebsocketHandle::class.java)))
