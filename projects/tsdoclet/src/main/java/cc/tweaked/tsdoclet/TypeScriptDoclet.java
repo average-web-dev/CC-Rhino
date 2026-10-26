@@ -50,6 +50,8 @@ public class TypeScriptDoclet implements Doclet {
     private javax.lang.model.util.Elements elements;
     /** Set when a script method's TS type cannot be derived honestly; fails the javadoc run. */
     private boolean failed;
+    /** Names of the script-object types (see {@link #isObjectType}), each of which has a promise flavour. */
+    private final java.util.Set<String> objectTypes = new java.util.HashSet<>();
 
     @Override
     public void init(Locale locale, Reporter reporter) {
@@ -143,6 +145,13 @@ public class TypeScriptDoclet implements Doclet {
             // methods, so it is not discovered by scanning — emit a fixed base here.
             Files.writeString(outputDir.resolve("IPeripheral.d.ts"),
                 "interface IPeripheral {\n    type: string;\n}\n");
+            // Collect the script-object types first: promise flavours refer to each other's promise flavour.
+            for (var type : ElementFilter.typesIn(env.getIncludedElements())) {
+                if (!isObjectType(type)) continue;
+                var methods = new ArrayList<ExecutableElement>();
+                collectScriptMethods(type, new java.util.HashSet<>(), methods);
+                if (!methods.isEmpty()) objectTypes.add(type.getSimpleName().toString());
+            }
             for (var type : ElementFilter.typesIn(env.getIncludedElements())) {
                 emitType(type, docTrees);
             }
@@ -224,40 +233,74 @@ public class TypeScriptDoclet implements Doclet {
         // alongside the interface. Skip peripherals and GenericPeripheral method mixins (attached/
         // wrapped, not required), sub-handles like `fs.ReadHandle`, and `[kind=…]` event modules —
         // only a bare lowercase id (no dot, no bracket) on a standalone API names a require-able module.
-        if (!isPeripheral && !isAssignableTo(type, "GenericPeripheral") && module.matches("[a-z_]+")) {
+        var requireable = isObjectType(type) && module.matches("[a-z_]+");
+        if (requireable) {
             out.append("declare function require(id: \"").append(module).append("\"): ").append(name).append(";\n");
             // `module` matches [a-z_]+, so it is a valid JS identifier for the const binding.
             out.append("declare module \"").append(module).append("\" { const ").append(module)
                 .append(": ").append(name).append("; export = ").append(module).append("; }\n");
-            emitPromisesModule(module, name, methods);
         }
+        // Modules and the objects their methods return (handles, …) also have a promise flavour.
+        if (isObjectType(type)) emitPromisesType(module, name, methods, supers, requireable);
 
         Files.writeString(outputDir.resolve(name + ".d.ts"), out.toString());
     }
 
     /**
-     * Emit {@code <Name>Promises.d.ts} for the engine-generated {@code <module>/promises} module: the same methods,
-     * each returning a {@code Promise} of the blocking form's result. Node-style pairs collapse as the engine does it
-     * (see {@code JSAPIBuilder}): {@code fooSync} plus a callback {@code foo} become one promise-returning {@code foo}
-     * with {@code fooSync}'s signature.
+     * Whether a type is a script object: a module or an object returned by a method (a handle, …), as opposed to a
+     * peripheral or a peripheral method mixin. Each has a {@code <Name>Promises} flavour, as the engine gives objects
+     * returned through a {@code /promises} module promise-returning methods.
      */
-    private void emitPromisesModule(String module, String name, List<ExecutableElement> methods) throws IOException {
+    private boolean isObjectType(TypeElement type) {
+        return blockTagText(docTrees.getDocCommentTree(type), "cc.module") != null
+            && !isAssignableTo(type, "IPeripheral") && !isAssignableTo(type, "GenericPeripheral");
+    }
+
+    /** Replace every script-object type in a TS type with its {@code <Name>Promises} flavour. */
+    private String promiseObjects(String type) {
+        for (var name : objectTypes) {
+            type = type.replaceAll("\\b" + java.util.regex.Pattern.quote(name) + "\\b", name + "Promises");
+        }
+        return type;
+    }
+
+    /**
+     * Emit {@code <Name>Promises.d.ts}: the promise flavour of a script object — for a require-able module, the
+     * engine-generated {@code <module>/promises} module; otherwise an object (handle, …) as returned through such a
+     * module. The same methods, each returning a {@code Promise} of the blocking form's result, in which script
+     * objects are their promise flavour too. Node-style pairs collapse as the engine does it (see
+     * {@code JSAPIBuilder}): {@code fooSync} plus a callback {@code foo} become one promise-returning {@code foo} with
+     * {@code fooSync}'s signature.
+     */
+    private void emitPromisesType(
+        String module, String name, List<ExecutableElement> methods, List<String> supers, boolean requireable
+    ) throws IOException {
         var names = new java.util.HashSet<String>();
         for (var method : methods) names.addAll(scriptFunctionNames(method));
 
         var promiseName = name + "Promises";
-        var out = new StringBuilder("/** The `").append(module).append("/promises` module: `").append(module)
-            .append("` with every function returning a promise instead of blocking. */\n");
-        out.append("interface ").append(promiseName).append(" {\n");
+        var out = new StringBuilder();
+        if (requireable) {
+            out.append("/** The `").append(module).append("/promises` module: `").append(module)
+                .append("` with every function returning a promise instead of blocking. */\n");
+        } else {
+            out.append("/** `").append(name).append("` as returned through a `/promises` module: every method returns a promise. */\n");
+        }
+        out.append("interface ").append(promiseName);
+        var promiseSupers = supers.stream().filter(objectTypes::contains).map(s -> s + "Promises").toList();
+        if (!promiseSupers.isEmpty()) out.append(" extends ").append(String.join(", ", promiseSupers));
+        out.append(" {\n");
         for (var method : methods) {
             for (var line : renderMethod(method, names)) out.append("    ").append(line).append("\n");
         }
         out.append("}\n");
 
-        var binding = module + "Promises";
-        out.append("declare function require(id: \"").append(module).append("/promises\"): ").append(promiseName).append(";\n");
-        out.append("declare module \"").append(module).append("/promises\" { const ").append(binding)
-            .append(": ").append(promiseName).append("; export = ").append(binding).append("; }\n");
+        if (requireable) {
+            var binding = module + "Promises";
+            out.append("declare function require(id: \"").append(module).append("/promises\"): ").append(promiseName).append(";\n");
+            out.append("declare module \"").append(module).append("/promises\" { const ").append(binding)
+                .append(": ").append(promiseName).append("; export = ").append(binding).append("; }\n");
+        }
         Files.writeString(outputDir.resolve(promiseName + ".d.ts"), out.toString());
     }
 
@@ -289,7 +332,7 @@ public class TypeScriptDoclet implements Doclet {
             if (c == ')' && --depth == 0) {
                 var rest = signature.substring(i + 1).trim();
                 if (!rest.startsWith(":")) break;
-                return signature.substring(0, i + 1) + ": Promise<" + rest.substring(1).trim() + ">";
+                return signature.substring(0, i + 1) + ": Promise<" + promiseObjects(rest.substring(1).trim()) + ">";
             }
         }
         error(method, "Cannot parse @cc-r.overload signature " + signature);
@@ -351,10 +394,18 @@ public class TypeScriptDoclet implements Doclet {
             // Trailing @Nullable arguments may be left out entirely by the queueing code: make them optional.
             var firstOptional = components.size();
             while (firstOptional > 0 && isNullableComponent(components.get(firstOptional - 1))) firstOptional--;
+            // A varargs record (`record Foo(String... args)`) spreads its last component into the event's arguments
+            // (see Events.arguments): it becomes a rest element.
+            var varArgs = ElementFilter.constructorsIn(type.getEnclosedElements()).stream()
+                .anyMatch(c -> c.isVarArgs() && c.getParameters().size() == components.size());
             var tuple = new StringBuilder("[");
             for (var i = 0; i < components.size(); i++) {
                 var comp = components.get(i);
                 if (i > 0) tuple.append(", ");
+                if (varArgs && i == components.size() - 1) {
+                    tuple.append("...").append(comp.getSimpleName()).append(": ").append(tsType(comp.asType()));
+                    continue;
+                }
                 var compType = overrides.getOrDefault(comp.getSimpleName().toString(), tsType(comp.asType()));
                 if (isNullableComponent(comp) && !compType.contains("null") && !compType.equals("unknown")) {
                     compType += " | null";
@@ -550,7 +601,7 @@ public class TypeScriptDoclet implements Doclet {
             if (!ret.equals("void") && !ret.contains("null") && isNullable(method)) ret = ret + " | null";
         }
 
-        if (promise) ret = "Promise<" + ret + ">";
+        if (promise) ret = "Promise<" + promiseObjects(ret) + ">";
 
         var lines = new ArrayList<String>();
         for (var name : exposed) {
