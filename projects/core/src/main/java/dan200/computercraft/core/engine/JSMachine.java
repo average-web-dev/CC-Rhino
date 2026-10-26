@@ -120,10 +120,12 @@ public class JSMachine implements IMachine {
             var context = environment.context();
             var methods = environment.luaMethods();
             for (var api : environment.apis()) {
-                for (var name : api.getNames()) {
-                    var obj = JSAPIBuilder.build(cx, scope, shim, api, context, methods);
-                    loader.registerNative(name, obj);
-                }
+                var moduleName = api.getModuleName();
+                if (api.getNames().length == 0 && moduleName == null) continue;
+
+                var obj = JSAPIBuilder.build(cx, scope, shim, api, context, methods);
+                for (var name : api.getNames()) loader.registerNative(name, obj);
+                if (moduleName != null) loader.registerNative(moduleName, obj);
             }
 
             // Register the engine-internal 'events' module (emitter + scheduler).

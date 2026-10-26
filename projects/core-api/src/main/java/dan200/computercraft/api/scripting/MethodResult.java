@@ -46,12 +46,12 @@ public final class MethodResult {
         destination = null;
     }
 
-    /** Immediate return with error-level adjustment — no continuation. Used by {@link #adjustError}. */
-    private MethodResult(@Nullable Object @Nullable [] arguments, @Nullable ICallback callback, int adjust) {
+    /** Copy of a result with an adjusted error level, keeping its destination. Used by {@link #adjustError}. */
+    private MethodResult(@Nullable Bucket destination, @Nullable Object @Nullable [] arguments, @Nullable ICallback callback, int adjust) {
+        this.destination = destination;
         result = arguments;
         this.callback = callback;
         this.adjust = adjust;
-        destination = null;
     }
 
     /** Continuation with a callback (IO bucket). Used by {@link #pullEvent}, {@link #pullEventRaw}, {@link #yield}. */
@@ -185,6 +185,6 @@ public final class MethodResult {
     public MethodResult adjustError(int adjust) {
         if (adjust < 0) throw new IllegalArgumentException("cannot adjust by a negative amount");
         if (adjust == 0 || callback == null) return this;
-        return new MethodResult(result, callback, this.adjust + adjust);
+        return new MethodResult(destination, result, callback, this.adjust + adjust);
     }
 }

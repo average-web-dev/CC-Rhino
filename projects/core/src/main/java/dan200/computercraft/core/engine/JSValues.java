@@ -4,6 +4,9 @@
 
 package dan200.computercraft.core.engine;
 
+import dan200.computercraft.api.scripting.IContext;
+import dan200.computercraft.api.scripting.IFunction;
+import dan200.computercraft.api.scripting.ScriptException;
 import org.jspecify.annotations.Nullable;
 import org.mozilla.javascript.*;
 
@@ -12,6 +15,10 @@ import java.util.Collection;
 import java.util.Map;
 
 public final class JSValues {
+    private static final IContext NO_CONTEXT = task -> {
+        throw new ScriptException("Cannot run main-thread tasks from a returned function");
+    };
+
     private JSValues() {}
 
     /** Convert a Java/CC value to a Rhino JS value. */
@@ -58,6 +65,13 @@ public final class JSValues {
                 }
             }
             return obj;
+        }
+        if (java instanceof IFunction function) {
+            // A function returned from Java (e.g. a closure). It has no context of its own, so it cannot issue
+            // main-thread tasks, but it may still yield via MethodResult like any other native method.
+            var bridge = new JSMethodBridge((target, context, args) -> function.call(args), function, NO_CONTEXT);
+            ScriptRuntime.setFunctionProtoAndParent(bridge, cx, scope);
+            return bridge;
         }
         if (java.getClass().isRecord()) {
             var obj = cx.newObject(scope);
