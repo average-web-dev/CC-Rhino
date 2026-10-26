@@ -16,14 +16,17 @@ final class JSAPIBuilder {
     private JSAPIBuilder() {}
 
     /**
-     * Enumerate every method on {@code api} via {@code methods} and wrap each as a {@link JSMethodBridge}.
+     * Enumerate every method on {@code api} via {@code methods} and wrap each as a {@link JSMethodBridge}, behind a
+     * {@link JSCallShim} so that blocking calls which fail throw at their call site.
      *
      * @return A plain JS object whose properties are the wrapped methods.
      */
-    static Scriptable build(Context cx, Scriptable scope, Object api, IContext context, MethodSupplier<ApiMethod> methods) {
+    static Scriptable build(
+        Context cx, Scriptable scope, JSCallShim shim, Object api, IContext context, MethodSupplier<ApiMethod> methods
+    ) {
         var obj = cx.newObject(scope);
         methods.forEachMethod(api, (target, name, method, info) ->
-            ScriptableObject.putProperty(obj, name, new JSMethodBridge(method, target, context)));
+            ScriptableObject.putProperty(obj, name, shim.wrap(cx, scope, new JSMethodBridge(method, target, context))));
         return obj;
     }
 }

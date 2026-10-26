@@ -7,6 +7,7 @@ package dan200.computercraft.core.engine;
 import dan200.computercraft.api.scripting.IComputerAPI;
 import dan200.computercraft.api.scripting.IContext;
 import dan200.computercraft.api.scripting.MethodResult;
+import dan200.computercraft.core.asm.ApiMethodSupplier;
 import dan200.computercraft.core.computer.TimeoutState;
 import dan200.computercraft.core.filesystem.FileSystem;
 import dan200.computercraft.core.methods.ApiMethod;
@@ -88,11 +89,14 @@ final class JSMachineBuilder {
     }
 
     JSMachine build() throws IOException {
+        // Objects without registered methods (e.g. the engine's own `events` module) use the real generator.
+        var generated = ApiMethodSupplier.create(List.of());
         MethodSupplier<ApiMethod> supplier = new MethodSupplier<>() {
             @Override
             public boolean forEachSelfMethod(Object object, UntargetedConsumer<ApiMethod> consumer) {
                 var m = methods.get(object);
-                if (m == null || m.isEmpty()) return false;
+                if (m == null) return generated.forEachSelfMethod(object, consumer);
+                if (m.isEmpty()) return false;
                 m.forEach((name, method) -> consumer.accept(name, method, null));
                 return true;
             }
@@ -100,7 +104,8 @@ final class JSMachineBuilder {
             @Override
             public boolean forEachMethod(Object object, TargetedConsumer<ApiMethod> consumer) {
                 var m = methods.get(object);
-                if (m == null || m.isEmpty()) return false;
+                if (m == null) return generated.forEachMethod(object, consumer);
+                if (m.isEmpty()) return false;
                 m.forEach((name, method) -> consumer.accept(object, name, method, null));
                 return true;
             }
