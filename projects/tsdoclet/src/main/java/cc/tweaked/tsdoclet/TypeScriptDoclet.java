@@ -46,6 +46,10 @@ public class TypeScriptDoclet implements Doclet {
     /** Records referenced by a script method (return/parameter types); emitted as TS interfaces. */
     private final java.util.Set<TypeElement> referencedRecords = new java.util.LinkedHashSet<>();
     private final java.util.Set<TypeElement> referencedEnums = new java.util.LinkedHashSet<>();
+    private DocTrees docTrees;
+    private javax.lang.model.util.Elements elements;
+    /** Set when a script method's TS type cannot be derived honestly; fails the javadoc run. */
+    private boolean failed;
 
     @Override
     public void init(Locale locale, Reporter reporter) {
@@ -131,7 +135,8 @@ public class TypeScriptDoclet implements Doclet {
 
     @Override
     public boolean run(DocletEnvironment env) {
-        var docTrees = env.getDocTrees();
+        var docTrees = this.docTrees = env.getDocTrees();
+        elements = env.getElementUtils();
         try {
             Files.createDirectories(outputDir);
             // The base every peripheral interface extends. IPeripheral itself has no @ScriptFunction
@@ -168,7 +173,13 @@ public class TypeScriptDoclet implements Doclet {
             reporter.print(javax.tools.Diagnostic.Kind.ERROR, "Cannot write .d.ts: " + e.getMessage());
             return false;
         }
-        return true;
+        return !failed;
+    }
+
+    /** Report a script method whose TS signature would be imprecise ({@code unknown}) without an explicit tag. */
+    private void error(Element element, String message) {
+        reporter.print(javax.tools.Diagnostic.Kind.ERROR, element, message);
+        failed = true;
     }
 
     private void emitType(TypeElement type, DocTrees docTrees) throws IOException {
@@ -185,15 +196,24 @@ public class TypeScriptDoclet implements Doclet {
         collectScriptMethods(type, new java.util.HashSet<>(), methods);
 
         var body = new ArrayList<String>();
-        for (var method : methods) body.addAll(renderMethod(method, docTrees));
+        for (var method : methods) body.addAll(renderMethod(method));
         if (body.isEmpty()) return; // nothing scriptable here
 
         var isPeripheral = isAssignableTo(type, "IPeripheral");
         var name = type.getSimpleName().toString();
 
+        // `@cc-r.extends <Iface>[, …]` — the object also exposes another type's methods (e.g. a HTTP response
+        // carrying a ReadHandle through ObjectSource#getExtra), which the Java hierarchy cannot show.
+        var supers = new ArrayList<String>();
+        if (isPeripheral) supers.add("IPeripheral");
+        var extraSupers = blockTagText(docTrees.getDocCommentTree(type), "cc-r.extends");
+        if (extraSupers != null) {
+            for (var s : extraSupers.split(",")) if (!s.isBlank()) supers.add(s.trim());
+        }
+
         // Ambient global declaration (no export/import) so it merges with the hand-written .d.ts files.
         var out = new StringBuilder("interface ").append(name);
-        if (isPeripheral) out.append(" extends IPeripheral");
+        if (!supers.isEmpty()) out.append(" extends ").append(String.join(", ", supers));
         out.append(" {\n");
         if (isPeripheral) out.append("    type: '").append(module).append("';\n");
         for (var line : body) out.append("    ").append(line).append("\n");
@@ -254,15 +274,30 @@ public class TypeScriptDoclet implements Doclet {
     /** Build {@code EventMap.ts} from every {@code @Event} record: name → labelled tuple of components. */
     private void emitEventMap(DocletEnvironment env) throws IOException {
         var events = new java.util.TreeMap<String, String>();
+        // Event records are often grouped as nested types of a holder class (e.g. CoreEvents).
+        var types = new java.util.LinkedHashSet<TypeElement>();
         for (var type : ElementFilter.typesIn(env.getIncludedElements())) {
+            var nested = new ArrayList<TypeElement>();
+            collectNestedTypes(type, nested);
+            types.addAll(nested);
+        }
+        for (var type : types) {
             var event = eventName(type);
             if (event == null || type.getKind() != ElementKind.RECORD) continue;
+            var overrides = componentOverrides(docTrees.getDocCommentTree(type));
+            var components = type.getRecordComponents();
+            // Trailing @Nullable arguments may be left out entirely by the queueing code: make them optional.
+            var firstOptional = components.size();
+            while (firstOptional > 0 && isNullableComponent(components.get(firstOptional - 1))) firstOptional--;
             var tuple = new StringBuilder("[");
-            var first = true;
-            for (var comp : type.getRecordComponents()) {
-                if (!first) tuple.append(", ");
-                first = false;
-                tuple.append(comp.getSimpleName()).append(": ").append(tsType(comp.asType()));
+            for (var i = 0; i < components.size(); i++) {
+                var comp = components.get(i);
+                if (i > 0) tuple.append(", ");
+                var compType = overrides.getOrDefault(comp.getSimpleName().toString(), tsType(comp.asType()));
+                if (isNullableComponent(comp) && !compType.contains("null") && !compType.equals("unknown")) {
+                    compType += " | null";
+                }
+                tuple.append(comp.getSimpleName()).append(i >= firstOptional ? "?: " : ": ").append(compType);
             }
             events.put(event, tuple.append("]").toString());
         }
@@ -299,15 +334,38 @@ public class TypeScriptDoclet implements Doclet {
         if (unionType != null) {
             out.append("type ").append(name).append(" =\n    | ").append(unionType.replace(" | ", "\n    | ")).append(";\n");
         } else {
+            // `@cc-r.options` — an options bag passed *into* a method: a @Nullable component may be left out.
+            var options = !blockTags(doc, "cc-r.options").isEmpty();
+            var overrides = componentOverrides(doc);
             out.append("interface ").append(name).append(" {\n");
             for (var comp : rec.getRecordComponents()) {
-                var type = tsType(comp.asType());
-                if (isNullableComponent(comp) && !type.contains("null")) type += " | null";
-                out.append("    ").append(comp.getSimpleName()).append(": ").append(type).append(";\n");
+                var type = overrides.getOrDefault(comp.getSimpleName().toString(), tsType(comp.asType()));
+                var separator = ": ";
+                if (isNullableComponent(comp)) {
+                    if (options) {
+                        separator = "?: ";
+                    } else if (!type.contains("null")) {
+                        type += " | null";
+                    }
+                }
+                if (type.contains("unknown")) {
+                    error(comp, "Record component " + comp.getSimpleName() + " maps to an imprecise TS type (" + type + ")");
+                }
+                out.append("    ").append(comp.getSimpleName()).append(separator).append(type).append(";\n");
             }
             out.append("}\n");
         }
         Files.writeString(outputDir.resolve(name + ".d.ts"), out.toString());
+    }
+
+    /** {@code @cc-r.param <component> <type>} tags on a record: TS types for components the Java type can't express. */
+    private java.util.Map<String, String> componentOverrides(DocCommentTree doc) {
+        var out = new java.util.HashMap<String, String>();
+        for (var tag : blockTags(doc, "cc-r.param")) {
+            var sp = tag.indexOf(' ');
+            if (sp > 0) out.put(tag.substring(0, sp), tag.substring(sp + 1).trim());
+        }
+        return out;
     }
 
     /** Emit a TS string-union type alias for an enum, using the lowercased constant names (CC's wire form). */
@@ -324,15 +382,15 @@ public class TypeScriptDoclet implements Doclet {
     }
 
     /** Render the declarations for one method — one per exposed name (annotation aliases). */
-    private List<String> renderMethod(ExecutableElement method, DocTrees docTrees) {
-        var doc = docTrees.getDocCommentTree(method);
+    private List<String> renderMethod(ExecutableElement method) {
+        var doc = new MethodDoc(method);
+        var summary = doc.summary();
 
         // `@cc-r.eventlistener` — emit a generic listener over EventMap plus a string fallback overload.
-        if (!blockTags(doc, "cc-r.eventlistener").isEmpty()) {
+        if (!doc.tags("cc-r.eventlistener").isEmpty()) {
             var lines = new ArrayList<String>();
-            var sum = firstSentence(doc);
             for (var name : scriptFunctionNames(method)) {
-                if (sum != null) lines.add("/** " + sum + " */");
+                if (summary != null) lines.add("/** " + summary + " */");
                 lines.add(name + "<E extends keyof EventMap>(event: E, listener: (...args: EventMap[E]) => void): void;");
                 // `any[]` (not `unknown[]`): a catch-all listener is contravariant, so a more
                 // specific handler like `(id: number) => void` must remain assignable to it.
@@ -343,12 +401,11 @@ public class TypeScriptDoclet implements Doclet {
 
         // `@cc-r.overload <signature>` (repeatable) — emit each `(params): ret` signature verbatim as one overload
         // instead of deriving a signature from the Java method, e.g. for Node-style optional middle arguments.
-        var overloads = blockTags(doc, "cc-r.overload");
+        var overloads = doc.tags("cc-r.overload");
         if (!overloads.isEmpty()) {
             var lines = new ArrayList<String>();
-            var sum = firstSentence(doc);
             for (var name : scriptFunctionNames(method)) {
-                if (sum != null) lines.add("/** " + sum + " */");
+                if (summary != null) lines.add("/** " + summary + " */");
                 for (var signature : overloads) lines.add(name + signature.trim() + ";");
             }
             return lines;
@@ -357,22 +414,22 @@ public class TypeScriptDoclet implements Doclet {
         // Parameter overrides from the docblock: `@cc-r.param <name> <type>` (e.g. a callback type that
         // the Java `Object` parameter can't express), or `@cc-r.params <list>` to replace the whole list.
         var tsParam = new java.util.HashMap<String, String>();
-        for (var tag : blockTags(doc, "cc-r.param")) {
+        for (var tag : doc.tags("cc-r.param")) {
             var sp = tag.indexOf(' ');
             if (sp > 0) tsParam.put(tag.substring(0, sp), tag.substring(sp + 1).trim());
         }
         // `@cc-r.hide <name> [<name> …]` — drop parameters from the TS signature (e.g. an injected target).
         var hidden = new java.util.HashSet<String>();
-        for (var tag : blockTags(doc, "cc-r.hide")) {
+        for (var tag : doc.tags("cc-r.hide")) {
             for (var n : tag.split("[\\s,]+")) if (!n.isEmpty()) hidden.add(n);
         }
-        var fullParams = blockTagText(doc, "cc-r.params");
+        var fullParams = doc.tag("cc-r.params");
 
         String paramStr;
         if (fullParams != null) {
             paramStr = fullParams.trim();
         } else {
-            // Drop runtime-injected context; map Optional<>/IArguments/Coerced<>.
+            // Drop runtime-injected context; map Optional<>/Coerced<>.
             var params = new ArrayList<String>();
             for (var p : method.getParameters()) {
                 var name = p.getSimpleName().toString();
@@ -386,34 +443,109 @@ public class TypeScriptDoclet implements Doclet {
                 if (simple.equals("IComputerAccess") || simple.equals("IContext")
                     || simple.equals("IComputerSystem") || simple.equals("IAPIEnvironment")) continue;
                 if (simple.equals("IArguments")) {
+                    error(method, "IArguments parameter needs @cc-r.params or @cc-r.overload to describe the TS signature");
                     params.add("...args: unknown[]");
                     continue;
                 }
+                String type;
+                var optional = false;
                 if (simple.equals("Optional") && pType instanceof DeclaredType dt && !dt.getTypeArguments().isEmpty()) {
-                    params.add(name + "?: " + tsType(dt.getTypeArguments().get(0)));
+                    type = tsType(dt.getTypeArguments().get(0));
+                    optional = true;
                 } else {
-                    params.add(name + ": " + tsType(pType));
+                    type = tsType(pType);
                 }
+                // `Object` parameters are deliberately "any value" (e.g. a modem payload); anything else that maps
+                // to `unknown` is a gap the Java signature cannot express.
+                if (type.contains("unknown") && !simple.equals("Object")) {
+                    error(p, "Parameter " + name + " maps to an imprecise TS type (" + type + "); add @cc-r.param");
+                }
+                params.add(scriptParamName(name) + (optional ? "?: " : ": ") + type);
             }
             paramStr = String.join(", ", params);
         }
 
         // Return type: explicit @cc-r.return wins, else map the Java type (+ | null if @Nullable).
-        var ret = blockTagText(doc, "cc-r.return");
+        var ret = doc.tag("cc-r.return");
         if (ret != null) {
             ret = ret.trim();
         } else {
             ret = tsType(method.getReturnType());
+            if (ret.contains("unknown")) {
+                error(method, "Return type maps to an imprecise TS type (" + ret + "); add @cc-r.return");
+            }
             if (!ret.equals("void") && !ret.contains("null") && isNullable(method)) ret = ret + " | null";
         }
 
-        var summary = firstSentence(doc);
         var lines = new ArrayList<String>();
         for (var name : scriptFunctionNames(method)) {
             if (summary != null) lines.add("/** " + summary + " */");
             lines.add(name + "(" + paramStr + "): " + ret + ";");
         }
         return lines;
+    }
+
+    /**
+     * The script-facing name of a Java parameter. Upstream names a raw argument {@code fooArg} / {@code fooA} when the
+     * method body validates it into a local {@code foo}; scripts should just see {@code foo}.
+     */
+    private static String scriptParamName(String name) {
+        if (name.length() > 4 && name.endsWith("Arg")) return name.substring(0, name.length() - 3);
+        if (name.length() > 2 && name.endsWith("A") && Character.isLowerCase(name.charAt(name.length() - 2))) {
+            return name.substring(0, name.length() - 1);
+        }
+        return name;
+    }
+
+    /**
+     * The documentation of a method, falling back to the methods it overrides (so {@code {@inheritDoc}} and
+     * inherited {@code @cc-r.*} tags work): the summary is the first non-{@code {@inheritDoc}} one, and each tag is
+     * read from the most-derived declaration that has it.
+     */
+    private final class MethodDoc {
+        private final List<DocCommentTree> chain = new ArrayList<>();
+
+        MethodDoc(ExecutableElement method) {
+            add(docTrees.getDocCommentTree(method));
+            var owner = (TypeElement) method.getEnclosingElement();
+            var seen = new java.util.HashSet<TypeElement>();
+            var queue = new java.util.ArrayDeque<>(supertypes(owner));
+            while (!queue.isEmpty()) {
+                var type = queue.removeFirst();
+                if (!seen.add(type)) continue;
+                for (var candidate : ElementFilter.methodsIn(type.getEnclosedElements())) {
+                    if (candidate.getSimpleName().equals(method.getSimpleName()) && elements.overrides(method, candidate, owner)) {
+                        add(docTrees.getDocCommentTree(candidate));
+                    }
+                }
+                queue.addAll(supertypes(type));
+            }
+        }
+
+        private void add(DocCommentTree doc) {
+            if (doc != null) chain.add(doc);
+        }
+
+        String summary() {
+            for (var doc : chain) {
+                var summary = firstSentence(doc);
+                if (summary != null) return summary;
+            }
+            return null;
+        }
+
+        List<String> tags(String name) {
+            for (var doc : chain) {
+                var tags = blockTags(doc, name);
+                if (!tags.isEmpty()) return tags;
+            }
+            return List.of();
+        }
+
+        String tag(String name) {
+            var tags = tags(name);
+            return tags.isEmpty() ? null : tags.get(0);
+        }
     }
 
     // ── Type mapping ────────────────────────────────────────────────────────────
@@ -428,6 +560,11 @@ public class TypeScriptDoclet implements Doclet {
         };
     }
 
+    /** The TS key type of a {@code Map}: numeric keys (e.g. slot → item) become {@code number}, anything else {@code string}. */
+    private String mapKeyType(TypeMirror key) {
+        return tsType(key).equals("number") ? "number" : "string";
+    }
+
     private String mapDeclared(DeclaredType d) {
         var simple = ((TypeElement) d.asElement()).getSimpleName().toString();
         var args = d.getTypeArguments();
@@ -437,7 +574,8 @@ public class TypeScriptDoclet implements Doclet {
             case "String", "CharSequence" -> "string";
             case "List", "Collection", "Set", "Iterable" ->
                 (args.isEmpty() ? "unknown" : tsType(args.get(0))) + "[]";
-            case "Map" -> "Record<string, " + (args.size() == 2 ? tsType(args.get(1)) : "unknown") + ">";
+            case "Map" -> "Record<" + (args.size() == 2 ? mapKeyType(args.get(0)) : "string") + ", "
+                + (args.size() == 2 ? tsType(args.get(1)) : "unknown") + ">";
             case "Optional", "Coerced" -> args.isEmpty() ? "unknown" : tsType(args.get(0));
             case "Object", "MethodResult" -> "unknown"; // opaque/dynamic result; override with @cc-r.return
             case "ByteBuffer" -> "string";              // CC represents binary data as strings
@@ -512,7 +650,12 @@ public class TypeScriptDoclet implements Doclet {
     /** First sentence of a doc comment, flattened to one line. */
     private String firstSentence(DocCommentTree doc) {
         if (doc == null) return null;
-        var text = flatten(doc.getFirstSentence()).trim();
+        var text = flatten(doc.getFirstSentence())
+            // Upstream (illuaminate) reference links: `[label][`ref`]` → label, `[`ref`]` → ref.
+            .replaceAll("\\[([^\\[\\]]+)]\\[`[^`]*`]", "$1")
+            .replaceAll("\\[`([^`]+)`]", "$1")
+            .replace("*/", "*\\/")
+            .trim();
         return text.isEmpty() ? null : text;
     }
 
@@ -561,6 +704,17 @@ public class TypeScriptDoclet implements Doclet {
         for (var tree : trees) {
             if (tree instanceof com.sun.source.doctree.LiteralTree lit) {
                 sb.append(lit.getBody().getBody());
+            } else if (tree instanceof com.sun.source.doctree.LinkTree link) {
+                // `{@link Foo#bar() label}` reads as its label; a bare `{@link Foo#bar}` as `Foo.bar`/`bar`.
+                var label = flatten(link.getLabel());
+                if (label.isEmpty()) {
+                    label = link.getReference().getSignature().replaceAll("\\(.*\\)", "");
+                    if (label.startsWith("#")) label = label.substring(1);
+                    label = label.replace('#', '.');
+                }
+                sb.append(label);
+            } else if (tree instanceof com.sun.source.doctree.InheritDocTree) {
+                // Resolved by MethodDoc, which falls back to the overridden method's summary.
             } else {
                 sb.append(tree.toString());
             }
