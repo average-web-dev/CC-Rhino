@@ -60,4 +60,14 @@ final class JSCallShim {
         ScriptableObject.putProperty(failure, "error", error);
         return failure;
     }
+
+    /** Whether {@code value} is a failure marker built by {@link #failureWith}. */
+    boolean isFailure(Scriptable value) {
+        return value.getPrototype() == failureProto;
+    }
+
+    /** The error carried by a failure marker (see {@link #isFailure}). */
+    Object errorOf(Scriptable failure) {
+        return ScriptableObject.getProperty(failure, "error");
+    }
 }

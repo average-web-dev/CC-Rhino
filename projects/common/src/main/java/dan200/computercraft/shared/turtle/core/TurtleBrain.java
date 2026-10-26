@@ -5,16 +5,17 @@
 package dan200.computercraft.shared.turtle.core;
 
 import com.mojang.authlib.GameProfile;
+import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.api.scripting.MethodResult;
 import dan200.computercraft.api.scripting.Result;
 import dan200.computercraft.api.scripting.TaskCompletion;
-import dan200.computercraft.api.turtle.TurtleCommandResult;
-import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.api.turtle.ITurtleUpgrade;
 import dan200.computercraft.api.turtle.TurtleAnimation;
 import dan200.computercraft.api.turtle.TurtleCommand;
+import dan200.computercraft.api.turtle.TurtleCommandResult;
 import dan200.computercraft.api.turtle.TurtleSide;
 import dan200.computercraft.api.upgrades.UpgradeData;
+import dan200.computercraft.core.apis.events.CoreEvents;
 import dan200.computercraft.core.computer.ComputerSide;
 import dan200.computercraft.core.util.PeripheralHelpers;
 import dan200.computercraft.impl.TurtleUpgrades;
@@ -22,9 +23,9 @@ import dan200.computercraft.shared.computer.core.ComputerFamily;
 import dan200.computercraft.shared.computer.core.ServerComputer;
 import dan200.computercraft.shared.config.Config;
 import dan200.computercraft.shared.container.InventoryDelegate;
+import dan200.computercraft.shared.platform.PlatformHelper;
 import dan200.computercraft.shared.turtle.TurtleOverlay;
 import dan200.computercraft.shared.turtle.blocks.TurtleBlockEntity;
-import dan200.computercraft.shared.platform.PlatformHelper;
 import dan200.computercraft.shared.util.BlockEntityHelpers;
 import dan200.computercraft.shared.util.DirectionUtil;
 import dan200.computercraft.shared.util.Holiday;
@@ -682,7 +683,7 @@ public class TurtleBrain implements TurtleAccessInternal {
             LOG.error("Error running turtle command {} at {}", nextCommand.command(), getPosition(), e);
             if (computer != null) {
                 computer.getMainThreadMonitor().trackWork(System.nanoTime() - start, TimeUnit.NANOSECONDS);
-                computer.queueEvent("task_complete", new Object[]{ nextCommand.taskId(), false, e.getMessage() });
+                computer.queueEvent(new CoreEvents.TaskComplete(nextCommand.taskId(), false, e.getMessage()));
             }
             return;
         }
@@ -697,7 +698,7 @@ public class TurtleBrain implements TurtleAccessInternal {
         var value = result != null && result.isSuccess()
             ? Result.succeed()
             : Result.fail(msg != null ? msg : "error");
-        computer.queueEvent("task_complete", new Object[]{ nextCommand.taskId(), true, value });
+        computer.queueEvent(new CoreEvents.TaskComplete(nextCommand.taskId(), true, value));
     }
 
     private void updateAnimation() {

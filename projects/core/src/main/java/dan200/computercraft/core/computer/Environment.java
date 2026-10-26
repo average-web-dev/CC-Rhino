@@ -4,10 +4,11 @@
 
 package dan200.computercraft.core.computer;
 
-import dan200.computercraft.api.scripting.IComputerAPI;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.api.peripheral.WorkMonitor;
+import dan200.computercraft.api.scripting.IComputerAPI;
 import dan200.computercraft.core.apis.IAPIEnvironment;
+import dan200.computercraft.core.apis.events.CoreEvents;
 import dan200.computercraft.core.filesystem.FileSystem;
 import dan200.computercraft.core.metrics.MetricsObserver;
 import dan200.computercraft.core.terminal.Terminal;
@@ -113,7 +114,7 @@ public final class Environment implements IAPIEnvironment {
                 timer.ticksLeft--;
                 if (timer.ticksLeft <= 0) {
                     // Queue the "timer" event
-                    queueEvent(TIMER_EVENT, entry.getIntKey());
+                    queueEvent(new CoreEvents.Timer(entry.getIntKey()));
                     it.remove();
                 }
             }

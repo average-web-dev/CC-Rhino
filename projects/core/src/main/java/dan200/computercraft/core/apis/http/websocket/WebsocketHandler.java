@@ -4,6 +4,7 @@
 
 package dan200.computercraft.core.apis.http.websocket;
 
+import dan200.computercraft.core.apis.events.CoreEvents;
 import dan200.computercraft.core.apis.http.NetworkUtils;
 import dan200.computercraft.core.apis.http.options.Options;
 import dan200.computercraft.core.metrics.Metrics;
@@ -13,7 +14,7 @@ import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.websocketx.*;
 import io.netty.util.CharsetUtil;
 
-import static dan200.computercraft.core.apis.http.websocket.WebsocketClient.MESSAGE_EVENT;
+import java.nio.ByteBuffer;
 
 class WebsocketHandler extends SimpleChannelInboundHandler<Object> {
     private final Websocket websocket;
@@ -58,12 +59,12 @@ class WebsocketHandler extends SimpleChannelInboundHandler<Object> {
             var data = NetworkUtils.toBytes(textFrame.content());
 
             websocket.environment().observe(Metrics.WEBSOCKET_INCOMING, data.length);
-            websocket.environment().queueEvent(MESSAGE_EVENT, websocket.address(), data, false);
+            websocket.environment().queueEvent(new CoreEvents.WebsocketMessage(websocket.address(), ByteBuffer.wrap(data), false));
         } else if (frame instanceof BinaryWebSocketFrame) {
             var data = NetworkUtils.toBytes(frame.content());
 
             websocket.environment().observe(Metrics.WEBSOCKET_INCOMING, data.length);
-            websocket.environment().queueEvent(MESSAGE_EVENT, websocket.address(), data, true);
+            websocket.environment().queueEvent(new CoreEvents.WebsocketMessage(websocket.address(), ByteBuffer.wrap(data), true));
         } else if (frame instanceof CloseWebSocketFrame closeFrame) {
             websocket.close(closeFrame.statusCode(), closeFrame.reasonText());
         }

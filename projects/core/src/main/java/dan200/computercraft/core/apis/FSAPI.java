@@ -682,8 +682,8 @@ public class FSAPI implements IComputerAPI {
 
     // ── Result types ──────────────────────────────────────────────────────────
 
-    private static final IFunction TRUE = args -> MethodResult.of(true);
-    private static final IFunction FALSE = args -> MethodResult.of(false);
+    private static final IFunction TRUE = IFunction.nonYielding(args -> MethodResult.of(true));
+    private static final IFunction FALSE = IFunction.nonYielding(args -> MethodResult.of(false));
 
     private static IFunction is(boolean value) {
         return value ? TRUE : FALSE;

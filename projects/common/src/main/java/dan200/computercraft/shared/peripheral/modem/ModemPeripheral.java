@@ -5,14 +5,15 @@
 package dan200.computercraft.shared.peripheral.modem;
 
 import com.google.errorprone.annotations.concurrent.GuardedBy;
-import dan200.computercraft.api.scripting.ScriptException;
-import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.network.Packet;
 import dan200.computercraft.api.network.PacketNetwork;
 import dan200.computercraft.api.network.PacketReceiver;
 import dan200.computercraft.api.network.PacketSender;
 import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.api.peripheral.IPeripheral;
+import dan200.computercraft.api.scripting.ScriptException;
+import dan200.computercraft.api.scripting.ScriptFunction;
+import dan200.computercraft.shared.peripheral.PeripheralEvents;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashSet;
@@ -119,8 +120,8 @@ public abstract class ModemPeripheral implements IPeripheral, PacketSender, Pack
 
         synchronized (computers) {
             for (var computer : computers) {
-                computer.queueEvent("modem_message",
-                    computer.getAttachmentName(), packet.channel(), packet.replyChannel(), packet.payload(), distance);
+                computer.queueEvent(new PeripheralEvents.ModemMessage(
+                    computer.getAttachmentName(), packet.channel(), packet.replyChannel(), packet.payload(), distance));
             }
         }
     }
@@ -131,8 +132,8 @@ public abstract class ModemPeripheral implements IPeripheral, PacketSender, Pack
 
         synchronized (computers) {
             for (var computer : computers) {
-                computer.queueEvent("modem_message",
-                    computer.getAttachmentName(), packet.channel(), packet.replyChannel(), packet.payload());
+                computer.queueEvent(new PeripheralEvents.ModemMessage(
+                    computer.getAttachmentName(), packet.channel(), packet.replyChannel(), packet.payload(), null));
             }
         }
     }

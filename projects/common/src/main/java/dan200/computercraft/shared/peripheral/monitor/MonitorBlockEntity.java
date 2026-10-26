@@ -11,6 +11,7 @@ import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.core.terminal.Terminal;
 import dan200.computercraft.shared.computer.terminal.TerminalState;
 import dan200.computercraft.shared.config.Config;
+import dan200.computercraft.shared.peripheral.PeripheralEvents;
 import dan200.computercraft.shared.util.BlockEntityHelpers;
 import dan200.computercraft.shared.util.TickScheduler;
 import net.minecraft.core.BlockPos;
@@ -134,7 +135,7 @@ public class MonitorBlockEntity extends BlockEntity {
 
         if (xIndex != 0 || yIndex != 0 || serverMonitor == null) return;
 
-        if (serverMonitor.pollResized()) eachComputer(c -> c.queueEvent("monitor_resize", c.getAttachmentName()));
+        if (serverMonitor.pollResized()) eachComputer(c -> c.queueEvent(new PeripheralEvents.MonitorResize(c.getAttachmentName())));
         if (serverMonitor.pollTerminalChanged()) MonitorWatcher.enqueue(this);
     }
 
@@ -477,7 +478,7 @@ public class MonitorBlockEntity extends BlockEntity {
         var xCharPos = (int) Math.min(originTerminal.getWidth(), Math.max((pair.x() - RENDER_BORDER - RENDER_MARGIN) / xCharWidth + 1.0, 1.0));
         var yCharPos = (int) Math.min(originTerminal.getHeight(), Math.max((pair.y() - RENDER_BORDER - RENDER_MARGIN) / yCharHeight + 1.0, 1.0));
 
-        eachComputer(c -> c.queueEvent("monitor_touch", c.getAttachmentName(), xCharPos, yCharPos));
+        eachComputer(c -> c.queueEvent(new PeripheralEvents.MonitorTouch(c.getAttachmentName(), xCharPos, yCharPos)));
     }
 
     private void eachComputer(Consumer<IComputerAccess> fun) {

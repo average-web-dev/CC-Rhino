@@ -24,6 +24,7 @@ import dan200.computercraft.shared.computer.metrics.basic.AggregatedMetric;
 import dan200.computercraft.shared.computer.metrics.basic.BasicComputerMetricsObserver;
 import dan200.computercraft.shared.computer.metrics.basic.ComputerMetrics;
 import dan200.computercraft.shared.network.container.ComputerContainerData;
+import dan200.computercraft.shared.peripheral.PeripheralEvents;
 import dan200.computercraft.shared.platform.PlatformHelper;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
@@ -236,12 +237,12 @@ public final class CommandComputerCraft {
      * @return The number of computers this event was queued on.
      */
     private static int queue(Collection<ServerComputer> computers, List<String> args) {
-        var rest = args.toArray();
+        var event = new PeripheralEvents.ComputerCommand(args.toArray(new String[0]));
 
         var queued = 0;
         for (var computer : computers) {
             if (computer.getFamily() == ComputerFamily.COMMAND && computer.isOn()) {
-                computer.queueEvent("computer_command", rest);
+                computer.queueEvent(event);
                 queued++;
             }
         }

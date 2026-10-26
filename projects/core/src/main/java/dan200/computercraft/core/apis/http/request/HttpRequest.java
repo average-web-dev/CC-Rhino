@@ -6,6 +6,7 @@ package dan200.computercraft.core.apis.http.request;
 
 import dan200.computercraft.core.Logging;
 import dan200.computercraft.core.apis.IAPIEnvironment;
+import dan200.computercraft.core.apis.events.CoreEvents;
 import dan200.computercraft.core.apis.http.HTTPRequestException;
 import dan200.computercraft.core.apis.http.NetworkUtils;
 import dan200.computercraft.core.apis.http.Resource;
@@ -37,8 +38,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class HttpRequest extends Resource<HttpRequest> {
     private static final Logger LOG = LoggerFactory.getLogger(HttpRequest.class);
-    private static final String SUCCESS_EVENT = "http_success";
-    private static final String FAILURE_EVENT = "http_failure";
 
     private static final int MAX_REDIRECTS = 16;
 
@@ -175,15 +174,15 @@ public class HttpRequest extends Resource<HttpRequest> {
     }
 
     void failure(String message) {
-        if (tryClose()) environment.queueEvent(FAILURE_EVENT, address, message);
+        if (tryClose()) environment.queueEvent(new CoreEvents.HttpFailure(address, message, null));
     }
 
     void failure(String message, HttpResponseHandle object) {
-        if (tryClose()) environment.queueEvent(FAILURE_EVENT, address, message, object);
+        if (tryClose()) environment.queueEvent(new CoreEvents.HttpFailure(address, message, object));
     }
 
     void success(HttpResponseHandle object) {
-        if (tryClose()) environment.queueEvent(SUCCESS_EVENT, address, object);
+        if (tryClose()) environment.queueEvent(new CoreEvents.HttpSuccess(address, object));
     }
 
     @Override

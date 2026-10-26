@@ -6,6 +6,7 @@ package dan200.computercraft.core.apis;
 
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.api.peripheral.WorkMonitor;
+import dan200.computercraft.api.scripting.Events;
 import dan200.computercraft.core.computer.ComputerEnvironment;
 import dan200.computercraft.core.computer.ComputerSide;
 import dan200.computercraft.core.computer.GlobalEnvironment;
@@ -41,6 +42,11 @@ public interface IAPIEnvironment {
     void reboot();
 
     void queueEvent(String event, @Nullable Object... args);
+
+    /** Queue an {@link dan200.computercraft.api.scripting.Event @Event} record (see {@link Events}). */
+    default void queueEvent(Record event) {
+        queueEvent(Events.name(event), Events.arguments(event));
+    }
 
     void setPeripheralChangeListener(@Nullable IPeripheralChangeListener listener);
 

@@ -138,7 +138,10 @@ public final class JSValues {
         if (java instanceof IFunction function) {
             // A function returned from Java (e.g. a closure). It has no context of its own, so it cannot issue
             // main-thread tasks, but it may still yield via MethodResult like any other native method.
-            var bridge = new JSMethodBridge((target, context, args) -> function.call(args), function, NO_CONTEXT);
+            var bridge = new JSMethodBridge(
+                (target, context, args) -> function.call(args), function, NO_CONTEXT,
+                "function", "a /promises module", !function.isNonYielding(), false
+            );
             ScriptRuntime.setFunctionProtoAndParent(bridge, cx, scope);
             return bridge;
         }

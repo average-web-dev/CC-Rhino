@@ -221,6 +221,11 @@ public class ServerComputer implements ComputerEnvironment {
         queueEvent(event, null);
     }
 
+    /** Queue an {@link dan200.computercraft.api.scripting.Event @Event} record (see {@link Computer#queueEvent(Record)}). */
+    public final void queueEvent(Record event) {
+        computer.queueEvent(event);
+    }
+
     /** A task id unique to this computer, shared with main-thread tasks so {@code task_complete} ids never collide. */
     public final long getUniqueTaskId() {
         return computer.getUniqueTaskId();

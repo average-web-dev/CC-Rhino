@@ -57,31 +57,62 @@ final class JSParallel {
         }
     }
 
-    static Scriptable build(Context cx, Scriptable scope, JSCallShim shim, EventLoop eventLoop) {
+    /**
+     * Build the {@code parallel} module, or with {@code promises} the {@code parallel/promises} module: there the
+     * {@code waitFor*} functions return a promise settled with the group (the caller keeps running), and {@code spawn}
+     * an already-resolved promise of the handle. Invalid arguments reject the promise.
+     */
+    static Scriptable build(Context cx, Scriptable scope, JSCallShim shim, EventLoop eventLoop, boolean promises) {
         var module = cx.newObject(scope);
-        put(module, "waitForAll", shim.wrap(cx, scope, new NativeFunction("waitForAll",
-            (c, s, args) -> waitFor(c, JSTaskGroup.Mode.ALL, -1, tasks(args, 0)))));
-        put(module, "waitForAny", shim.wrap(cx, scope, new NativeFunction("waitForAny",
-            (c, s, args) -> waitFor(c, JSTaskGroup.Mode.ANY, 1, tasks(args, 0)))));
-        put(module, "waitForN", shim.wrap(cx, scope, new NativeFunction("waitForN", (c, s, args) -> {
+        put(module, "waitForAll", blocking(cx, scope, shim, promises, new NativeFunction("waitForAll",
+            (c, s, args) -> waitFor(c, s, promises, JSTaskGroup.Mode.ALL, -1, tasks(args, 0)))));
+        put(module, "waitForAny", blocking(cx, scope, shim, promises, new NativeFunction("waitForAny",
+            (c, s, args) -> waitFor(c, s, promises, JSTaskGroup.Mode.ANY, 1, tasks(args, 0)))));
+        put(module, "waitForN", blocking(cx, scope, shim, promises, new NativeFunction("waitForN", (c, s, args) -> {
             if (args.length == 0 || !(args[0] instanceof Number count)) {
                 throw ScriptRuntime.typeError("bad argument #1 (number expected, got " + typeOf(args, 0) + ")");
             }
-            return waitFor(c, JSTaskGroup.Mode.N, (int) Math.max(0, count.doubleValue()), tasks(args, 1));
+            return waitFor(c, s, promises, JSTaskGroup.Mode.N, (int) Math.max(0, count.doubleValue()), tasks(args, 1));
         })));
-        put(module, "spawn", function(cx, scope, new NativeFunction("spawn", (c, s, args) -> {
+        put(module, "spawn", function(cx, scope, promised(promises, new NativeFunction("spawn", (c, s, args) -> {
             var task = tasks(args, 0);
             if (task.size() != 1) throw ScriptRuntime.typeError("bad argument #1 (function expected, got no value)");
             return handle(c, s, eventLoop, eventLoop.spawn(task.getFirst()));
-        })));
+        }))));
         return module;
     }
 
+    /** A {@code waitFor*} function: behind the call shim when blocking, returning a promise otherwise. */
+    private static Object blocking(Context cx, Scriptable scope, JSCallShim shim, boolean promises, NativeFunction fn) {
+        return promises ? function(cx, scope, promised(true, fn)) : shim.wrap(cx, scope, fn);
+    }
+
+    /** In the promise flavour, turn a synchronous result into a resolved promise and a thrown error into a rejected one. */
+    private static NativeFunction promised(boolean promises, NativeFunction fn) {
+        if (!promises) return fn;
+        return new NativeFunction(fn.name, (c, s, args) -> {
+            var support = JSPromises.get(c);
+            if (support == null) throw new IllegalStateException("No JS event loop is running");
+            Object result;
+            try {
+                result = fn.body.call(c, s, args);
+            } catch (JSAbort e) {
+                throw e;
+            } catch (RhinoException e) {
+                return support.rejected(c, EventLoop.errorValue(c, s, e));
+            }
+            return result instanceof NativePromise ? result : support.resolved(c, result);
+        });
+    }
+
     /**
-     * Block the caller until {@code needed} of {@code tasks} have returned. The continuation is captured here and the
-     * {@link EventLoop} starts the threads once it parks it — JS is never run from inside this native call.
+     * Wait until {@code needed} of {@code tasks} have returned. A blocking call captures its continuation here and the
+     * {@link EventLoop} starts the threads once it parks it — JS is never run from inside this native call. A
+     * promise call starts the threads once the caller yields, and returns a promise settled with the group.
      */
-    private static Object waitFor(Context cx, JSTaskGroup.Mode mode, int needed, List<Callable> tasks) {
+    private static Object waitFor(
+        Context cx, Scriptable scope, boolean promises, JSTaskGroup.Mode mode, int needed, List<Callable> tasks
+    ) {
         var target = needed < 0 ? tasks.size() : Math.min(needed, tasks.size());
         if (target == 0) {
             return switch (mode) {
@@ -91,8 +122,28 @@ final class JSParallel {
             };
         }
 
-        var pending = cx.captureContinuation();
-        pending.setApplicationState(new JSTaskGroup.Request(mode, target, tasks));
+        var request = new JSTaskGroup.Request(mode, target, tasks);
+        var support = JSPromises.get(cx);
+        if (promises && support != null) {
+            var deferred = support.deferred(cx);
+            support.eventLoop().startPromiseGroup(request, deferred.waiter());
+            return deferred.promise();
+        }
+
+        var name = "parallel." + switch (mode) {
+            case ALL -> "waitForAll";
+            case ANY -> "waitForAny";
+            case N -> "waitForN";
+        };
+        var hint = "require('parallel/promises')";
+        if (support != null && support.inAsyncCode()) throw JSPromises.blockingError(cx, scope, name, hint, true);
+        ContinuationPending pending;
+        try {
+            pending = cx.captureContinuation();
+        } catch (IllegalStateException e) {
+            throw JSPromises.blockingError(cx, scope, name, hint, false);
+        }
+        pending.setApplicationState(request);
         throw pending;
     }
 

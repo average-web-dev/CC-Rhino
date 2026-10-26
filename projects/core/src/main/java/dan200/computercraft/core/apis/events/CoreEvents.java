@@ -45,7 +45,7 @@ public final class CoreEvents {
 
     /** Text was pasted into the computer. */
     @Event("paste")
-    public record Paste(String text) {
+    public record Paste(ByteBuffer text) {
     }
 
     /** A mouse button was pressed (advanced computers only). */
@@ -120,6 +120,17 @@ public final class CoreEvents {
     /** A websocket received a message (a binary string). */
     @Event("websocket_message")
     public record WebsocketMessage(String url, ByteBuffer message, boolean binary) {
+    }
+
+    /**
+     * A promise was rejected without a handler, and no running thread owns it (a program's own unhandled rejections
+     * fail that program instead). Emitted by the engine to {@code events.on} listeners only; it is not queued.
+     * {@code error} is {@code Error("Unhandled promise rejection: …")} with the reason as its {@code cause}.
+     *
+     * @cc-r.param error Error
+     */
+    @Event("unhandled_rejection")
+    public record UnhandledRejection(Object error) {
     }
 
     /** Files were dropped onto the computer's terminal. */

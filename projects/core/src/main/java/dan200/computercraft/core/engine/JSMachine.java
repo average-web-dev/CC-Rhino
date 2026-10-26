@@ -140,8 +140,11 @@ public class JSMachine implements IMachine {
             emitter = eventLoop.emitter();
             // Lets native APIs (e.g. fs callbacks) defer JS callbacks onto the event loop.
             JSScheduler.install(cx, scope, eventLoop);
+            // Promise jobs, /promises modules, async code detection, and the async + tslib modules.
+            var promises = JSPromises.install(cx, scope, eventLoop, shim);
 
-            // Build the module loader and register all CC APIs as native modules.
+            // Build the module loader and register all CC APIs as native modules. Every native module `x` also gets
+            // an `x/promises` flavour whose functions return promises instead of blocking.
             var loader = new JSRequire(scope, environment.fileSystem());
             var context = environment.context();
             var methods = environment.luaMethods();
@@ -151,16 +154,25 @@ public class JSMachine implements IMachine {
                 var moduleName = api.getModuleName();
                 if (api.getNames().length == 0 && moduleName == null) continue;
 
-                var obj = JSAPIBuilder.build(cx, scope, shim, api, context, methods);
-                for (var name : api.getNames()) loader.registerNative(name, obj);
-                if (moduleName != null) loader.registerNative(moduleName, obj);
+                var name = moduleName != null ? moduleName : api.getNames()[0];
+                var obj = JSAPIBuilder.build(cx, scope, shim, api, context, methods, name, false);
+                var promiseObj = JSAPIBuilder.build(cx, scope, shim, api, context, methods, name, true);
+                for (var alias : api.getNames()) registerNative(loader, alias, obj, promiseObj);
+                if (moduleName != null) registerNative(loader, moduleName, obj, promiseObj);
             }
 
             // Register the engine-internal 'events' module (emitter + scheduler).
             var eventsApi = new EventsAPI(emitter, eventLoop);
-            loader.registerNative("events", JSAPIBuilder.build(cx, scope, shim, eventsApi, context, methods));
+            registerNative(loader, "events",
+                JSAPIBuilder.build(cx, scope, shim, eventsApi, context, methods, "events", false),
+                JSAPIBuilder.build(cx, scope, shim, eventsApi, context, methods, "events", true));
             // Green threads (parallel.waitForAll/waitForAny/waitForN/spawn), implemented natively in the event loop.
-            loader.registerNative("parallel", JSParallel.build(cx, scope, shim, eventLoop));
+            registerNative(loader, "parallel",
+                JSParallel.build(cx, scope, shim, eventLoop, false), JSParallel.build(cx, scope, shim, eventLoop, true));
+            // Promise helpers: async.run / async.unwrap, and tslib for tsc's importHelpers output. These are about
+            // promises already, so they have no /promises flavour.
+            loader.registerNative("async", promises.asyncModule());
+            loader.registerNative("tslib", promises.tslibModule());
 
             // Expose loader, run the JS require() setup, then remove the loader from global scope.
             // The setup script captures a reference via closure so require() still works after deletion.
@@ -179,6 +191,12 @@ public class JSMachine implements IMachine {
         } finally {
             Context.exit();
         }
+    }
+
+    /** Register a native module and its {@code /promises} flavour. */
+    private static void registerNative(JSRequire loader, String name, Object module, Object promiseModule) {
+        loader.registerNative(name, module);
+        loader.registerNative(name + "/promises", promiseModule);
     }
 
     /**
@@ -337,11 +355,32 @@ public class JSMachine implements IMachine {
         // entered it.
     }
 
+    /**
+     * Our Rhino context: promise jobs go to the {@link EventLoop}'s microtask queue rather than Rhino's own, so they run
+     * as part of the event loop (with thread ownership and abort handling) instead of never.
+     */
+    private final class CCContext extends Context {
+        CCContext(ContextFactory factory) {
+            super(factory);
+        }
+
+        @Override
+        public void enqueueMicrotask(Runnable task) {
+            // The event loop is created after the context; nothing settles a promise before then.
+            var loop = eventLoop;
+            if (loop != null) {
+                loop.schedulePromiseJob(task);
+            } else {
+                super.enqueueMicrotask(task);
+            }
+        }
+    }
+
     private final class CCContextFactory extends ContextFactory {
         @Override
         @SuppressWarnings("deprecation") // setOptimizationLevel(-1) = interpreter mode; required for continuations
         protected Context makeContext() {
-            var cx = super.makeContext();
+            var cx = new CCContext(this);
             cx.setOptimizationLevel(-1);
             cx.setLanguageVersion(Context.VERSION_ES6);
             cx.setInstructionObserverThreshold(CoreConfig.jsInstructionThreshold);
@@ -353,14 +392,20 @@ public class JSMachine implements IMachine {
 
         @Override
         protected void observeInstructionCount(Context cx, int instructionCount) {
-            if (isDisposed || timeout.isHardAborted()) throw JSAbort.hard();
-            if (timeout.isSoftAborted()) throw JSAbort.soft();
+            if (isDisposed || timeout.isHardAborted()) throw abort(JSAbort.hard());
+            if (timeout.isSoftAborted()) throw abort(JSAbort.soft());
             while (timeout.isPaused()) {
                 executionThread = Thread.currentThread();
-                if (isDisposed || timeout.isHardAborted()) throw JSAbort.hard();
+                if (isDisposed || timeout.isHardAborted()) throw abort(JSAbort.hard());
                 LockSupport.parkNanos(1_000_000L); // 1 ms; listener unparks on hard abort
             }
             executionThread = null;
+        }
+
+        /** Tell the event loop, as Rhino's promise machinery would otherwise swallow the abort. */
+        private JSAbort abort(JSAbort abort) {
+            var loop = eventLoop;
+            return loop != null ? loop.noteAbort(abort) : abort;
         }
     }
 }

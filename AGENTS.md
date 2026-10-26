@@ -55,7 +55,16 @@ part of `assemble`.
   optional, and `ScriptUtil.toRecord` accepts them missing), `@cc-r.extends` (extra TS supertypes, e.g. a handle
   exposing a `ReadHandle` via `ObjectSource`), `@cc-r.param <component> <type>` on records. `{@inheritDoc}` is
   resolved. Item/block/entity/fluid detail shapes are hand-written in `projects/core/src/ts/types/details.d.ts`;
-  events are `@Event` records (`CoreEvents`, `PeripheralEvents`) that make up the generated `EventMap`.
+  events are `@Event` records (`CoreEvents`, `PeripheralEvents`) that make up the generated `EventMap`. **Queue events
+  through their record** (`computer.queueEvent(new CoreEvents.Timer(id))`; `queueEvent(Record)` exists on
+  `IComputerAccess`, `AttachedComputerSet`, `IAPIEnvironment`, `Computer`, `ServerComputer`), never with a raw name and
+  argument list, so the declaration and the queued arguments cannot drift. A varargs record
+  (`record ComputerCommand(String... args)`) spreads its last component and becomes a rest element in `EventMap`.
+- Every script-object type (modules and the objects their methods return) also gets a `<Name>Promises` interface;
+  require-able modules additionally get `require("<module>/promises")` declarations.
+- The ROM and the TS test fixtures are compiled by `projects/core/src/build/compile-ts.mjs` (tsc via the TS API, plus a
+  transform that parenthesizes every `yield`: Rhino rejects `f(yield x)` and parses `yield`'s operand as a comma
+  expression).
 
 ## Where things live
 
@@ -69,6 +78,7 @@ part of `assemble`.
 | Wrapping returned Java objects with script methods (handles, dynamic objects) | `core/engine/JSObjects.java` |
 | Java method → JS function, continuation capture, errors thrown at the call site | `core/engine/JSMethodBridge.java`, `JSAPIBuilder.java`, `JSCallShim.java`, `JSErrors.java` |
 | Deferring JS callbacks from native code onto the event loop (e.g. fs callbacks) | `core/engine/JSScheduler.java` |
+| Promises: `/promises` modules, promise jobs, `async`/`tslib` modules, async-code detection | `core/engine/JSPromises.java`, `Waiter.java`, `JSAPIBuilder.java` (+ `EventLoop`) |
 | Safepoint aborts, resource limits | `core/engine/JSAbort.java`, `JSLimits.java`, `core/CoreConfig.java` (+ `ConfigSpec`) |
 | Event bus (`events.on/once/off`) | `core/engine/JSEventEmitter.java`, `core/apis/EventsAPI.java` |
 | Core APIs (`fs`, `system`, `term`, `http`, `peripheral`, `redstone`) | `projects/core/src/main/java/dan200/computercraft/core/apis/` |
@@ -100,13 +110,36 @@ part of `assemble`.
   (`JSCallShim`). `ScriptException` extra properties (e.g. fs `code`) are copied onto the error (`JSErrors`).
 - Continuations only work when JS is entered via `executeScriptWithContinuations` / `callFunctionWithContinuations`.
   A JS callback invoked directly from Java (`fn.call(...)`) **cannot** call blocking APIs — schedule it through
-  `JSScheduler.callLater` instead. Blocking APIs also fail inside generators (Rhino resumes them through Java).
+  `JSScheduler.callLater` instead. Blocking APIs also fail inside generators and promise jobs (Rhino runs them
+  through Java): there they throw "`x.y` blocks and cannot be used inside async code — use require('x/promises')
+  instead" (`JSPromises.blockingError`). Methods that may block are rejected *before* they run, also in other native
+  callbacks (`forEach`, a `Promise` executor): `JSMethodBridge` captures the continuation *before* calling such a
+  method and drops it if the method returns immediately. "May block" = a `MethodResult` return or `mainThread`, and
+  for `IFunction`s / `IDynamicObject` methods everything not declared otherwise (`IFunction.nonYielding(fn)`,
+  `IDynamicObject.isNonYielding(i)`).
 - Concurrency: `require('parallel')` is native (green threads). Every parked continuation, listener, microtask and
   `setImmediate` belongs to a thread; stopping a thread discards them. Ctrl+T raises `Error("Terminated")` in the
   foreground program; bash runs each program as a foreground thread. There is deliberately **no** public
   `pullEvent`/`queueEvent`.
-- Rhino `Promise` jobs are not drained by the event loop yet, so `.then` callbacks never run. The planned async model
-  is `require('<module>/promises')` (#35); there is no `async`/`await` in Rhino.
+- Async model (#35): blocking stays the default. Every native module `x` also exists as `require('x/promises')` with
+  the same functions returning real `Promise`s (`fooSync` + callback `foo` pairs collapse to a promise `foo`, as in
+  Node's `fs/promises`); objects returned through it get promise methods too. Rhino's promise jobs run in the event
+  loop's microtask queue (`JSMachine.CCContext.enqueueMicrotask` → `EventLoop.schedulePromiseJob`). A pending
+  operation is parked like a blocking call, but with a `Waiter.Promised` instead of a continuation.
+  `require('async')` has `run(function* () {…})` (yield = await) and `unwrap(p)` (block until settled);
+  `require('tslib')` is native, so TS `async` functions, async generators and `for await` work (ROM tsconfig:
+  `target: es2015` + `importHelpers`; `Symbol.asyncIterator` is polyfilled). Rhino has no `async`/`await` syntax,
+  and Rhino's generator functions lack `Function.prototype` (use `Function.prototype.apply.call`).
+- Promise reactions belong to the thread that registered them (`Promise.prototype.then` is wrapped, see `JSPromises`):
+  a stopped thread's reactions never run. A pending `/promises` operation of a stopped thread is discarded and its
+  promise rejected with `Error("Terminated")`, so other threads awaiting it don't hang. Aborts inside promise code are
+  noted by the event loop (`EventLoop.noteAbort`), as Rhino's promise machinery catches them.
+- Unhandled rejections (`EventLoop.checkRejections`): a rejection without a handler at the end of a microtask drain
+  fails the thread that created the promise with `Error("Unhandled promise rejection: …")` (Node ≥ 15 semantics; bash
+  prints it like any program error). If that thread is the root thread or already returned, the error goes to the
+  `unhandled_rejection` event (bash prints it); a stopped thread's promises never report. Rhino's own
+  `UnhandledRejectionTracker` is unusable (static map shared by all computers), so the global `Promise` is a wrapper
+  that reports every new promise.
 - Programs are loaded with `require.uncached` (fresh every run); libraries use the cached `require`.
 - `fs` follows Node.js semantics and signatures (options objects, `withFileTypes`, `recursive`, Node error codes);
   CC-specific calls (`getDrive`, `getFreeSpace`, …) are extensions.
@@ -115,7 +148,9 @@ part of `assemble`.
 ## Conventions
 
 - **Rhino authoring constraints** for all ROM/bios TS: no `const` inside loops/blocks (use `let`), no spread in calls
-  or array literals (use `.concat()` / `.apply()`). TS targets ES2017, CommonJS (`export = {...}`).
+  or array literals (use `.concat()` / `.apply()`). TS targets ES2015 (`async` → generators + native `tslib`),
+  CommonJS (`export = {...}`). In plain JS generators (`async.run`), parenthesize `yield` inside expressions
+  (`f((yield p))`, `x = (yield p), y`).
 - Programs in `rom/bin` / `rom/os/bin` export `main(args, cwd)`; bash calls it. Interactive programs suspend bash's
   `char`/`key` listeners and register their own.
 - New source files carry the MPL-2.0 SPDX header (`average-web-dev`, current year).

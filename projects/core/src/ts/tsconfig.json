@@ -1,8 +1,9 @@
 {
     "compilerOptions": {
         "module": "commonjs",
-        "target": "es2017",
-        "lib": ["es2017"],
+        "target": "es2015",
+        "importHelpers": true,
+        "lib": ["es2017", "es2018.asyncgenerator", "es2018.asynciterable"],
         "strict": true,
         "noEmitOnError": true,
         "outDir": "../../build/generated/js",

@@ -23,6 +23,7 @@ import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame
 import org.hamcrest.MatcherAssert.assertThat
 import org.hamcrest.Matchers.*
 import org.junit.jupiter.api.AfterAll
+import java.nio.ByteBuffer
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -84,7 +85,8 @@ class TestHttpApi {
                 // receive() returns a WebsocketReceiveResult record.
                 val message = websocket.receive(Optional.empty()).await()!![0] as WebsocketReceiveResult
                 assertThat("Received a message", message.success, equalTo(true))
-                assertThat("Received a return message", message.message as ByteArray, equalTo("HELLO".toByteArray()))
+                // The websocket_message event carries a ByteBuffer (see CoreEvents.WebsocketMessage).
+                assertThat("Received a return message", message.message as ByteBuffer, equalTo(ByteBuffer.wrap("HELLO".toByteArray())))
                 assertThat("Message is text", message.binary, equalTo(false))
 
                 websocket.close()

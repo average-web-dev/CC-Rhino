@@ -4,6 +4,11 @@
 
 package dan200.computercraft.api.scripting;
 
+import org.jspecify.annotations.Nullable;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+
 /**
  * Helpers for turning an {@link Event}-annotated record into the {@code (name, args)} pair that
  * {@code queueEvent} expects. The record's {@link Event#value()} is the event name and its components,
@@ -22,15 +27,37 @@ public final class Events {
         return annotation.value();
     }
 
-    /** The record's components, in declaration order, as event arguments. */
-    public static Object[] arguments(Record event) {
-        var components = event.getClass().getRecordComponents();
-        var args = new Object[components.length];
+    /**
+     * The record's components, in declaration order, as event arguments. A varargs record
+     * ({@code record Foo(String... args)}) spreads its last component, so the event gets one argument per element.
+     */
+    public static @Nullable Object[] arguments(Record event) {
+        var type = event.getClass();
+        var components = type.getRecordComponents();
+        var args = new ArrayList<@Nullable Object>(components.length);
         try {
-            for (var i = 0; i < components.length; i++) args[i] = components[i].getAccessor().invoke(event);
+            for (var i = 0; i < components.length; i++) {
+                var value = components[i].getAccessor().invoke(event);
+                if (i == components.length - 1 && isVarArgs(type) && value instanceof Object[] rest) {
+                    args.addAll(Arrays.asList(rest));
+                } else {
+                    args.add(value);
+                }
+            }
         } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Cannot read components of " + event.getClass().getName(), e);
+            throw new IllegalStateException("Cannot read components of " + type.getName(), e);
         }
-        return args;
+        return args.toArray();
+    }
+
+    private static boolean isVarArgs(Class<?> record) {
+        var components = record.getRecordComponents();
+        var types = new Class<?>[components.length];
+        for (var i = 0; i < components.length; i++) types[i] = components[i].getType();
+        try {
+            return record.getDeclaredConstructor(types).isVarArgs();
+        } catch (NoSuchMethodException e) {
+            return false;
+        }
     }
 }

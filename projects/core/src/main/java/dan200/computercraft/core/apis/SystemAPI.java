@@ -9,6 +9,7 @@ import dan200.computercraft.api.scripting.IComputerAPI;
 import dan200.computercraft.api.scripting.MethodResult;
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.scripting.ScriptFunction;
+import dan200.computercraft.core.apis.events.CoreEvents;
 import dan200.computercraft.core.util.StringUtil;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
@@ -75,7 +76,7 @@ public class SystemAPI implements IComputerAPI {
                     var alarm = entry.getValue();
                     var t = alarm.day * 24.0 + alarm.time;
                     if (now >= t) {
-                        apiEnvironment.queueEvent("alarm", entry.getIntKey());
+                        apiEnvironment.queueEvent(new CoreEvents.Alarm(entry.getIntKey()));
                         it.remove();
                     }
                 }

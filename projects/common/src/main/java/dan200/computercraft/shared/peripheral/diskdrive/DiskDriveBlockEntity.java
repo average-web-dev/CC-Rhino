@@ -14,6 +14,7 @@ import dan200.computercraft.shared.common.AbstractContainerBlockEntity;
 import dan200.computercraft.shared.container.BasicContainer;
 import dan200.computercraft.shared.network.client.PlayRecordClientMessage;
 import dan200.computercraft.shared.network.server.ServerNetworking;
+import dan200.computercraft.shared.peripheral.PeripheralEvents;
 import dan200.computercraft.shared.util.WorldUtil;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -337,7 +338,7 @@ public final class DiskDriveBlockEntity extends AbstractContainerBlockEntity imp
             assert info.mountPath == null : "Mount path should be null";
         }
 
-        computer.queueEvent("disk", computer.getAttachmentName());
+        computer.queueEvent(new PeripheralEvents.DiskInsert(computer.getAttachmentName()));
     }
 
     private static void unmountDisk(IComputerAccess computer, MountInfo info) {
@@ -346,7 +347,7 @@ public final class DiskDriveBlockEntity extends AbstractContainerBlockEntity imp
             info.mountPath = null;
         }
 
-        computer.queueEvent("disk_eject", computer.getAttachmentName());
+        computer.queueEvent(new PeripheralEvents.DiskEject(computer.getAttachmentName()));
     }
 
     private void updateBlockState(DiskDriveState state) {

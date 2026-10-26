@@ -6,7 +6,6 @@ package dan200.computercraft.shared.peripheral.modem.wired;
 
 import dan200.computercraft.api.filesystem.Mount;
 import dan200.computercraft.api.filesystem.WritableMount;
-import dan200.computercraft.api.scripting.*;
 import dan200.computercraft.api.network.PacketNetwork;
 import dan200.computercraft.api.network.wired.WiredNode;
 import dan200.computercraft.api.network.wired.WiredSender;
@@ -14,7 +13,9 @@ import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.api.peripheral.NotAttachedException;
 import dan200.computercraft.api.peripheral.WorkMonitor;
+import dan200.computercraft.api.scripting.*;
 import dan200.computercraft.core.apis.PeripheralAPI;
+import dan200.computercraft.core.apis.events.CoreEvents;
 import dan200.computercraft.core.computer.GuardedContext;
 import dan200.computercraft.core.methods.PeripheralMethod;
 import dan200.computercraft.shared.computer.core.ServerContext;
@@ -339,12 +340,12 @@ public abstract class WiredModemPeripheral extends ModemPeripheral implements Wi
         private void attach() {
             attached = true;
             peripheral.attach(this);
-            computer.queueEvent("peripheral", getAttachmentName());
+            computer.queueEvent(new CoreEvents.PeripheralAttach(getAttachmentName()));
         }
 
         private void detach() {
             peripheral.detach(this);
-            computer.queueEvent("peripheral_detach", getAttachmentName());
+            computer.queueEvent(new CoreEvents.PeripheralDetach(getAttachmentName()));
             attached = false;
 
             synchronized (this) {

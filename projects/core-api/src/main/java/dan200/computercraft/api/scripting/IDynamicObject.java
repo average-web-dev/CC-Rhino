@@ -36,4 +36,16 @@ public interface IDynamicObject {
      * @throws ScriptException If the function threw an exception.
      */
     MethodResult callMethod(IContext context, int method, IArguments arguments) throws ScriptException;
+
+    /**
+     * Whether a method never yields, i.e. always returns {@link MethodResult#of(Object)}. Methods that may yield (the
+     * default, as it cannot be known in advance) are treated as blocking: they cannot be called from async code
+     * (generators, promise callbacks) or from callbacks run by native code, and are rejected there before they run.
+     *
+     * @param method The index of the method in {@link #getMethodNames()}.
+     * @return Whether the method never yields.
+     */
+    default boolean isNonYielding(int method) {
+        return false;
+    }
 }

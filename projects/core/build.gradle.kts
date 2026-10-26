@@ -43,9 +43,30 @@ val transpileTypeScript by tasks.registering(cc.tweaked.gradle.NpxExecToDir::cla
 
     output = layout.buildDirectory.dir("generated/js")
 
-    args = listOf("tsc", "--project", "src/ts/tsconfig.json")
+    // tsc plus a Rhino fix-up transform (see the script).
+    inputs.file("src/build/compile-ts.mjs").withPropertyName("compiler")
+    args = listOf("tsx", "src/build/compile-ts.mjs", "--project", "src/ts/tsconfig.json")
 
     onlyIf { hasTypeScriptSources }
+}
+
+// TypeScript fixtures for the engine tests (e.g. `async` functions), compiled with the ROM's compiler settings, so the
+// tests run real tsc output on Rhino.
+val transpileTestTypeScript by tasks.registering(cc.tweaked.gradle.NpxExecToDir::class) {
+    group = LifecycleBasePlugin.VERIFICATION_GROUP
+    description = "Transpile the TypeScript test fixtures under src/test/ts/ to JavaScript"
+
+    inputs.files(fileTree("src/test/ts") { include("**/*.ts") }).withPropertyName("sources")
+    inputs.file("src/test/ts/tsconfig.json").withPropertyName("tsconfig")
+    inputs.file("src/ts/tsconfig.json").withPropertyName("baseTsconfig")
+    inputs.files(fileTree("src/ts/types") { include("**/*.ts") }).withPropertyName("romTypes")
+    dependsOn(":common:generateTsTypes")
+    inputs.dir(project(":common").layout.buildDirectory.dir("tsTypes")).withPropertyName("apiTypes")
+
+    output = layout.buildDirectory.dir("generated/testJs")
+
+    inputs.file("src/build/compile-ts.mjs").withPropertyName("compiler")
+    args = listOf("tsx", "src/build/compile-ts.mjs", "--project", "src/test/ts/tsconfig.json")
 }
 
 dependencies {
@@ -79,6 +100,10 @@ tasks.processResources {
 
     var props = mapOf("gitContributors" to cct.gitContributors.get().joinToString("\n"))
     filesMatching("data/computercraft/js/rom/help/credits.md") { expand(props) }
+}
+
+tasks.processTestResources {
+    from(transpileTestTypeScript) { into("ts-fixtures") }
 }
 
 tasks.test {
