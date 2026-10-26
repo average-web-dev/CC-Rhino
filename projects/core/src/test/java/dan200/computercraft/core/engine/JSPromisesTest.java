@@ -389,7 +389,7 @@ class JSPromisesTest {
             """);
         assertEquals(List.of(
             "w.await blocks and cannot be used inside async code or callbacks run by native code (such as "
-                + "Array.prototype.forEach) — use require('w/promises') instead"
+                + "Array.prototype.forEach, or a listener of another thread called by events.emit) — use require('w/promises') instead"
         ), rec.values);
         assertEquals(0, api.calls, "the method never ran");
     }
@@ -401,7 +401,7 @@ class JSPromisesTest {
             """);
         assertEquals(List.of(
             "w.main blocks and cannot be used inside async code or callbacks run by native code (such as "
-                + "Array.prototype.forEach) — use require('w/promises') instead"
+                + "Array.prototype.forEach, or a listener of another thread called by events.emit) — use require('w/promises') instead"
         ), rec.values);
         assertEquals(0, api.calls);
     }

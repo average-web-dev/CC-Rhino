@@ -38,6 +38,14 @@ final class JSArguments implements IArguments {
         return JSValues.toJava(raw);
     }
 
+    /** The unconverted JS values of the arguments from {@code index} on. */
+    Object[] raw(int index) {
+        var from = Math.min(offset + index, args.length);
+        var out = new Object[args.length - from];
+        System.arraycopy(args, from, out, 0, out.length);
+        return out;
+    }
+
     @Override
     public String getType(int index) {
         if (index < 0 || index >= count()) return "nil";

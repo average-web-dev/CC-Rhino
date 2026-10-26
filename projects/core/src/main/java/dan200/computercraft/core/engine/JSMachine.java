@@ -22,7 +22,7 @@ public class JSMachine implements IMachine {
 
     // Synthetic CC event name used to keep the JS event loop running when there is pending internal
     // work (microtasks, setImmediate) but no real CC event is incoming.
-    private static final String SELF_TICK_EVENT = "cc:js-tick";
+    private static final String SELF_TICK_EVENT = JSEventEmitter.SELF_TICK_EVENT;
     private static final String TERMINATE_EVENT = "terminate";
 
     /**
@@ -138,6 +138,8 @@ public class JSMachine implements IMachine {
             var shim = new JSCallShim(cx, scope);
             eventLoop = new EventLoop(shim);
             emitter = eventLoop.emitter();
+            // Lets Java code running inside the machine deliver events synchronously (JSEventEmitter.fireNow).
+            emitter.install(cx, scope);
             // Lets native APIs (e.g. fs callbacks) defer JS callbacks onto the event loop.
             JSScheduler.install(cx, scope, eventLoop);
             // Promise jobs, /promises modules, async code detection, and the async + tslib modules.
@@ -163,8 +165,10 @@ public class JSMachine implements IMachine {
 
             // Register the engine-internal 'events' module (emitter + scheduler).
             var eventsApi = new EventsAPI(emitter, eventLoop);
-            registerNative(loader, "events",
-                JSAPIBuilder.build(cx, scope, shim, eventsApi, context, methods, "events", false),
+            var eventsModule = JSAPIBuilder.build(cx, scope, shim, eventsApi, context, methods, "events", false);
+            // events.emit is JS, so the listeners it calls may block (see JSEventEmitter.installEmit).
+            emitter.installEmit(cx, scope, eventsModule);
+            registerNative(loader, "events", eventsModule,
                 JSAPIBuilder.build(cx, scope, shim, eventsApi, context, methods, "events", true));
             // Green threads (parallel.waitForAll/waitForAny/waitForN/spawn), implemented natively in the event loop.
             registerNative(loader, "parallel",
@@ -227,8 +231,8 @@ public class JSMachine implements IMachine {
                 // Start any threads the bios spawned or is waiting for.
                 var readyResult = eventLoop.drainMicrotasks(cx, scope);
                 if (readyResult.isError()) { close(); return readyResult; }
-                // Fire __start__ so any os.on("__start__", cb) listeners run.
-                var startResult = emitSafe("__start__", new Object[0]);
+                // Fire __start__ so any events.on("__start__", cb) listeners run.
+                var startResult = emitSafe(JSEventEmitter.START_EVENT, new Object[0]);
                 if (startResult.isError()) return startResult;
                 var r = eventLoop.drainMicrotasks(cx, scope);
                 if (r.isError()) { close(); return r; }

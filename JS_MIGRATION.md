@@ -572,58 +572,131 @@ Each continuation is bucketed by its phase rather than kept in a single flat lis
 
 ## Phase 13 — Unified event bus
 
-Right now two separate systems dispatch events to JS:
+Before this phase there was only one way for an event to reach `events.on` listeners:
 
 ```text
-Path A — CC-originated events (Java APIs, peripherals, timers)
-  apiEnvironment.queueEvent("modem_message", args)
+Queued — any thread, CC-originated events (Java APIs, peripherals, timers)
+  computer.queueEvent(new SomeEvent(…))            (an @Event record)
     → CC computer event queue (cross-tick, cross-thread safe)
-      → next tick: JSMachine.handleEvent("modem_message", args)
-        → JSEventEmitter.emit(…)  ← JS listeners finally fire
-
-Path B — JS-originated events (user code calling events.emit())
-  JSEventEmitter.emit("custom", args)  ← fires synchronously, this tick
+      → later: JSMachine.handleEvent(name, args)
+        → wakes blocked calls waiting for it (EventLoop Phase 2), then
+        → EventLoop.emit(…): each listener entered from the event loop (may block)
 ```
 
-The gap: a Java API that calls `queueEvent()` from inside a method invoked by JS
-(e.g. a peripheral side-effect) does **not** reach `events.on()` listeners until the
-next tick. Listeners registered with `events.on()` have no way to receive a
-synchronous event from Java without waiting a full CC tick.
+Java code already running inside the machine (a script method) had no way to deliver an event synchronously, and
+JS had no `events.emit` at all.
 
-### Goal
+### Result
 
-Make `JSEventEmitter` the single authoritative dispatch point. Java code that needs
-to fire an event from within the current JS execution context calls directly into
-the emitter; Java code running on another thread (server thread, modem callbacks)
-still queues via `apiEnvironment.queueEvent()` → CC scheduler → `handleEvent()` → emitter.
+`JSEventEmitter` is the single dispatch point, with two delivery modes:
 
 ```text
-Unified model:
+Queued (unchanged) — computer.queueEvent(record), from any thread
+  → next handleEvent → drainIO + EventLoop.emit (listeners may block)
 
-  Same-context Java call (inside handleEvent execution):
-    JSEventBus.fireNow("modem_message", args)   ← emitter.emit() directly
-
-  Cross-thread / cross-tick Java call:
-    apiEnvironment.queueEvent("modem_message", args)
-      → CC queue → handleEvent() → emitter (as today)
-
-  JS-side call:
-    require('events').emit("custom", args)      ← emitter.emit() directly (unchanged)
+Synchronous — from inside the machine's JS execution, before the call returns
+  Java:  JSEventEmitter.current().fireNow(record)          ← @Event record
+    → EventLoop.dispatchNow(…): each listener called from Java (cannot block)
+  JS:    require('events').emit('custom', ...args)         ← boolean "had listeners"
+    → JS emit (JSEventEmitter.installEmit) loops over EventLoop.emitPlan(event):
+        own / ancestor-thread listener → called from JS, may block (blocks the caller of emit)
+        unrelated-thread listener      → ForeignListener: run as its owner from Java (cannot block)
 ```
 
-### Implementation approach
+- **`JSEventEmitter.fireNow(Record)`** (and `fireNow(Context, Scriptable, Record)`) — record-based like
+  `queueEvent(Record)`; arguments are converted with `JSValues.toJs`. `JSEventEmitter.current()` finds the emitter of
+  the machine executing on this thread (Context thread-local, like `JSScheduler`) and throws `IllegalStateException`
+  anywhere else, so cross-thread callers cannot use it by mistake. It only reaches `events.on` listeners: blocked
+  calls waiting for the event (`MethodResult.pullEvent`, `TaskCompletion`) are **not** woken — those need
+  `queueEvent`.
+- **`events.emit(event, ...args)`** — Node `EventEmitter.emit` semantics: synchronous, listeners in registration
+  order (`once` listeners removed first), the arguments passed unchanged (same objects), returns whether there were
+  listeners. `events/promises.emit` is the generated promise flavour: it emits synchronously too and returns an
+  already-settled `Promise<boolean>` (a listener error or a reserved name rejects it).
+- **Native event names are reserved.** `events.emit` throws an `Error` with `code: 'ERR_RESERVED_EVENT'` for every
+  name registered through `Events.register` — all `@Event` records (`CoreEvents`, `KeyEvent`, `CharEvent`,
+  `RedstoneEvent` from `JSEventEmitter`'s static initializer; `PeripheralEvents` from `ModRegistry.register`) plus the
+  engine-internal `__start__` and `cc:js-tick`. Otherwise any program could fake input (`key`, `char`, `paste`, mouse
+  events) that the shell or another program acts on, fake `terminate`, or emit `timer` / `task_complete` /
+  `modem_message` / `http_success` with forged arguments that other programs' listeners trust. Every other name is
+  allowed; addon mods register their own `@Event` records the same way. (Emitting a native name could not wake a
+  blocked call anyway, since `emit` does not go through the I/O phase — it would only mislead listeners.)
+- **`emit` is JS, so listeners can block.** Rhino can only capture a continuation across interpreted frames. The
+  blocking module's `emit` is therefore a small JS function (`JSEventEmitter.EMIT_JS`, installed on the `events`
+  module object by `installEmit`; no new global, the sandbox allow-list is unchanged). It asks the native, never
+  blocking `plan(event)` (`EventLoop.emitPlan`) for the listeners — reserved-name check, `once` listeners removed,
+  registration order kept — and calls them itself with `fn.apply` (which stays in the interpreter). Listeners are
+  split by ownership:
+  - **Own / ancestor listeners** (owned by the calling thread or one of its ancestors — always the case for root
+    listeners) are called directly, as part of the caller's strand. They may block (`turtle.dig()`, `sleep`, …),
+    which blocks the caller: `emit` returns once all listeners have finished, as Node's `emit` does for synchronous
+    listeners. This is safe for ancestor-owned listeners because it is the caller's own lineage: the ancestor is
+    waiting for the caller (or runs it in the background), and killing the ancestor kills the caller too. The
+    difference to normal dispatch: work the listener starts (`events.on`, `parallel.spawn`, …) belongs to the caller
+    rather than to the ancestor — inherited by the ancestor when the caller returns, discarded if the caller is
+    stopped. Ctrl+T reaches a listener blocked in a foreground caller like any blocking call of the caller; the
+    `Terminated` error propagates out of `emit`.
+  - **Unrelated-thread listeners** are wrapped in a `ForeignListener`, which runs them as their owner from Java
+    (`EventLoop.callAs`), exactly like `fireNow`: they cannot block (clear error), and an error fails their owner.
+  - If `emit` itself is called where no continuation can be captured — inside `Array.prototype.forEach` & co. (see
+    #38), generators or promise jobs — a blocking own listener gets the usual clear error.
+- **`fireNow` and `events/promises.emit`** call every listener from Java (`EventLoop.dispatchNow`), so none can
+  block: the blocking error says "… cannot be used inside async code or callbacks run by native code (such as
+  Array.prototype.forEach, or a listener of another thread called by events.emit) — use require('x/promises')
+  instead". The way out is `setImmediate` or a `/promises` module. `events/promises.emit` deliberately stays simple:
+  synchronous, settled promise; it does not wait for (blocking or async) listeners.
+- **Thread ownership** — every listener of another thread runs as that thread (`EventLoop.callAs`), so work it starts
+  belongs to it; listeners of stopped threads are skipped.
+- **Errors** — an error in a listener owned by the calling thread or one of its ancestors is thrown from `emit` /
+  `fireNow`, skipping the remaining listeners, as in Node; failing the owner would kill the caller anyway, so the
+  caller gets the chance to catch it. An error in a listener of an unrelated thread fails that thread exactly as in
+  normal dispatch, and the remaining listeners still run.
+- **Types** — `EventMap` (generated, native events) plus an empty, augmentable `CustomEventMap` (emitted by the
+  doclet next to it). `emit` is typed `emit<E extends keyof CustomEventMap>(event: E, ...args: CustomEventMap[E])`
+  plus `emit<E extends string>(event: E extends keyof EventMap | keyof CustomEventMap ? never : E, ...args: any[])`,
+  so emitting a native name is a compile error, declared custom events are checked, and other names are free-form.
+  `on` / `once` / `off` get a `CustomEventMap` overload as well.
 
-- **`JSEventEmitter.java`** — add `void fireNow(Context cx, Scriptable scope, String event, Object[] javaArgs)`: converts args via `JSValues.toJs()` then calls `emit()`. Requires an active Rhino `Context` (only call from within `handleEvent()`).
-- **`EventsAPI.java`** — expose `emit(event, ...args)` as a JS-callable method backed by `emitter.fireNow()`, replacing any manual workaround users might have.
-- **`OSAPI.java`** — remove the `apiEnvironment.queueEvent("cc:yield", …)` call from `doYield()`: the yield continuation is already handled by `MethodResult.YIELD` and Phase 4; the queued event is a no-op and can be deleted.
-- **`JSMachine.handleEvent()`** — no structural change; it already calls `emitter.emit()` for all CC-queue events. It remains the bridge for cross-thread events.
-- **`IAPIEnvironment` / `SystemAPI`** — audit all `queueEvent()` call sites: classify each as same-context (can switch to `fireNow`) or cross-thread (must stay as `queueEvent`).
+### `queueEvent` audit (13.4)
+
+Every call site runs on a thread other than the target machine's JS execution (or is a generic pass-through whose
+caller is unknown), so **all stay queued** — none was migrated to `fireNow`. The queue is also what wakes blocked
+calls waiting for an event (Phase 1/2), which `fireNow` does not do.
+
+| Call site | Event(s) | Runs on | Verdict |
+|---|---|---|---|
+| `Environment` timer tick | `timer` | computer tick (server thread) | cross-thread: must stay (also wakes `sleep`, Phase 1) |
+| `SystemAPI` alarm tick | `alarm` | server tick | cross-thread: must stay |
+| `Computer` redstone tick | `redstone` | server tick | cross-thread: must stay |
+| `PeripheralAPI.onPeripheralChanged` | `peripheral`, `peripheral_detach` | server tick (peripheral change) | cross-thread: must stay |
+| `WiredModemPeripheral` remote attach/detach | `peripheral`, `peripheral_detach` | server thread (wired network) | cross-thread: must stay |
+| `JSContext` main-thread task | `task_complete` | server thread (main-thread task) | cross-thread: must stay (wakes the `TaskCallback`, Phase 2) |
+| `TurtleBrain` command completion | `task_complete` | turtle update tick (server thread) | cross-thread: must stay (wakes `TaskCompletion.await`) |
+| `HttpRequest`, `CheckUrl`, `Websocket`, `WebsocketHandler` | `http_*`, `websocket_*` | Netty I/O threads | cross-thread: must stay |
+| `EventComputerInput` | `key`, `key_up`, `char`, `paste`, `mouse_*` | server network thread | cross-thread: must stay |
+| `ComputerActionServerMessage` | `terminate` | server network thread | cross-thread: must stay |
+| `ServerInputState` | `file_transfer` | server network thread | cross-thread: must stay |
+| standalone `InputState` | `file_transfer`, `terminate` | emulator UI thread | cross-thread: must stay (now queues `CoreEvents` records instead of raw names) |
+| `ModemPeripheral` receive | `modem_message` | the *sending* computer's thread / server thread | cross-thread (another machine): must stay |
+| `MonitorBlockEntity` | `monitor_resize`, `monitor_touch` | server tick / player interaction | cross-thread: must stay |
+| `DiskDriveBlockEntity` | `disk`, `disk_eject` | server thread | cross-thread: must stay |
+| `SpeakerPeripheral` | `speaker_audio_empty` | server tick | cross-thread: must stay |
+| `RedstoneRelayPeripheral` | `redstone` | server tick | cross-thread: must stay |
+| `TurtleBlockEntity` | `turtle_inventory` | server thread (inventory change) | cross-thread: must stay |
+| `CommandComputerCraft` (`/computercraft queue`) | `computer_command` | server thread (command) | cross-thread: must stay |
+| `ComputerExecutor` self-tick | `cc:js-tick` | any thread (executor wake-up) | must stay: it *is* the mechanism that schedules the next tick |
+| `ComputerAccess`, `PeripheralAPI.PeripheralWrapper`, `WiredModemPeripheral.RemotePeripheralWrapper`, `AttachedComputerSet` | any (addon `IComputerAccess.queueEvent`) | unknown (usually server thread) | must stay: generic API; Java code inside a script method can use `JSEventEmitter.current().fireNow(record)` |
+| `TestAPI` / `ManagedComputers` (testMod), `KotlinMachine` / `ScriptTaskRunner` (test fixtures), `ComputerTrackingPeripheral` (example) | test / example events | test harness / server thread | must stay (test-only / example) |
+| `EventLoop.checkRejections` | `unhandled_rejection` | inside the machine | already dispatched directly (`EventLoop.emit`), never queued |
+| `JSMachine.handleEvent` (boot) | `__start__` | inside the machine | already dispatched directly, never queued |
+
+`projects/web` (TeaVM emulator, disabled, #17) has its own copies of the HTTP and speaker sites; same verdict.
 
 - [x] **13.1** Remove the redundant `apiEnvironment.queueEvent("cc:yield", …)` from `OSAPI.doYield()` — the `MethodResult.YIELD` bucket already handles the yield without needing a CC event — *done: `SystemAPI.doYield` only returns `MethodResult.yield()`*
-- [ ] **13.2** Add `JSEventEmitter.fireNow(Context, Scriptable, String, Object[])` — `JSValues`-converting wrapper around `emit()` for Java callers inside the JS execution context
-- [ ] **13.3** Expose `events.emit(event, ...args)` in `EventsAPI` backed by `fireNow`
-- [ ] **13.4** Audit all `apiEnvironment.queueEvent()` call sites across all API classes; annotate each as `// cross-thread: must stay` or migrate to `fireNow`
-- [ ] **13.5** Verify: a peripheral that calls `fireNow()` from inside a `@ScriptFunction` invocation fires `events.on()` listeners synchronously in the same tick; cross-thread calls still deliver on the next tick
+- [x] **13.2** `JSEventEmitter.fireNow(Record)` / `fireNow(Context, Scriptable, Record)` + `JSEventEmitter.current()` — synchronous, record-based delivery for Java callers inside the JS execution context (`EventLoop.dispatchNow`)
+- [x] **13.3** `events.emit(event, ...args)` (and `events/promises.emit`) in `EventsAPI`: Node semantics, implemented in JS so own/ancestor listeners may block, native names rejected (`Events.register` / `Events.isNative`, `ERR_RESERVED_EVENT`), typed through `CustomEventMap`
+- [x] **13.4** Audit all `queueEvent()` call sites — see the table above; all stay queued
+- [x] **13.5** `JSEventEmitTest`: synchronous delivery within the call (`fireNow` from a script method, `emit`) vs. queued delivery on the next `handleEvent`, return value, reserved names, argument identity, listener ownership and stopped threads, error propagation, blocking own and ancestor listeners (I/O wait, timer, Ctrl+T), unrelated-thread listeners and emit inside forEach cannot block, registration order across threads, the promise flavour, nested emit from native callbacks; `EventsTest` covers the registry
 - [ ] **Commit** — stage Phase 13 files; propose commit message; wait for user approval
 
 ---

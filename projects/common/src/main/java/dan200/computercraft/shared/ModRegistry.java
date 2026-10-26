@@ -15,6 +15,7 @@ import dan200.computercraft.api.media.IMedia;
 import dan200.computercraft.api.network.wired.WiredElement;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.api.pocket.IPocketUpgrade;
+import dan200.computercraft.api.scripting.Events;
 import dan200.computercraft.api.turtle.ITurtleUpgrade;
 import dan200.computercraft.api.upgrades.UpgradeBase;
 import dan200.computercraft.api.upgrades.UpgradeData;
@@ -55,6 +56,7 @@ import dan200.computercraft.shared.media.recipes.DiskRecipe;
 import dan200.computercraft.shared.media.recipes.PrintoutRecipe;
 import dan200.computercraft.shared.network.container.ComputerContainerData;
 import dan200.computercraft.shared.network.container.ContainerData;
+import dan200.computercraft.shared.peripheral.PeripheralEvents;
 import dan200.computercraft.shared.peripheral.commandblock.CommandBlockPeripheral;
 import dan200.computercraft.shared.peripheral.diskdrive.DiskDriveBlock;
 import dan200.computercraft.shared.peripheral.diskdrive.DiskDriveBlockEntity;
@@ -605,6 +607,9 @@ public final class ModRegistry {
         RecipeFunctions.REGISTRY.register();
         Permissions.REGISTRY.register();
         CreativeTabs.REGISTRY.register();
+
+        // Peripheral and block events are native: scripts cannot emit them with events.emit.
+        Events.register(PeripheralEvents.class);
 
         // Register bundled power providers
         ComputerCraftAPI.registerBundledRedstoneProvider(new DefaultBundledRedstoneProvider());

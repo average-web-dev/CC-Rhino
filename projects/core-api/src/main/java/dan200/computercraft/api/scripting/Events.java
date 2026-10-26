@@ -8,14 +8,64 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Helpers for turning an {@link Event}-annotated record into the {@code (name, args)} pair that
  * {@code queueEvent} expects. The record's {@link Event#value()} is the event name and its components,
  * in declaration order, are the arguments — the same order the generated TypeScript {@code EventMap} uses.
+ *
+ * <p>Also keeps the registry of <em>native</em> event names ({@link #register}, {@link #isNative}). Scripts may emit
+ * their own events with {@code events.emit}, but not native ones: otherwise a program could fake input
+ * ({@code key}, {@code char}), timers or the completion of another program's task ({@code task_complete}).
  */
 public final class Events {
+    private static final Set<String> NATIVE = ConcurrentHashMap.newKeySet();
+
     private Events() {
+    }
+
+    /**
+     * Register native events, which scripts cannot emit themselves with {@code events.emit}.
+     *
+     * <p>Each class is either an {@link Event} record, or a holder class whose nested {@link Event} records are all
+     * registered (e.g. {@code CoreEvents}). Mods that declare their own event records should register them once at
+     * startup.
+     *
+     * @param types The event records or holder classes to register.
+     */
+    public static void register(Class<?>... types) {
+        for (var type : types) {
+            var annotation = type.getAnnotation(Event.class);
+            if (annotation != null) {
+                NATIVE.add(annotation.value());
+                continue;
+            }
+            var found = false;
+            for (var nested : type.getDeclaredClasses()) {
+                var nestedAnnotation = nested.getAnnotation(Event.class);
+                if (nestedAnnotation == null) continue;
+                NATIVE.add(nestedAnnotation.value());
+                found = true;
+            }
+            if (!found) throw new IllegalArgumentException(type.getName() + " declares no @Event records");
+        }
+    }
+
+    /** Register native event names that have no {@link Event} record (e.g. engine-internal events). */
+    public static void registerNames(String... names) {
+        NATIVE.addAll(Arrays.asList(names));
+    }
+
+    /**
+     * Whether {@code name} is a native event (see {@link #register}).
+     *
+     * @param name The event name.
+     * @return Whether scripts are not allowed to emit this event.
+     */
+    public static boolean isNative(String name) {
+        return NATIVE.contains(name);
     }
 
     /** The event name from the record's {@link Event} annotation. */

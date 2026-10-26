@@ -416,9 +416,20 @@ public class TypeScriptDoclet implements Doclet {
         }
         if (events.isEmpty()) return;
 
-        var out = new StringBuilder("interface EventMap {\n");
+        var out = new StringBuilder("/** The native events, fired by the computer: name → arguments. Scripts cannot emit these. */\n");
+        out.append("interface EventMap {\n");
         for (var e : events.entrySet()) out.append("    ").append(e.getKey()).append(": ").append(e.getValue()).append(";\n");
-        out.append("}\n");
+        out.append("}\n\n");
+        // Script-defined events (`events.emit`), declared by the program itself through declaration merging.
+        out.append("""
+            /**
+             * Script-defined events sent with `events.emit`: name → arguments. Empty by default; declare your own events
+             * by augmenting it (`declare global { interface CustomEventMap { my_event: [count: number]; } }` in a module),
+             * which types `events.emit`, `on`, `once` and `off` for them.
+             */
+            interface CustomEventMap {
+            }
+            """);
         Files.writeString(outputDir.resolve("EventMap.d.ts"), out.toString());
     }
 
@@ -508,12 +519,14 @@ public class TypeScriptDoclet implements Doclet {
         var exposed = promise ? promiseNames(scriptFunctionNames(method), promiseModule) : scriptFunctionNames(method);
         var voidRet = promise ? "Promise<void>" : "void";
 
-        // `@cc-r.eventlistener` — emit a generic listener over EventMap plus a string fallback overload.
+        // `@cc-r.eventlistener` — emit generic listeners over EventMap and CustomEventMap plus a string fallback overload.
         if (!doc.tags("cc-r.eventlistener").isEmpty()) {
             var lines = new ArrayList<String>();
             for (var name : exposed) {
                 if (summary != null) lines.add("/** " + summary + " */");
                 lines.add(name + "<E extends keyof EventMap>(event: E, listener: (...args: EventMap[E]) => void): " + voidRet + ";");
+                lines.add(name + "<E extends keyof CustomEventMap>(event: E, listener: (...args: CustomEventMap[E]) => void): "
+                    + voidRet + ";");
                 // `any[]` (not `unknown[]`): a catch-all listener is contravariant, so a more
                 // specific handler like `(id: number) => void` must remain assignable to it.
                 lines.add(name + "(event: string, listener: (...args: any[]) => void): " + voidRet + ";");

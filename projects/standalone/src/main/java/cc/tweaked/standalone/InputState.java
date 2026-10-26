@@ -4,6 +4,7 @@
 
 package cc.tweaked.standalone;
 
+import dan200.computercraft.core.apis.events.CoreEvents;
 import dan200.computercraft.core.apis.handles.ArrayByteChannel;
 import dan200.computercraft.core.apis.transfer.TransferredFile;
 import dan200.computercraft.core.apis.transfer.TransferredFiles;
@@ -130,12 +131,12 @@ public class InputState {
             files.add(new TransferredFile(path.getFileName().toString(), new ArrayByteChannel(contents)));
         }
 
-        if (!files.isEmpty()) computer.queueEvent(TransferredFiles.EVENT, new Object[]{ new TransferredFiles(files) });
+        if (!files.isEmpty()) computer.queueEvent(new CoreEvents.FileTransfer(new TransferredFiles(files)));
     }
 
     public void update() {
         if (terminateTimer >= 0 && terminateTimer < TERMINATE_TIME && (terminateTimer += 0.05f) > TERMINATE_TIME) {
-            computer.queueEvent("terminate", null);
+            computer.queueEvent(new CoreEvents.Terminate());
         }
 
         if (shutdownTimer >= 0 && shutdownTimer < TERMINATE_TIME && (shutdownTimer += 0.05f) > TERMINATE_TIME) {
