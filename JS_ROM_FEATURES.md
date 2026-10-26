@@ -375,7 +375,14 @@ parallel.waitForAll(...fns: Function[]): void
 
 **Dependencies**: events
 
-**Implementation notes**: In Lua this uses coroutines with filter strings. In JS, since there are no coroutines, this must be implemented with Rhino continuations or a fiber model. Each "thread" is a Rhino continuation context that is resumed whenever its filter matches the current event. The host runtime must expose a mechanism to suspend and resume synchronous contexts. `waitForAny` returns when the first continuation reaches its end; `waitForAll` waits for all.
+**Implementation notes** (done, native module — `JSParallel`, `JSThread`, `EventLoop`): each task runs as a green
+thread (`callFunctionWithContinuations`). The caller's continuation is parked inside the event loop and resumed by the
+threads themselves (no CC events, no polling). Every parked continuation, `events.on` listener, microtask and
+`setImmediate` callback is tagged with the thread that created it; stopping a thread (losers of
+`waitForAny`/`waitForN`, siblings of a failed task, `spawn` handle `.stop()`) discards all of it, cascading to child
+threads. Also `waitForN(n, ...fns)` and `spawn(fn)` → `{ id, stop(), isAlive(), getError() }`. `terminate` (Ctrl+T)
+throws `Error("Terminated")` at the blocked call of every foreground thread (threads being waited on by `waitFor*`);
+spawned background threads are not terminated. bash runs each program as such a foreground thread.
 
 **Priority**: important
 

@@ -299,19 +299,22 @@ function main(args: string[], cwd: string): void {
     events.on('term_resize', onResize);
 
     // Block here, one tick at a time, while the listeners above drive the editor.
-    while (running) system.yield();
+    // Ctrl+T makes system.yield() throw "Terminated"; the finally still restores the terminal.
+    try {
+        while (running) system.yield();
+    } finally {
+        events.off('char', onChar);
+        events.off('key', onKey);
+        events.off('paste', onPaste);
+        events.off('term_resize', onResize);
 
-    events.off('char', onChar);
-    events.off('key', onKey);
-    events.off('paste', onPaste);
-    events.off('term_resize', onResize);
-
-    // Restore the terminal for the shell.
-    term.setBackgroundColor(BLACK);
-    term.setTextColor(WHITE);
-    term.clear();
-    term.setCursorPos({ x: 0, y: 0 });
-    term.setCursorBlink(true);
+        // Restore the terminal for the shell.
+        term.setBackgroundColor(BLACK);
+        term.setTextColor(WHITE);
+        term.clear();
+        term.setCursorPos({ x: 0, y: 0 });
+        term.setCursorBlink(true);
+    }
 }
 
 export = { main };

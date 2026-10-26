@@ -48,6 +48,7 @@ CI only runs the mod build + tests (Lua lint/docs website/TeaVM web emulator are
 |---|---|
 | JS machine (Rhino context, safepoint, sandbox) | `projects/core/src/main/java/dan200/computercraft/core/engine/JSMachine.java` |
 | Event loop (timers / IO / microtasks / yields / setImmediate) | `core/engine/EventLoop.java` |
+| Green threads (`parallel` module), thread ownership/cancellation, Ctrl+T | `core/engine/JSParallel.java`, `JSThread.java`, `JSTaskGroup.java`, `EventLoop.java` |
 | `require()` resolver + module cache | `core/engine/JSRequire.java` (+ `REQUIRE_SETUP_JS` in `JSMachine`) |
 | Java ⇄ JS value conversion | `core/engine/JSValues.java`, `JSArguments.java` |
 | Java method → JS function, continuation capture | `core/engine/JSMethodBridge.java`, `JSAPIBuilder.java` |

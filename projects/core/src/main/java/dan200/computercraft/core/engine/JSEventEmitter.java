@@ -5,9 +5,6 @@
 package dan200.computercraft.core.engine;
 
 import org.mozilla.javascript.Callable;
-import org.mozilla.javascript.Context;
-import org.mozilla.javascript.ContinuationPending;
-import org.mozilla.javascript.Scriptable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -17,20 +14,30 @@ import java.util.Map;
 /**
  * Pure-Java event listener registry for the JS machine.
  *
- * <p>Exposed to JS via the {@code events} native module ({@code on/once/off/listenerCount}).
- * All listener invocations happen synchronously inside {@link #emit}.
-*/
+ * <p>Exposed to JS via the {@code events} native module ({@code on/once/off/listenerCount}). Every listener is owned
+ * by the green thread that registered it (see {@link JSThread}): listeners of a killed thread are removed, so a
+ * stopped or terminated program stops reacting to events. Listeners are invoked by {@link EventLoop#emit}.
+ */
 public final class JSEventEmitter {
-    record ListenerEntry(Callable fn, boolean once) {}
+    record ListenerEntry(Callable fn, boolean once, JSThread owner) {}
 
+    private final EventLoop eventLoop;
     private final Map<String, List<ListenerEntry>> listeners = new HashMap<>();
 
+    JSEventEmitter(EventLoop eventLoop) {
+        this.eventLoop = eventLoop;
+    }
+
     public void on(String event, Callable fn) {
-        listeners.computeIfAbsent(event, k -> new ArrayList<>()).add(new ListenerEntry(fn, false));
+        add(event, fn, false);
     }
 
     public void once(String event, Callable fn) {
-        listeners.computeIfAbsent(event, k -> new ArrayList<>()).add(new ListenerEntry(fn, true));
+        add(event, fn, true);
+    }
+
+    private void add(String event, Callable fn, boolean once) {
+        listeners.computeIfAbsent(event, k -> new ArrayList<>()).add(new ListenerEntry(fn, once, eventLoop.currentThread()));
     }
 
     public void off(String event, Callable fn) {
@@ -39,27 +46,20 @@ public final class JSEventEmitter {
     }
 
     /**
-     * Invoke all listeners registered for {@code event}.
-     * {@code once} listeners are removed before invocation so they can't be called twice even if
-     * a listener re-registers during emission.
+     * Take the listeners to invoke for {@code event}. {@code once} listeners are removed before invocation so they
+     * can't be called twice even if a listener re-registers during emission.
      */
-    public void emit(Context cx, Scriptable scope, String event, Object[] jsArgs) {
+    List<ListenerEntry> take(String event) {
         var list = listeners.get(event);
-        if (list == null || list.isEmpty()) return;
-        var snapshot = new ArrayList<>(list);
+        if (list == null || list.isEmpty()) return List.of();
+        var snapshot = List.copyOf(list);
         list.removeIf(ListenerEntry::once);
-        // Run every listener even if an earlier one captures a continuation (blocking call).
-        // Collecting all continuations in a list lets non-blocking listeners always execute.
-        List<ContinuationPending> captured = null;
-        for (var entry : snapshot) {
-            try {
-                cx.callFunctionWithContinuations(entry.fn(), scope, jsArgs);
-            } catch (ContinuationPending pending) {
-                if (captured == null) captured = new ArrayList<>();
-                captured.add(pending);
-            }
-        }
-        if (captured != null) throw new MultiContinuationPending(captured);
+        return snapshot;
+    }
+
+    /** Remove every listener whose owning thread has been killed. */
+    void removeDead() {
+        for (var list : listeners.values()) list.removeIf(e -> e.owner().isDead());
     }
 
     public int listenerCount(String event) {

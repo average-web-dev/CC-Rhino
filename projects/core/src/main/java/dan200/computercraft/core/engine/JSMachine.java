@@ -24,6 +24,7 @@ public class JSMachine implements IMachine {
     // Synthetic CC event name used to keep the JS event loop running when there is pending internal
     // work (microtasks, setImmediate) but no real CC event is incoming.
     private static final String SELF_TICK_EVENT = "cc:js-tick";
+    private static final String TERMINATE_EVENT = "terminate";
 
     /**
      * JS bootstrap that installs the global {@code require()} function using the {@code __cc_loader__}
@@ -133,9 +134,9 @@ public class JSMachine implements IMachine {
             // Compile bios now so we can use executeScriptWithContinuations later.
             biosScript = cx.compileString(biosSource, "bios.js", 1, null);
 
-            emitter = new JSEventEmitter();
             var shim = new JSCallShim(cx, scope);
             eventLoop = new EventLoop(shim);
+            emitter = eventLoop.emitter();
 
             // Build the module loader and register all CC APIs as native modules.
             var loader = new JSRequire(scope, environment.fileSystem());
@@ -153,6 +154,8 @@ public class JSMachine implements IMachine {
             // Register the engine-internal 'events' module (emitter + scheduler).
             var eventsApi = new EventsAPI(emitter, eventLoop);
             loader.registerNative("events", JSAPIBuilder.build(cx, scope, shim, eventsApi, context, methods));
+            // Green threads (parallel.waitForAll/waitForAny/waitForN/spawn), implemented natively in the event loop.
+            loader.registerNative("parallel", JSParallel.build(cx, scope, shim, eventLoop));
 
             // Expose loader, run the JS require() setup, then remove the loader from global scope.
             // The setup script captures a reference via closure so require() still works after deletion.
@@ -196,23 +199,18 @@ public class JSMachine implements IMachine {
         try {
             if (!started) {
                 started = true;
-                try {
-                    cx.executeScriptWithContinuations(biosScript, scope);
-                } catch (ContinuationPending pending) {
-                    eventLoop.schedule(pending);
-                } catch (EvaluatorException e) {
-                    return mapException(e);
-                } catch (RhinoException e) {
-                    close();
-                    return MachineResult.error(e.getMessage() != null ? e.getMessage() : e.toString());
-                } catch (Exception e) {
-                    close();
-                    return MachineResult.error(e.getMessage() != null ? e.getMessage() : e.toString());
-                }
+                var biosResult = eventLoop.runBios(cx, scope, biosScript);
+                if (biosResult.isError()) { close(); return biosResult; }
+                // Start any threads the bios spawned or is waiting for.
+                var readyResult = eventLoop.drainMicrotasks(cx, scope);
+                if (readyResult.isError()) { close(); return readyResult; }
                 // Fire __start__ so any os.on("__start__", cb) listeners run.
                 var startResult = emitSafe("__start__", new Object[0]);
-                if (!startResult.isError()) scheduleSelfTick();
-                return startResult;
+                if (startResult.isError()) return startResult;
+                var r = eventLoop.drainMicrotasks(cx, scope);
+                if (r.isError()) { close(); return r; }
+                scheduleSelfTick();
+                return MachineResult.OK;
             }
 
             // Null event after startup is a no-op (Phase 5.4).
@@ -233,6 +231,13 @@ public class JSMachine implements IMachine {
 
             var rawArgs = arguments != null ? arguments : new Object[0];
             var fullArgs = buildFullArgs(eventName, rawArgs);
+
+            // Ctrl+T: make the foreground program's blocked calls throw "Terminated" (see EventLoop.terminate).
+            if (TERMINATE_EVENT.equals(eventName)) {
+                eventLoop.terminate(cx, scope);
+                var r = eventLoop.drainMicrotasks(cx, scope);
+                if (r.isError()) { close(); return r; }
+            }
 
             // Phase 1 — Timers: wake up os.sleep() continuations whose CC timer just fired.
             if ("timer".equals(eventName) && rawArgs.length >= 1 && rawArgs[0] instanceof Number n) {
@@ -294,36 +299,14 @@ public class JSMachine implements IMachine {
         return fullArgs;
     }
 
-    /** Call emitter.emit(), routing any captured continuations into the event loop. */
+    /**
+     * Invoke the {@code events.on} listeners for {@code event}. Each runs as a strand of the thread that registered
+     * it, so blocking calls park and errors in a thread's listener fail that thread (see {@link EventLoop#emit}).
+     */
     private MachineResult emitSafe(String event, Object[] jsArgs) {
-        try {
-            emitter.emit(cx, scope, event, jsArgs);
-        } catch (MultiContinuationPending multi) {
-            for (var p : multi.continuations()) eventLoop.schedule(p);
-        } catch (EvaluatorException e) {
-            return mapException(e);
-        } catch (RhinoException e) {
-            close();
-            return MachineResult.error(e.getMessage() != null ? e.getMessage() : e.toString());
-        } catch (Exception e) {
-            close();
-            return MachineResult.error(e.getMessage() != null ? e.getMessage() : e.toString());
-        }
-        return MachineResult.OK;
-    }
-
-    private MachineResult mapException(EvaluatorException e) {
-        var msg = e.getMessage();
-        if (HARD_ABORT_MESSAGE.equals(msg)) {
-            close();
-            return MachineResult.TIMEOUT;
-        }
-        if (TimeoutState.ABORT_MESSAGE.equals(msg)) {
-            close();
-            return MachineResult.error(TimeoutState.ABORT_MESSAGE);
-        }
-        close();
-        return MachineResult.error(msg != null ? msg : e.toString());
+        var result = eventLoop.emit(cx, scope, event, jsArgs);
+        if (result.isError()) close();
+        return result;
     }
 
     @Override

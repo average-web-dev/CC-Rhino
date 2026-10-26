@@ -13,6 +13,7 @@ const events   = require('events');
 const term     = require('term');
 const fs       = require('fs');
 const env      = require('env');
+const parallel = require('parallel');
 const canColor = term.isColor();
 
 // Names that may follow `$` / `${...}` during variable expansion.
@@ -67,6 +68,11 @@ function formatError(fallbackFile: string, e: any): string {
  * Programs are loaded with `require.uncached`, so their top-level code runs on every invocation and edits take
  * effect immediately. Returns false only if the program itself was not found; errors raised by the program
  * (including a missing dependency) are printed and still count as found.
+ *
+ * The program runs as the foreground job: its own green thread, waited for with parallel.waitForAll. Ctrl+T makes
+ * the call it is blocked in throw `Error("Terminated")`; if the program does not catch it, the thread ends, every
+ * events.on listener / callback / thread it started is discarded, and we print "Terminated". Listeners a program
+ * leaves behind when it returns normally stay registered (they then belong to the shell).
  */
 function run(path: string, ...args: string[]): boolean {
     const isPath = path.startsWith('/') || path.startsWith('./') || path.startsWith('../');
@@ -78,12 +84,13 @@ function run(path: string, ...args: string[]): boolean {
         return false;
     }
     try {
-        const mod = require.uncached(resolved) as any;
-        if (typeof mod?.main === 'function') {
-            mod.main(args, cwd);
-        }
+        parallel.waitForAll(() => {
+            let mod = require.uncached(resolved) as any;
+            if (typeof mod?.main === 'function') mod.main(args, cwd);
+        });
     } catch (e: any) {
-        print(formatError(resolved, e));
+        if (e?.message === 'Terminated') print('Terminated');
+        else print(formatError(resolved, e));
     }
     return true;
 }

@@ -50,9 +50,14 @@ final class JSCallShim {
 
     /** Build the value to resume a continuation with so that its call site throws {@code new Error(message)}. */
     Scriptable failure(Context cx, Scriptable scope, String message) {
+        return failureWith(cx, scope, cx.newObject(scope, "Error", new Object[]{ message }));
+    }
+
+    /** Build the value to resume a continuation with so that its call site throws {@code error} (any JS value). */
+    Scriptable failureWith(Context cx, Scriptable scope, Object error) {
         var failure = cx.newObject(scope);
         failure.setPrototype(failureProto);
-        ScriptableObject.putProperty(failure, "error", cx.newObject(scope, "Error", new Object[]{ message }));
+        ScriptableObject.putProperty(failure, "error", error);
         return failure;
     }
 }

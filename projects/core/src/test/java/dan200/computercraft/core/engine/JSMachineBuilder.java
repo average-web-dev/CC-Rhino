@@ -48,6 +48,8 @@ final class JSMachineBuilder {
     private TimeoutState timeout = NO_TIMEOUT;
     private IContext context = NO_CONTEXT;
     private @Nullable FileSystem fileSystem;
+    private Runnable scheduleTick = () -> {
+    };
     private final List<IComputerAPI> apis = new ArrayList<>();
     private final Map<Object, Map<String, ApiMethod>> methods = new HashMap<>();
 
@@ -63,6 +65,12 @@ final class JSMachineBuilder {
 
     JSMachineBuilder context(IContext context) {
         this.context = context;
+        return this;
+    }
+
+    /** Called whenever the machine asks for a {@code cc:js-tick} (see {@link MachineEnvironment#scheduleTick()}). */
+    JSMachineBuilder scheduleTick(Runnable scheduleTick) {
+        this.scheduleTick = scheduleTick;
         return this;
     }
 
@@ -112,7 +120,7 @@ final class JSMachineBuilder {
         };
 
         var env = new MachineEnvironment(
-            context, MetricsObserver.discard(), timeout, apis, supplier, "test", fileSystem, () -> {});
+            context, MetricsObserver.discard(), timeout, apis, supplier, "test", fileSystem, scheduleTick);
         var stream = new ByteArrayInputStream(bios.getBytes(StandardCharsets.UTF_8));
         return new JSMachine(env, stream);
     }
