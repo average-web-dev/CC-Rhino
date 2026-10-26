@@ -27,7 +27,7 @@ The new structure does **not** need to stay compatible with the old Lua API.
 | **Sync suffix** | – | Blocking variant is named `…Sync` (Node convention), callback variant without suffix |
 
 Chosen default conventions (overridable):
-- Result of "can-fail" actions = `{ok: boolean, reason?: string}`
+- Result of "can-fail" actions = `{success: boolean, reason?: string}`
 - Coordinates/sizes = object instead of tuple
 
 ---
@@ -285,34 +285,34 @@ No tuples, no async → portable 1:1.
 
 ## `turtle` — result object instead of `(bool, string)` tuple
 
-All functions **block** (world interaction). "Can-fail" return → `{ok: boolean, reason?: string}`.
+All functions **block** (world interaction). "Can-fail" return → `{success: boolean, reason?: string}`.
 
 | Function | Parameters | Return |
 |---|---|---|
-| `forward` / `back` / `up` / `down` | – | `{ok, reason?}` |
-| `turnLeft` / `turnRight` | – | `{ok, reason?}` |
-| `dig` / `digUp` / `digDown` | `side?` | `{ok, reason?}` |
-| `place` / `placeUp` / `placeDown` | `text?` | `{ok, reason?}` |
-| `drop` / `dropUp` / `dropDown` | `count?` | `{ok, reason?}` |
-| `suck` / `suckUp` / `suckDown` | `count?` | `{ok, reason?}` |
-| `attack` / `attackUp` / `attackDown` | `side?` | `{ok, reason?}` |
+| `forward` / `back` / `up` / `down` | – | `{success, reason?}` |
+| `turnLeft` / `turnRight` | – | `{success, reason?}` |
+| `dig` / `digUp` / `digDown` | `side?` | `{success, reason?}` |
+| `place` / `placeUp` / `placeDown` | `text?` | `{success, reason?}` |
+| `drop` / `dropUp` / `dropDown` | `count?` | `{success, reason?}` |
+| `suck` / `suckUp` / `suckDown` | `count?` | `{success, reason?}` |
+| `attack` / `attackUp` / `attackDown` | `side?` | `{success, reason?}` |
 | `detect` / `detectUp` / `detectDown` | – | `boolean` |
 | `compare` / `compareUp` / `compareDown` | – | `boolean` |
-| `inspect` / `inspectUp` / `inspectDown` | – | `{ok: boolean, data?: object, reason?: string}` |
+| `inspect` / `inspectUp` / `inspectDown` | – | `{success: boolean, data?: object, reason?: string}` |
 | `select` | `slot` | `void` (or throws) |
 | `getSelectedSlot` | – | `number` |
 | `getItemCount` / `getItemSpace` | `slot?` | `number` |
 | `getItemDetail` | `slot?, detailed?` | `object \| null` |
 | `compareTo` | `slot` | `boolean` |
-| `transferTo` | `slot, count?` | `{ok, reason?}` |
-| `refuel` | `count?` | `{ok, reason?}` |
+| `transferTo` | `slot, count?` | `{success, reason?}` |
+| `refuel` | `count?` | `{success, reason?}` |
 | `getFuelLevel` / `getFuelLimit` | – | `number \| "unlimited"` |
-| `equipLeft` / `equipRight` | – | `{ok, reason?}` |
+| `equipLeft` / `equipRight` | – | `{success, reason?}` |
 | `getEquippedLeft` / `getEquippedRight` | – | `object \| null` |
 
-> **Alternative to `{ok, reason}`:** tuple `[ok, reason]` for `const [ok] = turtle.forward()`.
+> **Alternative to `{success, reason}`:** tuple `[ok, reason]` for `const [ok] = turtle.forward()`.
 > Downside: `if (turtle.forward())` is always truthy with either variant → needs clear docs.
-> Recommendation: `{ok, reason}`.
+> Recommendation: `{success, reason}`.
 
 ---
 
@@ -320,7 +320,7 @@ All functions **block** (world interaction). "Can-fail" return → `{ok: boolean
 
 | Function | Parameters | Return (new) | today |
 |---|---|---|---|
-| `exec` | `command` | `{ok: boolean, output: string[], affected?: number}` | 3 returns |
+| `exec` | `command` | `{success: boolean, output: string[], affected?: number}` | 3 returns |
 | `execAsync` | `command` | `number` (taskId) | same |
 | `list` | `...subcmd` | `string[]` | same |
 | `getDimension` | – | `string` | same |
@@ -335,8 +335,8 @@ All functions **block** (world interaction). "Can-fail" return → `{ok: boolean
 
 | Function | Parameters | Return |
 |---|---|---|
-| `equipBack` | – | `{ok: boolean, reason?: string}` |
-| `unequipBack` | – | `{ok: boolean, reason?: string}` |
+| `equipBack` | – | `{success: boolean, reason?: string}` |
+| `unequipBack` | – | `{success: boolean, reason?: string}` |
 
 ---
 
@@ -351,12 +351,12 @@ All functions **block** (world interaction). "Can-fail" return → `{ok: boolean
 3. **`http`:** `request`/`get` as callback + `…Sync` blocking, `Response` object with
    `.json()/.text()/.buffer()`, `WebSocket` as an EventEmitter.
 4. **Tuples → objects everywhere:** `getCursorPos`→`{x,y}`, `getBlockPosition`→`{x,y,z}`,
-   turtle/pocket→`{ok, reason}`.
+   turtle/pocket→`{success, reason}`.
 5. **`term` coordinates 0-based** (JS-idiomatic, diverging from CC).
 
 ## Decisions
 
-- **(a)** turtle/pocket result as **`{ok, reason}`** ✅ (tuple `[ok, reason]` rejected)
+- **(a)** turtle/pocket result as **`{success, reason}`** ✅ (tuple `[ok, reason]` rejected)
 - **(b)** `term` coordinates **0-based** ✅
 - **(c)** path helpers in a **dedicated `path` module** ✅
 - **(d)** computer control named **`process`** ✅

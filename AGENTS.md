@@ -86,7 +86,7 @@ part of `assemble`.
   meanwhile.
 - Main-thread work: `@ScriptFunction(mainThread = true)` or `TaskCallback`; externally-completed work (turtle
   command queue) uses `TaskCompletion.await(taskId)` and the standard `task_complete` event.
-- Return values: one value per call. Can-fail actions return a `Result` record (`{ ok, reason? }`); structured data
+- Return values: one value per call. Can-fail actions return a `Result` record (`{ success, reason? }`); structured data
   should be Java **records** (converted by reflection in `JSValues.toJs`, field names = component names).
   Real errors are thrown (`ScriptException`).
 - A failed blocking call (`task_complete` with `ok = false`) throws a normal, catchable JS `Error` at the call site
