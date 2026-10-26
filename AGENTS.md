@@ -49,6 +49,13 @@ part of `assemble`.
   agents/worktrees at once), and stop daemons when done (`./gradlew --stop`).
 - New `@cc.*` / `@cc-r.*` javadoc tags used by the TypeScript doclet must be added to the hidden-tag list in
   `buildSrc/src/main/kotlin/cc-tweaked.java-convention.gradle.kts`, otherwise `:common-api:javadoc` fails in CI.
+- The tsdoclet **fails** `generateTsTypes` when a script method's TS type would be `unknown` (an `Object`/
+  `MethodResult`/`Map<?, ?>` return, an `IArguments` parameter, …) without `@cc-r.return` / `@cc-r.params` /
+  `@cc-r.overload`. Other tags: `@cc-r.options` (record used as an options bag → `@Nullable` components become
+  optional, and `ScriptUtil.toRecord` accepts them missing), `@cc-r.extends` (extra TS supertypes, e.g. a handle
+  exposing a `ReadHandle` via `ObjectSource`), `@cc-r.param <component> <type>` on records. `{@inheritDoc}` is
+  resolved. Item/block/entity/fluid detail shapes are hand-written in `projects/core/src/ts/types/details.d.ts`;
+  events are `@Event` records (`CoreEvents`, `PeripheralEvents`) that make up the generated `EventMap`.
 
 ## Where things live
 

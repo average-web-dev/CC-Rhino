@@ -163,7 +163,7 @@ tasks.javadoc {
             listOf(
                 "cc.since", "cc.changed", "cc.module", "cc.usage", "cc.see", "cc.param", "cc.tparam", "cc.treturn",
                 "cc-r.return", "cc-r.params", "cc-r.param", "cc-r.hide", "cc-r.eventlistener", "cc-r.union",
-                "cc-r.interface", "cc-r.overload",
+                "cc-r.interface", "cc-r.overload", "cc-r.options", "cc-r.extends",
             ).map { "$it:X" },
         )
         stdOptions.links("https://docs.oracle.com/en/java/javase/${CCTweakedPlugin.JAVA_TARGET.asInt()}/docs/api/")

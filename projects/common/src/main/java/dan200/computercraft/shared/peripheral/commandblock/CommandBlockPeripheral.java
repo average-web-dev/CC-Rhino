@@ -4,6 +4,7 @@
 
 package dan200.computercraft.shared.peripheral.commandblock;
 
+import dan200.computercraft.api.scripting.Result;
 import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.shared.computer.apis.CommandAPI;
@@ -56,13 +57,13 @@ public class CommandBlockPeripheral implements IPeripheral {
     /**
      * Execute the command block once.
      *
-     * @return The result of executing.
+     * @return Whether the command succeeded.
      */
     @ScriptFunction(mainThread = true)
-    public final boolean runCommand() {
+    public final Result runCommand() {
         commandBlock.getCommandBlock().performCommand(commandBlock.getLevel());
         var result = commandBlock.getCommandBlock().getSuccessCount();
-        return result > 0;
+        return result > 0 ? Result.succeed() : Result.fail("Command failed");
     }
 
     @Override

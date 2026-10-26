@@ -255,11 +255,23 @@ public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralC
         }
     }
 
+    /**
+     * The six sides a peripheral can be attached to.
+     *
+     * @return The side names.
+     * @cc-r.return ComputerSide[]
+     */
     @ScriptFunction
     public final List<String> getSides() {
         return ComputerSide.NAMES;
     }
 
+    /**
+     * Whether a peripheral is attached to the given side.
+     *
+     * @param sideName The side to check.
+     * @return Whether there is a peripheral on that side.
+     */
     @ScriptFunction
     public final boolean isPresent(String sideName) {
         var side = ComputerSide.valueOfInsensitive(sideName);
@@ -272,6 +284,12 @@ public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralC
         return false;
     }
 
+    /**
+     * The types of the peripheral on the given side: its primary type first, then any additional types.
+     *
+     * @param sideName The side to check.
+     * @return The peripheral's types, or {@code null} if nothing is attached.
+     */
     @ScriptFunction
     public final @Nullable List<String> getType(String sideName) {
         var side = ComputerSide.valueOfInsensitive(sideName);
@@ -289,8 +307,15 @@ public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralC
         }
     }
 
+    /**
+     * Whether the peripheral on the given side has a type (primary or additional).
+     *
+     * @param sideName The side to check.
+     * @param type     The type to look for.
+     * @return Whether the peripheral has that type, or {@code null} if nothing is attached.
+     */
     @ScriptFunction
-    public final @Nullable Object hasType(String sideName, String type) {
+    public final @Nullable Boolean hasType(String sideName, String type) {
         var side = ComputerSide.valueOfInsensitive(sideName);
         if (side == null) return null;
 
@@ -303,8 +328,14 @@ public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralC
         return null;
     }
 
+    /**
+     * The names of the methods the peripheral on the given side provides.
+     *
+     * @param sideName The side to check.
+     * @return The method names, or {@code null} if nothing is attached.
+     */
     @ScriptFunction
-    public final @Nullable Object getMethods(String sideName) {
+    public final @Nullable Collection<String> getMethods(String sideName) {
         var side = ComputerSide.valueOfInsensitive(sideName);
         if (side == null) return null;
 
@@ -315,6 +346,16 @@ public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralC
         return null;
     }
 
+    /**
+     * Call a method on the peripheral on the given side.
+     *
+     * @param context The calling context.
+     * @param args    The side, the method name, and the method's arguments.
+     * @return Whatever the peripheral method returns.
+     * @throws ScriptException If no peripheral is attached, there is no such method, or the method fails.
+     * @cc-r.params {@code side: string, method: string, ...args: unknown[]}
+     * @cc-r.return unknown
+     */
     @ScriptFunction
     public final MethodResult call(IContext context, IArguments args) throws ScriptException {
         var side = ComputerSide.valueOfInsensitive(args.getString(0));

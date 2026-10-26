@@ -233,7 +233,7 @@ Function names are already camelCase. Main change: tuple returns become objects.
 | `scroll` | `y` | `void` | same |
 | `clear` / `clearLine` | – | `void` | same |
 | `getCursorPos` | – | `{x, y}` (**0-based**) | was 2 returns, 1-based |
-| `setCursorPos` | `x, y` | `void` | **0-based** (was 1-based) |
+| `setCursorPos` | `{x, y}` | `void` | **0-based** (was 1-based) |
 | `getCursorBlink` | – | `boolean` | same |
 | `setCursorBlink` | `blink` | `void` | same |
 | `getSize` | – | `{width, height}` | was 2 returns |
@@ -241,7 +241,7 @@ Function names are already camelCase. Main change: tuple returns become objects.
 | `getBackgroundColor` / `setBackgroundColor` | `color?` | `number` / `void` | same |
 | `isColor` | – | `boolean` | same |
 | `getPaletteColor` | `color` | `{r, g, b}` | was 3 returns |
-| `setPaletteColor` | `color, rgb \| r,g,b` | `void` | same |
+| `setPaletteColor` | `color, rgb \| {r, g, b} \| r,g,b` | `void` | also accepts `getPaletteColor`'s object |
 | `nativePaletteColor` | `color` | `{r, g, b}` | was 3 returns |
 
 > **Decided:** cursor coordinates are **0-based** (`{x: 0, y: 0}` = top left), diverging from
@@ -254,7 +254,7 @@ Function names are already camelCase. Main change: tuple returns become objects.
 
 | Function | Parameters | Return |
 |---|---|---|
-| `getSides` | – | `string[]` |
+| `getSides` | – | `ComputerSide[]` |
 | `setOutput` | `side, on` | `void` |
 | `getOutput` / `getInput` | `side` | `boolean` |
 | `setAnalogOutput` | `side, value` | `void` |
@@ -298,17 +298,17 @@ All functions **block** (world interaction). "Can-fail" return → `{success: bo
 | `attack` / `attackUp` / `attackDown` | `side?` | `{success, reason?}` |
 | `detect` / `detectUp` / `detectDown` | – | `boolean` |
 | `compare` / `compareUp` / `compareDown` | – | `boolean` |
-| `inspect` / `inspectUp` / `inspectDown` | – | `{success: boolean, data?: object, reason?: string}` |
+| `inspect` / `inspectUp` / `inspectDown` | – | `{success: true, data: BlockDetail} \| {success: false, reason}` |
 | `select` | `slot` | `void` (or throws) |
 | `getSelectedSlot` | – | `number` |
 | `getItemCount` / `getItemSpace` | `slot?` | `number` |
-| `getItemDetail` | `slot?, detailed?` | `object \| null` |
+| `getItemDetail` | `slot?, detailed?` | `ItemBasicDetail \| null` (`ItemDetail \| null` with `detailed`) |
 | `compareTo` | `slot` | `boolean` |
 | `transferTo` | `slot, count?` | `{success, reason?}` |
 | `refuel` | `count?` | `{success, reason?}` |
 | `getFuelLevel` / `getFuelLimit` | – | `number \| "unlimited"` |
 | `equipLeft` / `equipRight` | – | `{success, reason?}` |
-| `getEquippedLeft` / `getEquippedRight` | – | `object \| null` |
+| `getEquippedLeft` / `getEquippedRight` | – | `ItemDetail \| null` |
 
 > **Alternative to `{success, reason}`:** tuple `[ok, reason]` for `const [ok] = turtle.forward()`.
 > Downside: `if (turtle.forward())` is always truthy with either variant → needs clear docs.
@@ -320,14 +320,14 @@ All functions **block** (world interaction). "Can-fail" return → `{success: bo
 
 | Function | Parameters | Return (new) | today |
 |---|---|---|---|
-| `exec` | `command` | `{success: boolean, output: string[], affected?: number}` | 3 returns |
-| `execAsync` | `command` | `number` (taskId) | same |
+| `exec` | `command` | `CommandResult` `{success: boolean, output: string[], affected: number \| null}` | 3 returns |
+| `execAsync` | `command` | `number` (taskId; `task_complete` carries the `CommandResult`) | same |
 | `list` | `...subcmd` | `string[]` | same |
 | `getDimension` | – | `string` | same |
 | `getBlockPosition` | – | `{x, y, z}` | was 3 returns |
-| `getBlockInfo` | `x, y, z, dim?` | `object` | same |
-| `getBlockInfos` | `minX…maxZ, dim?` | `object[]` | same |
-| `getEntities` | `selector` | `object[]` | same |
+| `getBlockInfo` | `x, y, z, dim?` | `BlockInfo` | same |
+| `getBlockInfos` | `minX…maxZ, dim?` | `BlockInfo[]` | same |
+| `getEntities` | `selector` | `EntityDetail[]` | same |
 
 ---
 
@@ -339,6 +339,36 @@ All functions **block** (world interaction). "Can-fail" return → `{success: bo
 | `unequipBack` | – | `{success: boolean, reason?: string}` |
 
 ---
+
+## `http` handles, peripherals — tuples and booleans → records / `Result` (#12)
+
+Everything a script can call has a precise generated type (`common/build/tsTypes`, checked by `tsc` on every
+build); the tsdoclet fails the build on an `unknown` it cannot justify. Shapes:
+
+| Function | Return (new) | was |
+|---|---|---|
+| `http.request(options)` / `http.websocket(options)` | `Result` (options: `HttpRequestOptions` / `WebsocketOptions`) | inline type |
+| `response.getResponseCode()` | `HttpStatus` `{code, message}` | `[code, message]` |
+| `response` (`http_success`) | `HttpResponseHandle extends ReadHandle` | untyped extra methods |
+| `ws.receive(timeout?)` | `{success: true, message, binary} \| {success: false, reason}` | `[msg, binary] \| [null, reason]` |
+| `handle.seek(whence?, offset?)` | `number`, throws on failure | `number \| null \| [null, reason]` |
+| `handle.read(count?)` | `string \| number \| null` (number only without `count` in binary mode) | `unknown` |
+| `peripheral.hasType` / `getMethods` | `boolean \| null` / `string[] \| null` | `unknown` |
+| `peripheral.getSides` | `ComputerSide[]` | `string[]` |
+| `printer.getCursorPos()` / `setCursorPos(pos)` | `{x, y}` **0-based** like `term` | `[x, y]` 1-based / `(x, y)` |
+| `printer.getPageSize()` | `{width, height}` | `[width, height]` |
+| `printer.newPage()` / `endPage()` | `Result` (`"No ink"`, `"No paper"`, `"Output tray is full"`) | `boolean` |
+| `speaker.playNote/playSound/playAudio` | `Result` (`"Too many notes"`, `"Another sound is already playing"`, `"Cannot play music discs"`, `"Audio buffer is full"`) | `boolean` |
+| `command.runCommand()` (command block) | `Result` (`"Command failed"`) | `boolean` |
+| inventory `list()` / `getItemDetail(slot)` | `Record<number, ItemBasicDetail>` / `ItemDetail \| null` | `Record<string, unknown>` |
+| fluid `tanks()` | `Record<number, FluidBasicDetail>` | `Record<string, unknown>` |
+| wired modem `*Remote` | typed (`WiredModemPeripheral`) | not emitted |
+| `system.time()` | `number` | `Object` |
+
+Detail tables (`ItemDetail`, `BlockDetail`, `EntityDetail`, …) stay Java `Map`s because other mods' detail
+providers add fields; they are declared by hand in `projects/core/src/ts/types/details.d.ts` with an index
+signature. Slot/tank maps stay `Record<number, …>` (sparse, keyed by 1-based slot). Events are declared as `@Event`
+records (`CoreEvents`, `PeripheralEvents`) and form the generated `EventMap`.
 
 ## Summary of the biggest changes
 

@@ -31,6 +31,11 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+/**
+ * A wired modem: a {@link ModemPeripheral modem} which can also access the peripherals on its wired network.
+ *
+ * @cc.module modem
+ */
 public abstract class WiredModemPeripheral extends ModemPeripheral implements WiredSender {
     private static final Logger LOG = LoggerFactory.getLogger(WiredModemPeripheral.class);
 
@@ -189,10 +194,7 @@ public abstract class WiredModemPeripheral extends ModemPeripheral implements Wi
      * @param arguments Arguments to this computer.
      * @return The peripheral's result.
      * @throws ScriptException (hidden) If the method throws an error.
-     * @cc.tparam string remoteName The name of the peripheral to invoke the method on.
-     * @cc.tparam string method The name of the method
-     * @cc.param ...      Additional arguments to pass to the method
-     * @cc.treturn string The return values of the peripheral method.
+     * @cc-r.params {@code remoteName: string, method: string, ...args: unknown[]}
      * @cc-r.return unknown
      * @see PeripheralAPI#call
      */

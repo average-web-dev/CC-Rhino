@@ -22,7 +22,6 @@ import org.jspecify.annotations.Nullable;
 import java.util.Map;
 import java.util.Optional;
 
-// TODO: change cc.treturn
 /**
  * Turtles are a robotic device, which can break and place blocks, attack mobs, and move about the world. They have
  * an internal inventory of 16 slots, allowing them to store blocks they have broken or would like to place.
@@ -122,8 +121,6 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @return The turtle command result.
      * @cc-r.return Result
-     * @cc.treturn boolean Whether the turtle could successfully move.
-     * @cc.treturn string|nil The reason the turtle could not move.
      */
     @ScriptFunction
     public final MethodResult forward() {
@@ -135,8 +132,6 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @return The turtle command result.
      * @cc-r.return Result
-     * @cc.treturn boolean Whether the turtle could successfully move.
-     * @cc.treturn string|nil The reason the turtle could not move.
      */
     @ScriptFunction
     public final MethodResult back() {
@@ -148,8 +143,6 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @return The turtle command result.
      * @cc-r.return Result
-     * @cc.treturn boolean Whether the turtle could successfully move.
-     * @cc.treturn string|nil The reason the turtle could not move.
      */
     @ScriptFunction
     public final MethodResult up() {
@@ -161,8 +154,6 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @return The turtle command result.
      * @cc-r.return Result
-     * @cc.treturn boolean Whether the turtle could successfully move.
-     * @cc.treturn string|nil The reason the turtle could not move.
      */
     @ScriptFunction
     public final MethodResult down() {
@@ -174,8 +165,6 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @return The turtle command result.
      * @cc-r.return Result
-     * @cc.treturn boolean Whether the turtle could successfully turn.
-     * @cc.treturn string|nil The reason the turtle could not turn.
      */
     @ScriptFunction
     public final MethodResult turnLeft() {
@@ -187,8 +176,6 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @return The turtle command result.
      * @cc-r.return Result
-     * @cc.treturn boolean Whether the turtle could successfully turn.
-     * @cc.treturn string|nil The reason the turtle could not turn.
      */
     @ScriptFunction
     public final MethodResult turnRight() {
@@ -205,8 +192,6 @@ public class TurtleAPI implements IComputerAPI {
      * @param side The specific tool to use. Should be "left" or "right".
      * @return The turtle command result.
      * @cc-r.return Result
-     * @cc.treturn boolean Whether a block was broken.
-     * @cc.treturn string|nil The reason no block was broken.
      * @cc.changed 1.6 Added optional side argument.
      */
     @ScriptFunction
@@ -221,8 +206,6 @@ public class TurtleAPI implements IComputerAPI {
      * @param side The specific tool to use.
      * @return The turtle command result.
      * @cc-r.return Result
-     * @cc.treturn boolean Whether a block was broken.
-     * @cc.treturn string|nil The reason no block was broken.
      * @cc.changed 1.6 Added optional side argument.
      */
     @ScriptFunction
@@ -237,8 +220,6 @@ public class TurtleAPI implements IComputerAPI {
      * @param side The specific tool to use.
      * @return The turtle command result.
      * @cc-r.return Result
-     * @cc.treturn boolean Whether a block was broken.
-     * @cc.treturn string|nil The reason no block was broken.
      * @cc.changed 1.6 Added optional side argument.
      */
     @ScriptFunction
@@ -257,8 +238,6 @@ public class TurtleAPI implements IComputerAPI {
      * @param text When placing a sign, set its contents to this text.
      * @return The turtle command result.
      * @cc-r.return Result
-     * @cc.treturn boolean Whether the block could be placed.
-     * @cc.treturn string|nil The reason the block was not placed.
      * @cc.since 1.4
      */
     @ScriptFunction
@@ -272,8 +251,6 @@ public class TurtleAPI implements IComputerAPI {
      * @param text When placing a sign, set its contents to this text.
      * @return The turtle command result.
      * @cc-r.return Result
-     * @cc.treturn boolean Whether the block could be placed.
-     * @cc.treturn string|nil The reason the block was not placed.
      * @cc.since 1.4
      * @see #place For more information about placing items.
      */
@@ -288,8 +265,6 @@ public class TurtleAPI implements IComputerAPI {
      * @param text When placing a sign, set its contents to this text.
      * @return The turtle command result.
      * @cc-r.return Result
-     * @cc.treturn boolean Whether the block could be placed.
-     * @cc.treturn string|nil The reason the block was not placed.
      * @cc.since 1.4
      * @see #place For more information about placing items.
      */
@@ -306,8 +281,6 @@ public class TurtleAPI implements IComputerAPI {
      * @return The turtle command result.
      * @cc-r.return Result
      * @throws ScriptException If dropping an invalid number of items.
-     * @cc.treturn boolean Whether items were dropped.
-     * @cc.treturn string|nil The reason the no items were dropped.
      * @cc.since 1.31
      * @see #select
      */
@@ -324,8 +297,6 @@ public class TurtleAPI implements IComputerAPI {
      * @return The turtle command result.
      * @cc-r.return Result
      * @throws ScriptException If dropping an invalid number of items.
-     * @cc.treturn boolean Whether items were dropped.
-     * @cc.treturn string|nil The reason the no items were dropped.
      * @cc.since 1.4
      * @see #select
      */
@@ -342,8 +313,6 @@ public class TurtleAPI implements IComputerAPI {
      * @return The turtle command result.
      * @cc-r.return Result
      * @throws ScriptException If dropping an invalid number of items.
-     * @cc.treturn boolean Whether items were dropped.
-     * @cc.treturn string|nil The reason the no items were dropped.
      * @cc.since 1.4
      * @see #select
      */
@@ -358,16 +327,12 @@ public class TurtleAPI implements IComputerAPI {
      * The selected slot is determines what slot actions like {@link #drop} or {@link #getItemCount} act on.
      *
      * @param slot The slot to select.
-     * @return The turtle command result.
      * @throws ScriptException If the slot is out of range.
-     * @cc-r.return boolean
      * @see #getSelectedSlot
      */
-
     @ScriptFunction(mainThread = true)
-    public final boolean select(int slot) throws ScriptException {
+    public final void select(int slot) throws ScriptException {
         turtle.setSelectedSlot(checkSlot(slot));
-        return true;
     }
 
     /**
@@ -481,8 +446,6 @@ public class TurtleAPI implements IComputerAPI {
      * @param side The specific tool to use.
      * @return The turtle command result.
      * @cc-r.return Result
-     * @cc.treturn boolean Whether an entity was attacked.
-     * @cc.treturn string|nil The reason nothing was attacked.
      * @cc.since 1.4
      * @cc.changed 1.6 Added optional side argument.
      */
@@ -497,8 +460,6 @@ public class TurtleAPI implements IComputerAPI {
      * @param side The specific tool to use.
      * @return The turtle command result.
      * @cc-r.return Result
-     * @cc.treturn boolean Whether an entity was attacked.
-     * @cc.treturn string|nil The reason nothing was attacked.
      * @cc.since 1.4
      * @cc.changed 1.6 Added optional side argument.
      */
@@ -513,8 +474,6 @@ public class TurtleAPI implements IComputerAPI {
      * @param side The specific tool to use.
      * @return The turtle command result.
      * @cc-r.return Result
-     * @cc.treturn boolean Whether an entity was attacked.
-     * @cc.treturn string|nil The reason nothing was attacked.
      * @cc.since 1.4
      * @cc.changed 1.6 Added optional side argument.
      */
@@ -532,8 +491,6 @@ public class TurtleAPI implements IComputerAPI {
      * @return The turtle command result.
      * @cc-r.return Result
      * @throws ScriptException If given an invalid number of items.
-     * @cc.treturn boolean Whether items were picked up.
-     * @cc.treturn string|nil The reason the no items were picked up.
      * @cc.since 1.4
      * @cc.changed 1.6 Added an optional limit argument.
      */
@@ -549,8 +506,6 @@ public class TurtleAPI implements IComputerAPI {
      * @return The turtle command result.
      * @cc-r.return Result
      * @throws ScriptException If given an invalid number of items.
-     * @cc.treturn boolean Whether items were picked up.
-     * @cc.treturn string|nil The reason the no items were picked up.
      * @cc.since 1.4
      * @cc.changed 1.6 Added an optional limit argument.
      */
@@ -566,8 +521,6 @@ public class TurtleAPI implements IComputerAPI {
      * @return The turtle command result.
      * @cc-r.return Result
      * @throws ScriptException If given an invalid number of items.
-     * @cc.treturn boolean Whether items were picked up.
-     * @cc.treturn string|nil The reason the no items were picked up.
      * @cc.since 1.4
      * @cc.changed 1.6 Added an optional limit argument.
      */
@@ -622,9 +575,6 @@ public class TurtleAPI implements IComputerAPI {
      * @return If this turtle could be refuelled.
      * @cc-r.return Result
      * @throws ScriptException If the refuel count is out of range.
-     * @cc.treturn [1] true If the turtle was refuelled.
-     * @cc.treturn [2] false If the turtle was not refuelled.
-     * @cc.treturn [2] string The reason the turtle was not refuelled.
      * @cc.usage Refuel a turtle from the currently selected slot.
      * <pre>{@code
      * local level = turtle.getEnergy()
@@ -879,9 +829,6 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @return Whether an item was equipped or not.
      * @cc-r.return Result
-     * @cc.treturn [1] true If the item was equipped.
-     * @cc.treturn [2] false If we could not equip the item.
-     * @cc.treturn [2] string The reason equipping this item failed.
      * @cc.since 1.6
      * @see #equipRight()
      * @see #getEquippedLeft()
@@ -900,9 +847,6 @@ public class TurtleAPI implements IComputerAPI {
      *
      * @return Whether an item was equipped or not.
      * @cc-r.return Result
-     * @cc.treturn [1] true If the item was equipped.
-     * @cc.treturn [2] false If we could not equip the item.
-     * @cc.treturn [2] string The reason equipping this item failed.
      * @cc.since 1.6
      * @see #equipLeft()
      * @see #getEquippedRight()
@@ -917,7 +861,8 @@ public class TurtleAPI implements IComputerAPI {
      * <p>
      * This returns [information about the currently equipped item][`item_details`].
      *
-     * @return Information about the currently equipped item, or {@code nil} if no upgrade is equipped.
+     * @return Information about the currently equipped item, or {@code null} if no upgrade is equipped.
+     * @cc-r.return ItemDetail | null
      * @see #equipLeft()
      * @cc.since 1.116.0
      * @cc.see item_details
@@ -933,7 +878,8 @@ public class TurtleAPI implements IComputerAPI {
      * <p>
      * This returns [information about the currently equipped item][`item_details`].
      *
-     * @return Information about the currently equipped item, or {@code nil} if no upgrade is equipped.
+     * @return Information about the currently equipped item, or {@code null} if no upgrade is equipped.
+     * @cc-r.return ItemDetail | null
      * @see #equipRight()
      * @cc.since 1.116.0
      * @cc.see item_details
@@ -948,8 +894,6 @@ public class TurtleAPI implements IComputerAPI {
      * Get [information about the block][`block_details`] in front of the turtle.
      *
      * @return The turtle command result.
-     * @cc.treturn boolean Whether there is a block in front of the turtle.
-     * @cc.treturn table|string Information about the block in front, or a message explaining that there is no block.
      * @cc.since 1.64
      * @cc.changed 1.76 Added block state to return value.
      * @cc.see block_details
@@ -998,7 +942,6 @@ public class TurtleAPI implements IComputerAPI {
         return toInspectResult(new TurtleInspectCommand(InteractDirection.DOWN).execute(turtle));
     }
 
-    // TODO: correct return type
     /**
      * Get [information about the items][`item_details`] in the given slot.
      *
@@ -1006,9 +949,10 @@ public class TurtleAPI implements IComputerAPI {
      * @param slot     The slot to get information about. Defaults to the {@link #select selected slot}.
      * @param detailed Whether to include "detailed" information. When {@code true} the method will contain much
      *                 more information about the item at the cost of taking longer to run.
-     * @return The command result.
+     * @return Information about the item, or {@code null} if the slot is empty.
      * @throws ScriptException If the slot is out of range.
-     * @cc-r.return Record<string, unknown>
+     * @cc-r.overload {@code (slot?: number, detailed?: false): ItemBasicDetail | null}
+     * @cc-r.overload {@code (slot: number | undefined, detailed: boolean): ItemDetail | null}
      * @cc.since 1.64
      * @cc.changed 1.90.0 Added detailed parameter.
      * @cc.usage Print the current slot, assuming it contains 13 dirt.

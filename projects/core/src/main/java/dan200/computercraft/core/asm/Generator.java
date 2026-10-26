@@ -46,7 +46,7 @@ final class Generator<T> {
     private static final Map<Class<?>, ArgMethods> argMethods;
     private static final ArgMethods ARG_TABLE_UNSAFE;
     private static final MethodHandle ARG_GET_OBJECT, ARG_GET_ENUM, ARG_OPT_ENUM, ARG_GET_STRING_COERCED, ARG_GET_BYTES_COERCED;
-    private static final MethodHandle ARG_GET_RECORD;
+    private static final MethodHandle ARG_GET_RECORD, ARG_OPT_RECORD;
 
     private record ArgMethods(MethodHandle get, MethodHandle opt) {
         private static ArgMethods of(Class<?> type, String name) throws ReflectiveOperationException {
@@ -97,6 +97,7 @@ final class Generator<T> {
             ARG_GET_ENUM = LOOKUP.findVirtual(IArguments.class, "getEnum", MethodType.methodType(Enum.class, int.class, Class.class));
             ARG_OPT_ENUM = LOOKUP.findVirtual(IArguments.class, "optEnum", MethodType.methodType(Optional.class, int.class, Class.class));
             ARG_GET_RECORD = LOOKUP.findStatic(Generator.class, "getRecord", MethodType.methodType(Object.class, IArguments.class, int.class, Class.class));
+            ARG_OPT_RECORD = LOOKUP.findStatic(Generator.class, "optRecord", MethodType.methodType(Optional.class, IArguments.class, int.class, Class.class));
 
             // Create a new Coerced<>(args.getStringCoerced(_)) function.
             var mkCoerced = LOOKUP.findConstructor(Coerced.class, MethodType.methodType(void.class, Object.class));
@@ -328,6 +329,8 @@ final class Generator<T> {
                 return MethodHandles.insertArguments(ARG_OPT_ENUM, 1, argIndex, optType);
             }
 
+            if (optType.isRecord()) return MethodHandles.insertArguments(ARG_OPT_RECORD, 1, argIndex, optType);
+
             var getter = getArgMethods(Primitives.unwrap(optType), unsafe);
             if (getter != null) return MethodHandles.insertArguments(getter.opt(), 1, argIndex);
         }
@@ -363,6 +366,12 @@ final class Generator<T> {
      */
     private static Object getRecord(IArguments arguments, int index, Class<?> type) throws ScriptException {
         return ScriptUtil.toRecord(arguments.getTable(index), type);
+    }
+
+    /** Read an optional record argument: absent/{@code null} is {@link Optional#empty()}, see {@link #getRecord}. */
+    private static Optional<?> optRecord(IArguments arguments, int index, Class<?> type) throws ScriptException {
+        var table = arguments.optTable(index);
+        return table.isPresent() ? Optional.of(ScriptUtil.toRecord(table.get(), type)) : Optional.empty();
     }
 
     private static @Nullable ArgMethods getArgMethods(Class<?> type, boolean unsafe) {

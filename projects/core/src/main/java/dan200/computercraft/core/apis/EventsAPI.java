@@ -65,6 +65,12 @@ public final class EventsAPI implements IComputerAPI {
         if (callback instanceof Callable fn) emitter.off(event, fn);
     }
 
+    /**
+     * The number of listeners currently registered for {@code event}.
+     *
+     * @param event The event name.
+     * @return How many listeners would run if the event fired now.
+     */
     @ScriptFunction
     public int listenerCount(String event) {
         return emitter.listenerCount(event);
@@ -93,6 +99,11 @@ public final class EventsAPI implements IComputerAPI {
         return callback instanceof Callable fn ? eventLoop.scheduleImmediate(fn) : -1;
     }
 
+    /**
+     * Cancel a callback scheduled with {@link #setImmediate}. Unknown or already-run handles are ignored.
+     *
+     * @param id The handle returned by {@link #setImmediate}.
+     */
     @ScriptFunction
     public void clearImmediate(int id) {
         eventLoop.cancelImmediate(id);

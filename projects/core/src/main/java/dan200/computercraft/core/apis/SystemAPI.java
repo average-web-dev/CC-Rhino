@@ -267,10 +267,9 @@ public class SystemAPI implements IComputerAPI {
      * @cc.since 1.2
      * @cc.changed 1.80pr1 Add support for getting the local and UTC time.
      * @cc.changed 1.82.0 Arguments are now case insensitive.
-     * @cc-r.return number
      */
     @ScriptFunction
-    public final Object time(Optional<String> locale) throws ScriptException {
+    public final double time(Optional<String> locale) throws ScriptException {
         return switch (locale.orElse("ingame").toLowerCase(Locale.ROOT)) {
             case "utc" -> getTimeForCalendar(Calendar.getInstance(TimeZone.getTimeZone("UTC")));
             case "local" -> getTimeForCalendar(Calendar.getInstance());

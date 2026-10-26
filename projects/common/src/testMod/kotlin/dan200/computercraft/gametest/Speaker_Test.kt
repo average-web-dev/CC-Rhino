@@ -4,6 +4,7 @@
 
 package dan200.computercraft.gametest
 
+import dan200.computercraft.api.scripting.Result as ScriptResult
 import dan200.computercraft.gametest.api.sequence
 import dan200.computercraft.gametest.api.thenOnComputer
 import dan200.computercraft.gametest.api.tryMultipleTimes
@@ -21,12 +22,12 @@ class Speaker_Test {
     fun Fails_to_play_multiple_sounds(helper: GameTestHelper) = helper.sequence {
         thenOnComputer {
             callPeripheral("right", "playSound", SoundEvents.NOTE_BLOCK_HARP.key().location().toString())
-                .assertArrayEquals(true)
+                .assertArrayEquals(ScriptResult.succeed())
 
             tryMultipleTimes(2) {
                 // We could technically call this a tick later, so try twice
                 callPeripheral("right", "playSound", SoundEvents.NOTE_BLOCK_HARP.key().location().toString())
-                    .assertArrayEquals(false)
+                    .assertArrayEquals(ScriptResult.fail("Another sound is already playing"))
             }
         }
     }
@@ -38,7 +39,7 @@ class Speaker_Test {
     fun Will_not_play_record(helper: GameTestHelper) = helper.sequence {
         thenOnComputer {
             callPeripheral("right", "playSound", SoundEvents.MUSIC_DISC_PIGSTEP.key().location().toString())
-                .assertArrayEquals(false)
+                .assertArrayEquals(ScriptResult.fail("Cannot play music discs"))
         }
     }
 }

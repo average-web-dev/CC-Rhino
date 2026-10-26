@@ -16,6 +16,7 @@ import dan200.computercraft.core.apis.http.options.Action
 import dan200.computercraft.core.apis.http.options.AddressRule
 import dan200.computercraft.core.apis.http.request.HttpResponseHandle
 import dan200.computercraft.core.apis.http.websocket.WebsocketHandle
+import dan200.computercraft.core.apis.http.websocket.WebsocketReceiveResult
 import dan200.computercraft.test.core.computer.ScriptTaskRunner
 import io.netty.buffer.Unpooled
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame
@@ -80,9 +81,11 @@ class TestHttpApi {
                 val websocket = connectEvent[2] as WebsocketHandle
                 websocket.send(Coerced(ScriptValues.encode("Hello")), Optional.of(false))
 
-                // receive() returns a single [message, binary] tuple value.
-                val message = websocket.receive(Optional.empty()).await()!![0] as Array<*>
-                assertThat("Received a return message", message, array(equalTo("HELLO".toByteArray()), equalTo(false)))
+                // receive() returns a WebsocketReceiveResult record.
+                val message = websocket.receive(Optional.empty()).await()!![0] as WebsocketReceiveResult
+                assertThat("Received a message", message.success, equalTo(true))
+                assertThat("Received a return message", message.message as ByteArray, equalTo("HELLO".toByteArray()))
+                assertThat("Message is text", message.binary, equalTo(false))
 
                 websocket.close()
 

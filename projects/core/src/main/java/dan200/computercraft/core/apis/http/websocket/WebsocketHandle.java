@@ -15,7 +15,6 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -52,17 +51,13 @@ public class WebsocketHandle {
      * Wait for a message from the server.
      *
      * @param timeout The number of seconds to wait if no message is received.
-     * @return The result of receiving.
+     * @return The received message, or why none arrived: the reason the websocket was closed (as given by the
+     * {@code websocket_closed} event) or {@code "Timed out"}.
      * @throws ScriptException If the websocket has been closed.
-     * @cc.treturn [1] string The received message.
-     * @cc.treturn boolean If this was a binary message.
-     * @cc.treturn [2] nil If the websocket was closed while waiting, or if we timed out.
-     * @cc.treturn [2] string The reason we failed to receive a message. Either the reason the websocket was closed
-     * (as returned by [`websocket_closed`], or the string {@code "Timed out"}.
      * @cc.changed 1.80pr1.13 Added return value indicating whether the message was binary.
      * @cc.changed 1.87.0 Added timeout argument.
      * @cc.changed 1.117.0 Added return value indicating why receiving the message failed.
-     * @cc-r.return [message: string, binary: boolean] | [closed: null, reason: string]
+     * @cc-r.return WebsocketReceiveResult
      */
     @ScriptFunction
     public final MethodResult receive(Optional<Double> timeout) throws ScriptException {
@@ -155,15 +150,15 @@ public class WebsocketHandle {
         public MethodResult resume(@Nullable Object[] event) {
             if (event.length >= 3 && Objects.equals(event[0], MESSAGE_EVENT) && Objects.equals(event[1], address)) {
                 environment.cancelTimer(timeoutId);
-                return MethodResult.of(Arrays.copyOfRange(event, 2, event.length));
+                return MethodResult.of(WebsocketReceiveResult.message(event[2], event.length > 3 && Boolean.TRUE.equals(event[3])));
             } else if (event.length >= 2 && Objects.equals(event[0], CLOSE_EVENT) && Objects.equals(event[1], address) && websocket.isClosed()) {
                 // If the socket is closed abort.
                 environment.cancelTimer(timeoutId);
-                return MethodResult.of(new Object[]{ null, event.length > 2 ? event[2] : "Connection closed" });
+                return MethodResult.of(WebsocketReceiveResult.fail(event.length > 2 && event[2] instanceof String reason ? reason : "Connection closed"));
             } else if (event.length >= 2 && timeoutId != -1 && Objects.equals(event[0], TIMER_EVENT)
                 && event[1] instanceof Number id && id.intValue() == timeoutId) {
                 // If we received a matching timer event then abort.
-                return MethodResult.of(new Object[]{ null, "Timed out" });
+                return MethodResult.of(WebsocketReceiveResult.fail("Timed out"));
             }
 
             return pull;

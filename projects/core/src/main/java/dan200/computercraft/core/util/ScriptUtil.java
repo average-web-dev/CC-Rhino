@@ -7,7 +7,9 @@ package dan200.computercraft.core.util;
 import com.google.common.primitives.Primitives;
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.scripting.ScriptValues;
+import org.jspecify.annotations.Nullable;
 
+import java.lang.reflect.RecordComponent;
 import java.util.Collection;
 import java.util.Map;
 
@@ -57,6 +59,8 @@ public class ScriptUtil {
     /**
      * Coerce a table into a {@code record}, reading each {@linkplain Class#getRecordComponents() record component} from
      * the table by name (recursively, via {@link #getField(Map, String, Class)}) and invoking the canonical constructor.
+     * A component annotated {@link Nullable @Nullable} is optional: a missing (or {@code null}) field becomes
+     * {@code null}. Every other component is required.
      *
      * @param table The table to read from.
      * @param type  The record type to construct.
@@ -72,7 +76,9 @@ public class ScriptUtil {
         var parameterTypes = new Class<?>[components.length];
         for (var i = 0; i < components.length; i++) {
             parameterTypes[i] = components[i].getType();
-            arguments[i] = getField(table, components[i].getName(), components[i].getType());
+            arguments[i] = table.get(components[i].getName()) == null && isNullable(components[i])
+                ? null
+                : getField(table, components[i].getName(), components[i].getType());
         }
 
         try {
@@ -82,6 +88,11 @@ public class ScriptUtil {
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("Cannot construct record " + type.getName(), e);
         }
+    }
+
+    private static boolean isNullable(RecordComponent component) {
+        return !component.getType().isPrimitive()
+            && (component.isAnnotationPresent(Nullable.class) || component.getAnnotatedType().isAnnotationPresent(Nullable.class));
     }
 
     private static String expectedTypeName(Class<?> type) {

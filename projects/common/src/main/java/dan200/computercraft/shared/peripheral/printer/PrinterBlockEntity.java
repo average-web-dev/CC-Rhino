@@ -5,6 +5,7 @@
 package dan200.computercraft.shared.peripheral.printer;
 
 import dan200.computercraft.api.peripheral.IPeripheral;
+import dan200.computercraft.api.scripting.Result;
 import dan200.computercraft.shared.ModRegistry;
 import dan200.computercraft.shared.common.AbstractContainerBlockEntity;
 import dan200.computercraft.shared.computer.terminal.NetworkedTerminal;
@@ -131,17 +132,19 @@ public final class PrinterBlockEntity extends AbstractContainerBlockEntity imple
         }
     }
 
-    boolean startNewPage() {
+    Result startNewPage() {
         synchronized (page) {
-            if (!canInputPage()) return false;
-            if (printing && !outputPage()) return false;
-            return inputPage();
+            if (getInkLevel() <= 0) return Result.fail("No ink");
+            if (getPaperLevel() <= 0) return Result.fail("No paper");
+            if (printing && !outputPage()) return Result.fail("Output tray is full");
+            return inputPage() ? Result.succeed() : Result.fail("No ink");
         }
     }
 
-    boolean endCurrentPage() {
+    Result endCurrentPage() {
         synchronized (page) {
-            return printing && outputPage();
+            if (!printing) return Result.fail("Page not started");
+            return outputPage() ? Result.succeed() : Result.fail("Output tray is full");
         }
     }
 
@@ -171,10 +174,6 @@ public final class PrinterBlockEntity extends AbstractContainerBlockEntity imple
 
     static boolean isPaper(ItemStack stack) {
         return stack.is(Items.PAPER) || stack.is(ModRegistry.Items.PRINTED_PAGE.get());
-    }
-
-    private boolean canInputPage() {
-        return getInkLevel() > 0 && getPaperLevel() > 0;
     }
 
     private boolean inputPage() {
