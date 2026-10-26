@@ -17,6 +17,16 @@ declare function require(id: string): unknown;
 declare namespace require {
     /** Module search paths checked when resolving bare module ids. */
     let paths: string[];
+    /**
+     * Load a module without consulting or populating the module cache: its top-level code runs again on every
+     * call and always sees the current file contents. Used to run programs; libraries should use `require`.
+     */
+    function uncached(id: string): unknown;
+    /**
+     * Resolve a module id to its absolute path (or the id itself for native modules) without executing it.
+     * Throws `MODULE_NOT_FOUND` if there is no such module.
+     */
+    function resolve(id: string): string;
     /** Cache of resolved modules; key is the absolute path, value is `module.exports`. */
     const cache: Record<string, unknown>;
 }

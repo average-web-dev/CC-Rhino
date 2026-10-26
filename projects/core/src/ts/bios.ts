@@ -97,7 +97,7 @@
   function discoverBootEntries(): BootEntry[] {
       const entries: BootEntry[] = [];
 
-      entries.push({ label: "CC: Tweaked JS", detail: "/rom/os/index", path: "/rom/os/index" });
+      entries.push({ label: "CC: Rhino", detail: "/rom/os/index", path: "/rom/os/index" });
 
       if (fs.existsSync(LOCAL_BOOT_FILE)) {
           entries.push({
@@ -127,8 +127,6 @@
               label = readFirstLine(labelFile) ?? label
           }
 
-          print(label);
-
           entries.push({
               label,
               detail: script,
@@ -154,7 +152,7 @@
 
       term.setCursorPos({ x: 0, y: 0 });
       if (canColor) term.setTextColor(COL_WHITE);
-      term.write("  CC: Tweaked  Boot Selection");
+      term.write("  CC: Rhino  Boot Selection");
 
       term.setCursorPos({ x: 0, y: 1 });
       if (canColor) term.setTextColor(COL_GREY);
@@ -208,7 +206,7 @@
           term.clear();
           term.setCursorPos({ x: 0, y: 0 });
           try {
-              require(entry.path);
+              require.uncached(entry.path);
           } catch (e: unknown) {
               const msg: string = (e as any)?.message ?? String(e);
               print(`bios: failed to boot '${entry.label}'`);
@@ -260,11 +258,11 @@
   if (bootEntries.length === 1) {
       // Fast path — boot directly, no menu needed.
       const target = bootEntries[0];
-      print("CC: Tweaked JS Edition");
+      print("CC: Rhino");
       print(`Computer ${require('system').getComputerID()}`);
       print("");
       try {
-          require(target.path);
+          require.uncached(target.path);
       } catch (e: unknown) {
           const msg: string = (e as any)?.message ?? String(e);
           term.clear();

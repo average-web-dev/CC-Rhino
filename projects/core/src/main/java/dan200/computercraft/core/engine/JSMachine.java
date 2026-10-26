@@ -39,16 +39,38 @@ public class JSMachine implements IMachine {
             // Any assignment — require.paths = [...] — updates it for the entire runtime.
             var paths = ["/rom/apis"];
 
+            // Execute a module body in a fresh module scope. When `cached` is true the module object is stored in
+            // the cache *before* the body runs (Node semantics), so circular requires see the partially-initialised
+            // exports instead of recursing forever; it is evicted again if the body throws.
+            function execute(r, cached) {
+                var module = { exports: {}, id: r.resolved, filename: r.resolved };
+                if (cached) L.setCache(r.resolved, module);
+                try {
+                    r.fn(module, module.exports, makeRequire(r.dir), r.resolved, r.dir);
+                } catch (e) {
+                    if (cached) L.deleteCache(r.resolved);
+                    throw e;
+                }
+                return module.exports;
+            }
+
             function makeRequire(currentDir) {
                 var fn = function (id) {
-                    var r = L.lookup(id, currentDir, paths);
+                    var r = L.lookup(id, currentDir, paths, false);
                     if (!r || typeof r !== 'object' || !r.__CC_LOAD__) return r;
-                    var module = { exports: {}, id: r.resolved, filename: r.resolved };
-                    (new Function('module', 'exports', 'require', '__filename', '__dirname', r.source))(
-                        module, module.exports, makeRequire(r.dir), r.resolved, r.dir
-                    );
-                    L.setCache(r.resolved, module.exports);
-                    return module.exports;
+                    return execute(r, true);
+                };
+                // Load a module without consulting or populating the cache: its top-level code runs again on
+                // every call and always sees the current file contents. Used to run programs.
+                fn.uncached = function (id) {
+                    var r = L.lookup(id, currentDir, paths, true);
+                    if (!r || typeof r !== 'object' || !r.__CC_LOAD__) return r;
+                    return execute(r, false);
+                };
+                // Resolve a module id to its absolute path (or the id itself for native modules) without
+                // executing it. Throws MODULE_NOT_FOUND if there is no such module.
+                fn.resolve = function (id) {
+                    return L.resolve(id, currentDir, paths);
                 };
                 // Expose paths as a getter/setter so child require() functions also
                 // share the same variable — require.paths = [...] works from any module.
