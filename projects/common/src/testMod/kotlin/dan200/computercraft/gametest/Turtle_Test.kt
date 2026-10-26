@@ -784,6 +784,22 @@ class Turtle_Test {
     }
 
     /**
+     * `require('turtle/promises')` returns promises settled through `task_complete`, `async.unwrap`/`async.run` bridge
+     * the blocking and the promise style, and the blocking form throws a clear error inside async code without running
+     * (the turtle ends where [Move_task_complete] leaves it).
+     *
+     * @see [average-web-dev/CC-Rhino#35](https://github.com/average-web-dev/CC-Rhino/issues/35)
+     */
+    @GameTest(timeoutTicks = Timeouts.COMPUTER_TIMEOUT)
+    fun Move_promises(helper: GameTestHelper) = helper.sequence {
+        thenComputerOk()
+        thenExecute {
+            helper.assertBlockPresent(ModRegistry.Blocks.TURTLE_NORMAL.get(), BlockPos(2, 2, 2))
+            helper.assertBlockPresent(Blocks.DIRT, BlockPos(2, 2, 3))
+        }
+    }
+
+    /**
      * Timers and redstone events are dispatched to a JS program's listeners while a turtle command waits for a move
      * to finish animating.
      */
