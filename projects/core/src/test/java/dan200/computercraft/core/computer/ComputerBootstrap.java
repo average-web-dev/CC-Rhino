@@ -16,6 +16,7 @@ import dan200.computercraft.core.filesystem.MemoryMount;
 import dan200.computercraft.core.terminal.Terminal;
 import dan200.computercraft.test.core.computer.BasicEnvironment;
 import org.intellij.lang.annotations.Language;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -104,6 +105,13 @@ public class ComputerBootstrap {
                 if ((everOn || tick > TPS) && !computer.isOn()) break;
             }
 
+            // The computer may report a failure and shut down between two checks of the loop above.
+            if (api.message != null) {
+                computer.shutdown();
+                Assertions.fail(api.message);
+                return;
+            }
+
             if (computer.isOn() || !api.didAssert) {
                 var builder = new StringBuilder().append("Did not correctly [");
                 if (!api.didAssert) builder.append(" assert");
@@ -129,8 +137,9 @@ public class ComputerBootstrap {
     }
 
     public static class AssertApi implements IComputerAPI {
-        boolean didAssert;
-        String message;
+        // Written on the computer thread, read by the test loop.
+        volatile boolean didAssert;
+        volatile @Nullable String message;
 
         @Override
         public String[] getNames() {
