@@ -137,6 +137,8 @@ public class JSMachine implements IMachine {
             var loader = new JSRequire(scope, environment.fileSystem());
             var context = environment.context();
             var methods = environment.luaMethods();
+            // Lets JSValues convert returned Java objects with script methods (handles, dynamic objects, …).
+            JSObjects.install(cx, shim, context, methods);
             for (var api : environment.apis()) {
                 var moduleName = api.getModuleName();
                 if (api.getNames().length == 0 && moduleName == null) continue;

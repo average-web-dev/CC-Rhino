@@ -156,7 +156,7 @@ public final class JSValues {
             }
             return obj;
         }
-        return null;
+        return JSObjects.wrap(cx, scope, java);
     }
 
     /**
