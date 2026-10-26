@@ -31,7 +31,14 @@ public class TurtleEnergyStorage extends SnapshotParticipant<Integer> implements
         this.side = side;
     }
 
-    /** FE/t this face accepts, capped by the server max. A {@code null} (unsided) query allows charging. */
+    /**
+     * FE/t this face accepts, capped by the server max; a turtle which doesn't need energy accepts none.
+     * <p>
+     * A {@code null} (unsided) query has no turtle-relative side whose charge rate could apply, so it may charge at the
+     * server-configured {@code turtleMaxChargeRate}. This is deliberate: it lets mods which query the capability
+     * without a side fill the turtle, and charging can never create energy. Discharging an unsided query is
+     * never allowed (see {@link #dischargeRate()}). Both platform implementations behave identically.
+     */
     private int chargeRate() {
         if (!turtle.isEnergyNeeded()) return 0;
         var requested = side == null ? Integer.MAX_VALUE : turtle.getChargeRate(DirectionUtil.toLocal(turtle.getDirection(), side));

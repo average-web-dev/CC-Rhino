@@ -49,6 +49,12 @@ import java.util.function.Consumer;
 
 @AutoService({ PlatformHelper.class, ComputerCraftAPIService.class })
 public class TestPlatformHelper extends AbstractComputerCraftAPI implements PlatformHelper {
+    /**
+     * The energy storage returned by {@link #getEnergyStorage} for every block, or {@code null} for none. Tests which
+     * set this must reset it afterwards.
+     */
+    public static @Nullable EnergyHandle energyStorage;
+
     @Override
     public boolean isModLoaded(String id) {
         return false;
@@ -102,6 +108,11 @@ public class TestPlatformHelper extends AbstractComputerCraftAPI implements Plat
     @Override
     public boolean onNotifyNeighbour(Level level, BlockPos pos, BlockState block, Direction direction) {
         throw new UnsupportedOperationException("Cannot interact with the world inside tests");
+    }
+
+    @Override
+    public @Nullable EnergyHandle getEnergyStorage(Level level, BlockPos pos, Direction side) {
+        return energyStorage;
     }
 
     @Override
