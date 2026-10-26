@@ -79,8 +79,9 @@ class Inventory_Test {
     @GameTest
     fun Double_chest_size(helper: GameTestHelper) = helper.sequence {
         // FIXME: There's several ticks at the start of this test, where the chest sends block updates, which causes the
-        //  peripheral to be (re)created. Wait for those to expire.
-        thenIdle(2)
+        //  peripheral to be (re)created. Wait for those to expire. A main-thread call that lands while the peripheral is
+        //  being recreated returns null (GuardedContext), so two ticks were not always enough on slower CI runners.
+        thenIdle(5)
 
         thenOnComputer {
             getApi<PeripheralAPI>().call(context, ObjectArguments("left", "size")).await()
