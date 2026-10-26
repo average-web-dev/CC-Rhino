@@ -47,30 +47,45 @@ function getCwd(): string  { return cwd; }
 function setCwd(p: string) { cwd = p;    }
 
 /**
+ * Format an error as a single `file:line: message` line. The location is taken from the first stack frame outside
+ * the module loader, as errors created with `new Error()` carry no fileName/lineNumber of their own.
+ */
+function formatError(fallbackFile: string, e: any): string {
+    const msg = e?.message ?? String(e);
+    const frames = String(e?.stack ?? '').split('\n');
+    for (let frame of frames) {
+        let m = /^\s*at (.+?):(\d+)(?: \(.*\))?$/.exec(frame);
+        if (m && m[1] !== 'require-setup.js') return `${m[1]}:${m[2]}: ${msg}`;
+    }
+    return `${fallbackFile}: ${msg}`;
+}
+
+/**
  * Load a program and call its `main(args, cwd)` if present.
  * Bare names ('ls') are resolved via require.paths (JSRequire searches them).
  * Paths starting with '/', './', '../' are resolved against cwd.
- * Returns true on success, false if the module was not found or threw.
+ * Programs are loaded with `require.uncached`, so their top-level code runs on every invocation and edits take
+ * effect immediately. Returns false only if the program itself was not found; errors raised by the program
+ * (including a missing dependency) are printed and still count as found.
  */
 function run(path: string, ...args: string[]): boolean {
     const isPath = path.startsWith('/') || path.startsWith('./') || path.startsWith('../');
     const toRequire = isPath ? resolvePath(path) : path;
+    let resolved: string;
     try {
-        const mod = require(toRequire) as any;
+        resolved = require.resolve(toRequire);
+    } catch {
+        return false;
+    }
+    try {
+        const mod = require.uncached(resolved) as any;
         if (typeof mod?.main === 'function') {
             mod.main(args, cwd);
         }
-        return true;
     } catch (e: any) {
-        const msg = e?.message ?? String(e);
-        if (!msg.includes('MODULE_NOT_FOUND')) {
-            print(`${path}: ${msg}`);
-
-    print(e.filename);
-    print(e.lineNumber);
-        }
-        return false;
+        print(formatError(resolved, e));
     }
+    return true;
 }
 
 // ── Tab completion ───────────────────────────────────────────────────────────
@@ -370,9 +385,10 @@ function start(): void {
         const found = (run as (...a: string[]) => boolean).apply(null, [cmd].concat(args));
         events.on('char', onChar);
         events.on('key',  onKey);
-        if (!found && !(cmd as string).includes('/')) {
-            // Only print "not found" for bare command names, not for explicit paths.
-            print(`bash: ${cmd}: command not found`);
+        if (!found) {
+            print((cmd as string).includes('/')
+                ? `bash: ${cmd}: No such file or directory`
+                : `bash: ${cmd}: command not found`);
         }
     }
 

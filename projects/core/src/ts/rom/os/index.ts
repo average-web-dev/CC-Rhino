@@ -45,7 +45,7 @@ function detectDevice(): 'turtle' | 'pocket' | 'command' | 'standard' {
 
 // ── Boot sequence ──────────────────────────────────────────────────────────────
 
-klog('info', 'CC: Tweaked JS  kernel  v1.21.0');
+klog('info', 'CC: Rhino  kernel  v1.21.0');
 
 const device = detectDevice();
 klog('ok', `Computer ${system.getComputerID()} - ${device}`);
@@ -59,6 +59,20 @@ require.paths = ['/rom/os/bin', '/rom/bin', '/rom/lib'];
 klog('ok', 'Module paths: ' + require.paths.join(', '));
 
 klog('ok', 'Kernel ready - handing off to shell');
+
+/**
+ * Format an error as a single `file:line: message` line. The location is taken from the first stack frame outside
+ * the module loader, as errors created with `new Error()` carry no fileName/lineNumber of their own.
+ */
+function formatError(fallbackFile: string, e: any): string {
+    const msg = e?.message ?? String(e);
+    const frames = String(e?.stack ?? '').split('\n');
+    for (let frame of frames) {
+        let m = /^\s*at (.+?):(\d+)(?: \(.*\))?$/.exec(frame);
+        if (m && m[1] !== 'require-setup.js') return `${m[1]}:${m[2]}: ${msg}`;
+    }
+    return `${fallbackFile}: ${msg}`;
+}
 
 // ── Shell handoff ──────────────────────────────────────────────────────────────
 try {
@@ -76,7 +90,5 @@ try {
     bash.start();
     // @ts-ignore
 } catch (error: any) {
-    print(error);
-    print(error.filename);
-    print(error.lineNumber);
+    print(formatError('/rom/bin/bash.js', error));
 }
