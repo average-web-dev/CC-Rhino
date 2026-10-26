@@ -20,6 +20,9 @@ import org.junit.jupiter.api.Assertions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -32,15 +35,28 @@ public class ComputerBootstrap {
     private static final int TPS = 20;
     public static final int MAX_TIME = 10;
 
-    public static void run(@Language("lua") String program, Consumer<Computer> setup, int maxTimes) {
-        var mount = new MemoryMount()
-            .addFile("test.lua", program)
-            .addFile("startup.lua", "assertion.assert(pcall(loadfile('test.lua', nil, _ENV))) os.shutdown()");
+    /**
+     * A minimal bios which runs {@code /test.js} instead of booting the ROM. Any error thrown by the test (including
+     * timeouts) is reported through {@link AssertApi}, and the computer shuts down once the test finishes.
+     */
+    private static final String TEST_BIOS = """
+        var assertion = require('assertion');
+        globalThis.assert = function (value, message) { return assertion.assert(value, message); };
+        try {
+            require('/test.js');
+            assertion.assert(true);
+        } catch (e) {
+            assertion.assert(false, e != null && e.message !== undefined ? String(e.message) : String(e));
+        }
+        require('system').shutdown();
+        """;
 
+    public static void run(@Language("js") String program, Consumer<Computer> setup, int maxTimes) {
+        var mount = new MemoryMount().addFile("test.js", program);
         run(mount, setup, maxTimes);
     }
 
-    public static void run(@Language("lua") String program, int maxTimes) {
+    public static void run(@Language("js") String program, int maxTimes) {
         run(program, x -> {
         }, maxTimes);
     }
@@ -48,7 +64,13 @@ public class ComputerBootstrap {
     public static void run(WritableMount mount, Consumer<Computer> setup, int maxTicks) {
         var term = new Terminal(51, 19, true);
         var mainThread = new MainThread(new MainThreadConfig.Basic(Integer.MAX_VALUE, Integer.MAX_VALUE));
-        var environment = new BasicEnvironment(mount);
+        var environment = new BasicEnvironment(mount) {
+            @Override
+            public InputStream createResourceFile(String domain, String subPath) {
+                if (subPath.equals("js/bios.js")) return new ByteArrayInputStream(TEST_BIOS.getBytes(StandardCharsets.UTF_8));
+                return super.createResourceFile(domain, subPath);
+            }
+        };
         var context = ComputerContext.builder(environment).mainThreadScheduler(mainThread).build();
         final var computer = new Computer(context, environment, term, 0);
 

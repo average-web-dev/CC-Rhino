@@ -23,9 +23,9 @@ public class ComputerTest {
     public void testTimeout() {
         assertTimeoutPreemptively(ofSeconds(20), () -> {
             try {
-                ComputerBootstrap.run("print('Hello') while true do end", ComputerBootstrap.MAX_TIME);
+                ComputerBootstrap.run("while (true) {}", ComputerBootstrap.MAX_TIME);
             } catch (AssertionError e) {
-                if (e.getMessage().equals("/test.lua:1: Too long without yielding")) return;
+                if (e.getMessage().contains("Too long without yielding")) return;
                 throw e;
             }
 
@@ -48,8 +48,8 @@ public class ComputerTest {
         }
 
         ComputerBootstrap.run("""
-            local x, y = custom.getObjects()
-            assert(x ~= y)
+            var objects = require('custom').getObjects();
+            assert(objects[0] !== objects[1]);
             """, i -> i.addApi(new CustomApi()), 50);
     }
 

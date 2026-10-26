@@ -80,7 +80,8 @@ class TestHttpApi {
                 val websocket = connectEvent[2] as WebsocketHandle
                 websocket.send(Coerced(ScriptValues.encode("Hello")), Optional.of(false))
 
-                val message = websocket.receive(Optional.empty()).await()
+                // receive() returns a single [message, binary] tuple value.
+                val message = websocket.receive(Optional.empty()).await()!![0] as Array<*>
                 assertThat("Received a return message", message, array(equalTo("HELLO".toByteArray()), equalTo(false)))
 
                 websocket.close()

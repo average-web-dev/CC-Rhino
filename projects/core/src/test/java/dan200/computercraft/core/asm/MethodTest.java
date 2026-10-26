@@ -22,26 +22,28 @@ import static org.hamcrest.Matchers.is;
 public class MethodTest {
     @Test
     public void testMainThread() {
-        ComputerBootstrap.run("assert(main_thread.go() == 123)", x -> x.addApi(new MainThread()), 50);
+        ComputerBootstrap.run("assert(require('main_thread').go() === 123)", x -> x.addApi(new MainThread()), 50);
     }
 
     @Test
     public void testMainThreadPeripheral() {
-        ComputerBootstrap.run("assert(peripheral.call('top', 'go') == 123)",
+        ComputerBootstrap.run("assert(require('peripheral').call('top', 'go') === 123)",
             x -> x.getEnvironment().setPeripheral(ComputerSide.TOP, new MainThread()),
             50);
     }
 
     @Test
     public void testMainThreadReturnObject() {
-        ComputerBootstrap.run("assert(type(main_thread.complex().go) == \"function\")", x -> x.addApi(new MainThread()), 50);
+        ComputerBootstrap.run("assert(typeof require('main_thread').complex().go === 'function')", x -> x.addApi(new MainThread()), 50);
     }
 
     @Test
     public void testDynamic() {
         ComputerBootstrap.run(
-            "assert(dynamic.foo() == 123, 'foo: ' .. tostring(dynamic.foo()))\n" +
-                "assert(dynamic.bar() == 321, 'bar: ' .. tostring(dynamic.bar()))",
+            """
+                var dynamic = require('dynamic');
+                assert(dynamic.foo() === 123, 'foo: ' + dynamic.foo());
+                assert(dynamic.bar() === 321, 'bar: ' + dynamic.bar());""",
             x -> x.addApi(new Dynamic()), 50);
     }
 
@@ -49,9 +51,9 @@ public class MethodTest {
     public void testDynamicPeripheral() {
         ComputerBootstrap.run(
             """
-                local dynamic = peripheral.wrap('top')
-                assert(dynamic.foo() == 123, 'foo: ' .. tostring(dynamic.foo()))
-                assert(dynamic.bar() == 321, 'bar: ' .. tostring(dynamic.bar()))""",
+                var peripheral = require('peripheral');
+                assert(peripheral.call('top', 'foo') === 123, 'foo: ' + peripheral.call('top', 'foo'));
+                assert(peripheral.call('top', 'bar') === 321, 'bar: ' + peripheral.call('top', 'bar'));""",
             x -> x.getEnvironment().setPeripheral(ComputerSide.TOP, new Dynamic()),
             50
         );
@@ -59,7 +61,10 @@ public class MethodTest {
 
     @Test
     public void testExtra() {
-        ComputerBootstrap.run("assert(extra.go() == nil, 'go')\nassert(extra.go2() == 456, 'go2')",
+        ComputerBootstrap.run("""
+                var extra = require('extra');
+                assert(extra.go() === undefined, 'go');
+                assert(extra.go2() === 456, 'go2');""",
             x -> x.addApi(new ExtraObject()),
             50);
     }
@@ -68,9 +73,15 @@ public class MethodTest {
     public void testPeripheralThrow() {
         ComputerBootstrap.run(
             """
-                local throw = peripheral.wrap('top')
-                local _, err = pcall(function() throw.thisThread() end) assert(err == '/test.lua:2: !', ("thisThread: %q"):format(err))
-                local _, err = pcall(function() throw.mainThread() end) assert(err == '/test.lua:3: !', ("mainThread: %q"):format(err))""",
+                var peripheral = require('peripheral');
+                function errorOf(method) {
+                    try { peripheral.call('top', method); } catch (e) { return String(e.message); }
+                    return null;
+                }
+                var err = errorOf('thisThread');
+                assert(err !== null && err.indexOf('!') === 0, 'thisThread: ' + err);
+                err = errorOf('mainThread');
+                assert(err !== null && err.indexOf('!') === 0, 'mainThread: ' + err);""",
             x -> x.getEnvironment().setPeripheral(ComputerSide.TOP, new PeripheralThrow()),
             50
         );
@@ -80,15 +91,16 @@ public class MethodTest {
     public void testMany() {
         ComputerBootstrap.run(
             """
-                assert(many.method_0)
-                assert(many.method_39)""",
+                var many = require('many');
+                assert(typeof many.method_0 === 'function');
+                assert(typeof many.method_39 === 'function');""",
             x -> x.addApi(new ManyMethods()), 50);
     }
 
     @Test
     public void testFunction() {
         ComputerBootstrap.run(
-            "assert(func.call()(123) == 123)",
+            "assert(require('func').call()(123)[0] === 123)",
             x -> x.addApi(new ReturnFunction()), 50);
     }
 
@@ -97,7 +109,7 @@ public class MethodTest {
     public void testModule() {
         ComputerBootstrap.run(
             """
-                assert(require "test.module".func() == 123)""",
+                assert(require('test.module').func() === 123);""",
             x -> x.addApi(new IsModule()), 50);
     }
 
