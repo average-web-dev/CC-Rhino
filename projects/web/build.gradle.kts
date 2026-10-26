@@ -152,4 +152,6 @@ val docWebsite by tasks.registering(Copy::class) {
     into(layout.buildDirectory.dir("site"))
 }
 
-tasks.assemble { dependsOn(docWebsite) }
+// TODO(rhino): the docs website needs the TeaVM emulator (classes.wasm), which cannot compile the Rhino runtime yet,
+//  so it is not part of `assemble` until #17 is resolved. Build it explicitly with `./gradlew :web:docWebsite`.
+// tasks.assemble { dependsOn(docWebsite) }
