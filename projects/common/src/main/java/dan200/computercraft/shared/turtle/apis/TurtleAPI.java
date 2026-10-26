@@ -732,7 +732,8 @@ public class TurtleAPI implements IComputerAPI {
      * @param side The turtle-relative side ("front", "back", "left", "right", "top", "bottom").
      * @param rate The charge rate in FE/t; {@code 0} disables charging on that side.
      */
-    @ScriptFunction
+    // Main thread: storing the rate marks the block entity changed, which touches the level.
+    @ScriptFunction(mainThread = true)
     public final void setChargeRate(ComputerSide side, int rate) {
         turtle.setChargeRate(side, rate);
     }
@@ -754,7 +755,8 @@ public class TurtleAPI implements IComputerAPI {
      * @param side The turtle-relative side.
      * @param rate The discharge rate in FE/t; {@code 0} disables discharging on that side.
      */
-    @ScriptFunction
+    // Main thread: storing the rate marks the block entity changed, which touches the level.
+    @ScriptFunction(mainThread = true)
     public final void setDischargeRate(ComputerSide side, int rate) {
         turtle.setDischargeRate(side, rate);
     }
