@@ -23,6 +23,10 @@ public final class CoreConfig {
 
     public static int maximumFilesOpen = 128;
     public static int jsInstructionThreshold = 10_000;
+    /** Maximum number of interpreted JS call frames; deeper recursion throws a catchable error. */
+    public static int jsMaxStackDepth = 2_000;
+    /** Maximum length (in UTF-16 units) of strings produced by amplifying built-ins such as {@code repeat}. */
+    public static int jsMaxStringLength = 32 * 1024 * 1024;
     public static String defaultComputerSettings = "";
 
     public static boolean httpEnabled = true;
