@@ -6,9 +6,10 @@ package dan200.computercraft.core.engine;
 
 import dan200.computercraft.api.scripting.MethodResult;
 import dan200.computercraft.api.scripting.ScriptException;
-import dan200.computercraft.core.computer.TimeoutState;
 import org.jspecify.annotations.Nullable;
 import org.mozilla.javascript.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
@@ -37,6 +38,7 @@ import java.util.*;
  * @see JSMachine
  */
 public final class EventLoop {
+    private static final Logger LOG = LoggerFactory.getLogger(EventLoop.class);
     private static final Object[] NO_ARGS = new Object[0];
     static final String TERMINATED = "Terminated";
 
@@ -326,6 +328,10 @@ public final class EventLoop {
             } catch (ScriptException e) {
                 // The call failed — resume so that it throws at its JS call site (see JSCallShim).
                 jsResult = shim.failure(cx, scope, e.getMessage() != null ? e.getMessage() : e.toString());
+            } catch (RuntimeException e) {
+                // A bug in the native callback: as in JSMethodBridge, log it but don't leak Java details to scripts.
+                LOG.error("Unexpected exception in native callback", e);
+                jsResult = shim.failure(cx, scope, JSMethodBridge.INTERNAL_ERROR_MESSAGE);
             }
             var r = resume(cx, scope, entry.strand(), entry.pending(), jsResult);
             if (r.isError()) {
@@ -398,10 +404,11 @@ public final class EventLoop {
      */
     MachineResult drainCheck(Context cx, Scriptable scope) {
         if (checkMap.isEmpty()) return MachineResult.OK;
-        var snapshot = new ArrayList<>(checkMap.values());
-        checkMap.clear();
-        for (var task : snapshot) {
-            if (task.owner().isDead()) continue;
+        // Snapshot the IDs, not the callbacks: an earlier callback may still clearImmediate() a later one.
+        var snapshot = new ArrayList<>(checkMap.keySet());
+        for (var id : snapshot) {
+            var task = checkMap.remove(id);
+            if (task == null || task.owner().isDead()) continue;
             var r = run(cx, scope, new Strand(task.owner(), false),
                 () -> cx.callFunctionWithContinuations(task.fn(), scope, NO_ARGS));
             if (r.isError()) return r;
@@ -436,17 +443,20 @@ public final class EventLoop {
         } catch (ContinuationPending pending) {
             park(strand, pending);
             return MachineResult.OK;
-        } catch (EvaluatorException e) {
-            if (isAbort(e)) return mapEvaluator(e);
-            return failed(cx, scope, strand, e);
         } catch (RuntimeException e) {
-            return failed(cx, scope, strand, e);
+            return uncaught(cx, scope, strand, e);
         } finally {
             current = previous;
         }
     }
 
-    private MachineResult failed(Context cx, Scriptable scope, Strand strand, RuntimeException e) {
+    /**
+     * The single mapping for an exception escaping a piece of JS, whichever phase ran it. An abort ({@link JSAbort})
+     * always stops the machine, a hard abort as {@link MachineResult#TIMEOUT}. Any other error fails the strand's
+     * thread; an error in work owned by the root thread stops the machine.
+     */
+    private MachineResult uncaught(Context cx, Scriptable scope, Strand strand, RuntimeException e) {
+        if (e instanceof JSAbort abort) return abort.result();
         var owner = strand.thread().effective();
         if (owner.isRoot()) return MachineResult.error(e.getMessage() != null ? e.getMessage() : e.toString());
         threadFailed(owner, errorValue(cx, scope, e));
@@ -471,25 +481,6 @@ public final class EventLoop {
         } catch (RuntimeException e) {
             return cx.newObject(scope, "Error", new Object[]{ message });
         }
-    }
-
-    private static boolean isAbort(EvaluatorException e) {
-        var msg = e.getMessage();
-        var details = e.details();
-        return JSMachine.HARD_ABORT_MESSAGE.equals(msg) || TimeoutState.ABORT_MESSAGE.equals(msg)
-            || JSMachine.HARD_ABORT_MESSAGE.equals(details) || TimeoutState.ABORT_MESSAGE.equals(details);
-    }
-
-    private static MachineResult mapEvaluator(EvaluatorException e) {
-        var msg = e.getMessage();
-        var details = e.details();
-        if (JSMachine.HARD_ABORT_MESSAGE.equals(msg) || JSMachine.HARD_ABORT_MESSAGE.equals(details)) {
-            return MachineResult.TIMEOUT;
-        }
-        if (TimeoutState.ABORT_MESSAGE.equals(msg) || TimeoutState.ABORT_MESSAGE.equals(details)) {
-            return MachineResult.error(TimeoutState.ABORT_MESSAGE);
-        }
-        return MachineResult.error(msg != null ? msg : e.toString());
     }
 
     @Nullable

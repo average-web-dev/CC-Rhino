@@ -13,11 +13,10 @@ import org.mozilla.javascript.*;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.concurrent.locks.LockSupport;
 
 public class JSMachine implements IMachine {
-    // Package-visible so EventLoop.mapEvaluator() can compare against it.
-    static final String HARD_ABORT_MESSAGE = "hard abort";
     static final String STACK_OVERFLOW_MESSAGE = "stack overflow";
     static final String OUT_OF_MEMORY_MESSAGE = "out of memory";
 
@@ -25,6 +24,14 @@ public class JSMachine implements IMachine {
     // work (microtasks, setImmediate) but no real CC event is incoming.
     private static final String SELF_TICK_EVENT = "cc:js-tick";
     private static final String TERMINATE_EVENT = "terminate";
+
+    /**
+     * Legacy Rhino globals removed from the scope. {@code new Continuation()} would let a script capture (and re-enter)
+     * interpreter continuations behind the event loop's back; {@code Script}, {@code With} and {@code Call} expose
+     * compiler / scope internals. The interpreter itself does not need these globals: it creates continuations, with
+     * and activation objects directly. {@code CallSite} stays, as {@code Error.prepareStackTrace} looks it up by name.
+     */
+    private static final List<String> REMOVED_GLOBALS = List.of("Continuation", "Script", "With", "Call");
 
     /**
      * JS bootstrap that installs the global {@code require()} function using the {@code __cc_loader__}
@@ -122,6 +129,7 @@ public class JSMachine implements IMachine {
             // the deny-all ClassShutter in CCContextFactory stays as a second layer.
             var globals = cx.initSafeStandardObjects();
             scope = globals;
+            for (var name : REMOVED_GLOBALS) ScriptableObject.deleteProperty(globals, name);
             JSLimits.install(globals);
 
             // Compile bios now so we can use executeScriptWithContinuations later.
@@ -265,6 +273,10 @@ public class JSMachine implements IMachine {
             scheduleSelfTick();
             return MachineResult.OK;
 
+        } catch (JSAbort e) {
+            // All JS is entered through EventLoop, which maps aborts itself; this only guards code outside of it.
+            close();
+            return e.result();
         } catch (StackOverflowError e) {
             // Java-stack recursion (e.g. through native callbacks) bypasses the interpreter's frame limit. Rhino
             // never lets JS catch an Error, so the script is already unwound; stop the machine.
@@ -341,17 +353,11 @@ public class JSMachine implements IMachine {
 
         @Override
         protected void observeInstructionCount(Context cx, int instructionCount) {
-            if (isDisposed || timeout.isHardAborted()) {
-                throw new EvaluatorException(HARD_ABORT_MESSAGE);
-            }
-            if (timeout.isSoftAborted()) {
-                throw new EvaluatorException(TimeoutState.ABORT_MESSAGE);
-            }
+            if (isDisposed || timeout.isHardAborted()) throw JSAbort.hard();
+            if (timeout.isSoftAborted()) throw JSAbort.soft();
             while (timeout.isPaused()) {
                 executionThread = Thread.currentThread();
-                if (isDisposed || timeout.isHardAborted()) {
-                    throw new EvaluatorException(HARD_ABORT_MESSAGE);
-                }
+                if (isDisposed || timeout.isHardAborted()) throw JSAbort.hard();
                 LockSupport.parkNanos(1_000_000L); // 1 ms; listener unparks on hard abort
             }
             executionThread = null;

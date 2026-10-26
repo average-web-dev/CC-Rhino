@@ -36,9 +36,9 @@ class JSSandboxTest {
         "Int32Array", "Uint32Array", "Float32Array", "Float64Array", "BigInt64Array", "BigUint64Array",
         "Error", "EvalError", "RangeError", "ReferenceError", "SyntaxError", "TypeError", "URIError",
         "AggregateError",
-        // Rhino extensions (pure JS, no Java access). JavaException is only an Error subtype constructor.
-        "global", "uneval", "isXMLName", "InternalError", "JavaException", "StopIteration", "Continuation",
-        "Script", "Call", "CallSite", "With",
+        // Rhino extensions (pure JS, no Java access). JavaException is only an Error subtype constructor; CallSite is
+        // needed by Error.prepareStackTrace. Continuation, Script, With and Call are removed (see JSMachine).
+        "global", "uneval", "isXMLName", "InternalError", "JavaException", "StopIteration", "CallSite",
         // Installed by the CC runtime
         "require"
     );
@@ -61,7 +61,7 @@ class JSSandboxTest {
 
             // LiveConnect entry points must never be present, whatever the allow-list says.
             for (var name : List.of("Packages", "java", "javax", "JavaImporter", "JavaAdapter", "getClass",
-                "importClass", "importPackage")) {
+                "importClass", "importPackage", "Continuation", "Script", "With", "Call")) {
                 assertFalse(actual.contains(name), name + " must not be a global");
             }
         } finally {
@@ -128,6 +128,42 @@ class JSSandboxTest {
             } finally {
                 machine.close();
             }
+        }
+    }
+
+    @Test
+    void scripts_cannot_capture_continuations() throws Exception {
+        var probe = new JSMachineBuilder.Recorder();
+        var machine = new JSMachineBuilder()
+            .api(probe, probe.methods())
+            .bios("""
+                var probe = require('probe');
+                probe.record([typeof Continuation, typeof Script, typeof With, typeof Call,
+                    'Continuation' in globalThis].join(','));
+                function attempt(fn) {
+                    try { probe.record('captured: ' + typeof fn()); }
+                    catch (e) { probe.record(e.name); }
+                }
+                attempt(function () { return new Continuation(); });
+                attempt(function () { return Continuation(); });
+                attempt(function () { return new globalThis.Continuation(); });
+                attempt(function () { return new Script('1'); });
+                attempt(function () { return new With({}); });
+                // A script-defined replacement is an ordinary function, not the interpreter's capture primitive.
+                Continuation = function () { this.plain = true; };
+                probe.record(String(new Continuation().plain));
+                """)
+            .build();
+        try {
+            var result = machine.handleEvent(null, null);
+            assertFalse(result.isError(), "boot should succeed: " + result.getMessage());
+            assertEquals(List.of(
+                "undefined,undefined,undefined,undefined,false",
+                "ReferenceError", "ReferenceError", "TypeError", "ReferenceError", "ReferenceError",
+                "true"
+            ), probe.values);
+        } finally {
+            machine.close();
         }
     }
 
