@@ -13,56 +13,60 @@ Like its parent, it builds on the much-beloved [ComputerCraft] and runs on both 
 CC: Rhino is an independent fork and is not affiliated with or endorsed by the CC: Tweaked or ComputerCraft teams.
 
 ## Contributing
-Any contribution is welcome, be that using the mod, reporting bugs or contributing code. If you want to get started
-developing the mod, [check out the instructions here](CONTRIBUTING.md#developing).
+CC: Rhino is still at a very early stage and changing quickly, so **outside contributions are not being accepted yet**.
+Please don't open pull requests for now. Bug reports and feedback are welcome as [issues][issues]. Once things are more
+stable, contributions will be very welcome and suitable issues will be opened for them.
+
+If you want to build the mod yourself, [check out the instructions here](CONTRIBUTING.md#setting-up-a-development-environment).
 
 ## Community
-If you need help getting started with CC: Rhino, want to show off your latest project, or just want to chat about
-ComputerCraft, do check out the CC: Tweaked [GitHub discussions page][GitHub discussions]! There's also a fairly populated,
-albeit quiet IRC channel on [EsperNet], if that's more your cup of tea. You can join `#computercraft` through your
-desktop client, or online using [KiwiIRC].
+CC: Rhino has no community channels of its own yet. For questions or feedback about the fork, please use the
+[issue tracker][issues].
 
-We also host fairly comprehensive documentation at [tweaked.cc](https://tweaked.cc/ "The CC: Tweaked website").
+For ComputerCraft in general, the CC: Tweaked [GitHub discussions page][GitHub discussions] and the `#computercraft`
+IRC channel on [EsperNet] ([KiwiIRC]) are good places to ask. Note that the documentation at
+[tweaked.cc](https://tweaked.cc/ "The CC: Tweaked website") describes CC: Tweaked's **Lua** API; the JavaScript API of
+CC: Rhino is described in [JS_API_REDESIGN.md](JS_API_REDESIGN.md).
 
 ## Using
-CC: Tweaked is hosted on my maven repo, and so is relatively simple to depend on. You may wish to add a soft (or hard)
-dependency in your `mods.toml` file, with the appropriate version bounds, to ensure that API functionality you depend
-on is present.
+CC: Rhino is not published to a Maven repository yet. To depend on it, build it from source and publish it to your
+local Maven repository:
+
+```sh
+./gradlew publishToMavenLocal
+```
 
 ```groovy
 repositories {
-  maven {
-    url "https://maven.squiddev.cc"
-    content {
-      includeGroup("cc.tweaked")
-    }
-  }
+  mavenLocal()
 }
 
 dependencies {
   // Vanilla (i.e. for multi-loader systems)
-  compileOnly("cc.tweaked:cc-tweaked-$mcVersion-common-api:$cctVersion")
+  compileOnly("cc.tweaked:cc-rhino-$mcVersion-common-api:$rhinoVersion")
 
   // Forge Gradle
-  compileOnly("cc.tweaked:cc-tweaked-$mcVersion-forge-api:$cctVersion")
-  runtimeOnly("cc.tweaked:cc-tweaked-$mcVersion-forge:$cctVersion")
+  compileOnly("cc.tweaked:cc-rhino-$mcVersion-forge-api:$rhinoVersion")
+  runtimeOnly("cc.tweaked:cc-rhino-$mcVersion-forge:$rhinoVersion")
 
   // Fabric Loom
-  modCompileOnly("cc.tweaked:cc-tweaked-$mcVersion-fabric-api:$cctVersion")
-  modRuntimeOnly("cc.tweaked:cc-tweaked-$mcVersion-fabric:$cctVersion")
+  modCompileOnly("cc.tweaked:cc-rhino-$mcVersion-fabric-api:$rhinoVersion")
+  modRuntimeOnly("cc.tweaked:cc-rhino-$mcVersion-fabric:$rhinoVersion")
 }
 ```
 
-You should also be careful to only use classes within the `dan200.computercraft.api` package. Non-API classes are
-subject to change at any point. If you depend on functionality outside the API (or need to mixin to CC:T), please file
-an issue to let me know!
+Only use classes within the `dan200.computercraft.api` package. Non-API classes are subject to change at any point.
 
-We bundle the API sources with the jar, so documentation should be easily viewable within your editor. Alternatively,
-the generated documentation [can be browsed online](https://tweaked.cc/javadoc/).
+The API is **not** compatible with CC: Tweaked addons: Lua-specific types (`@LuaFunction`, `ILuaContext`, …) are
+replaced by the scripting API in `dan200.computercraft.api.scripting` (`@ScriptFunction`, `MethodResult`, `Result`).
+Mods written against CC: Tweaked will not work unchanged; a compatibility layer is tracked in [#33][compat].
 
+We bundle the API sources with the jar, so documentation should be easily viewable within your editor.
+
+[issues]: https://github.com/average-web-dev/CC-Rhino/issues "CC: Rhino issues"
+[compat]: https://github.com/average-web-dev/CC-Rhino/issues/33 "Compatibility layer for CC: Tweaked addons"
 [cc-tweaked]: https://github.com/cc-tweaked/CC-Tweaked "CC: Tweaked on GitHub"
 [computercraft]: https://github.com/dan200/ComputerCraft "ComputerCraft on GitHub"
-[modrinth]: https://modrinth.com/mod/gu7yAYhd "Download CC: Tweaked from Modrinth"
 [Minecraft Forge]: https://files.minecraftforge.net/ "Download Minecraft Forge."
 [Fabric]: https://fabricmc.net/use/installer/ "Download Fabric."
 [GitHub Discussions]: https://github.com/cc-tweaked/CC-Tweaked/discussions

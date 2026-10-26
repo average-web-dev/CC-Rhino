@@ -4,112 +4,87 @@ SPDX-FileCopyrightText: 2020 The CC: Tweaked Developers
 SPDX-License-Identifier: MPL-2.0
 -->
 
-# Contributing to CC: Tweaked
-As with many open source projects, CC: Tweaked thrives on contributions from other people! This document (hopefully)
-provides an introduction as to how to get started with helping out.
+# Contributing to CC: Rhino
+CC: Rhino is still at a very early stage and changing quickly, so **outside contributions are not being accepted yet**.
+Please don't open pull requests for now, not even for open issues. Once things are more stable, contributions will be
+very welcome and suitable issues will be opened for them.
 
-If you've any other questions, [just ask the community][community] or [open an issue][new-issue].
+Until then, this document describes how to build and test the mod yourself.
 
 ## Table of Contents
  - [Reporting issues](#reporting-issues)
- - [Translations](#translations)
  - [Setting up a development environment](#setting-up-a-development-environment)
- - [Developing CC: Tweaked](#developing-cc-tweaked)
+ - [Developing CC: Rhino](#developing-cc-rhino)
  - [Writing documentation](#writing-documentation)
 
 ## Reporting issues
-If you have a bug, suggestion, or other feedback, the best thing to do is [file an issue][new-issue]. When doing so, do
-use the issue templates - they provide a useful hint on what information to provide.
-
-## Translations
-Translations are managed through [CrowdIn], an online interface for managing language strings.
+If you have a bug, suggestion, or other feedback, [file an issue][new-issue]. When doing so, do use the issue
+templates - they provide a useful hint on what information to provide.
 
 ## Setting up a development environment
-In order to develop CC: Tweaked, you'll need to download the source code and then run it.
+In order to build CC: Rhino, you'll need to download the source code and then run it.
 
  - Make sure you've got the following software installed:
    - Java Development Kit 25 (JDK). This can be downloaded from [Adoptium].
    - [Git](https://git-scm.com/).
-   - [NodeJS 20 or later][node].
+   - [NodeJS 20 or later][node] (the ROM is written in TypeScript and transpiled with `tsc`).
 
- - Download CC: Tweaked's source code:
+ - Download CC: Rhino's source code:
    ```
-   git clone https://github.com/cc-tweaked/CC-Tweaked.git
-   cd CC-Tweaked
+   git clone https://github.com/average-web-dev/CC-Rhino.git
+   cd CC-Rhino
    ```
 
- - Build CC: Tweaked with `./gradlew build`. This will be very slow the first time it runs, as it needs to download a
+ - Build CC: Rhino with `./gradlew build`. This will be very slow the first time it runs, as it needs to download a
    lot of dependencies (and decompile Minecraft several times). Subsequent runs should be much faster!
 
- - You're now ready to start developing CC: Tweaked. Running `./gradlew :forge:runClient` or
-   `./gradle :fabric:runClient` will start Minecraft under Forge and Fabric respectively.
+ - Running `./gradlew :forge:runClient` or `./gradlew :fabric:runClient` will start Minecraft under Forge and Fabric
+   respectively.
 
-If you want to run CC:T in a normal Minecraft instance, run `./gradlew assemble` and copy the `.jar` from
+If you want to run CC: Rhino in a normal Minecraft instance, run `./gradlew assemble` and copy the `.jar` from
 `projects/forge/build/libs` (for Forge) or `projects/fabric/build/libs` (for Fabric).
 
-## Developing CC: Tweaked
-Before making any major changes to CC: Tweaked, I'd recommend starting opening an issue or starting a discussion on
-GitHub first. It's often helpful to discuss features before spending time developing them!
+## Developing CC: Rhino
+Have a read of the following documents first:
 
-Once you're ready to start programming, have a read of the [the architecture document][architecture] first. While it's
-not a comprehensive document, it gives a good hint of where you should start looking to make your changes. As always, if
-you're not sure, [do ask the community][community]!
+ - [JS_MIGRATION.md](JS_MIGRATION.md): the migration plan from Lua to JavaScript, the event-loop model and the
+   constraints for code running on Rhino.
+ - [JS_API_REDESIGN.md](JS_API_REDESIGN.md): the target JavaScript API of each module (`fs`, `system`, `turtle`, …).
+ - [JS_ROM_FEATURES.md](JS_ROM_FEATURES.md): the libraries and programs of the ROM.
+ - [AGENTS.md](AGENTS.md): build commands, where things live and the runtime model in short.
+ - [The architecture document][architecture]: the module layout inherited from CC: Tweaked.
 
-Generative AI contributions are *not* welcome. PRs containing, or suspected of containing, code output by a generative
-AI model will be immediately rejected.
+The ROM (bios, os, bash, programs and libraries) is written in TypeScript in `projects/core/src/ts/`. Type
+definitions for the native modules are generated from the Java javadoc with `./gradlew :common:generateTsTypes`.
 
 ### Testing
-When making larger changes, it may be useful to write a test to make sure your code works as expected.
+CC: Rhino has several test suites, each designed to test something different:
 
-CC: Tweaked has several test suites, each designed to test something different:
+ - The JavaScript engine (event loop, blocking calls, `require`, sandbox, resource limits, …) is tested by JUnit tests
+   in `projects/core/src/test/java/dan200/computercraft/core/engine/`.
 
- - In order to test CraftOS and its builtin APIs, we have a test suite written in Lua located at
-   `projects/core/src/test/resources/test-rom/`. These don't rely on any Minecraft code, which means they can run on
-   emulators, acting as a sort of compliance test.
+ - The builtin APIs are tested by running a JavaScript program (`/test.js`) on a real computer through
+   `ComputerBootstrap` (`projects/core/src/test/java/dan200/computercraft/core/computer/`). These don't rely on any
+   Minecraft code.
 
-   These tests are written using a test system called "mcfly", heavily inspired by [busted]. Groups of tests go inside
-   `describe` blocks, and a single test goes inside `it`. Assertions are generally written using `expect` (inspired by
-   Hamcrest and the like). For instance, `expect(foo):eq("bar")` asserts that your variable `foo` is equal to the
-   expected value `"bar"`.
+   Both can be run with `./gradlew :core:test`.
 
-   These tests can be run with `./gradlew :core:test`.
+ - In-game functionality, such as the behaviour of blocks, turtles and peripherals, is tested using [Minecraft's
+   gametest system][mc-test] (`projects/common/src/testMod`). These tests spin up a server, spawn a structure for each
+   test, and then run some code on the blocks defined in that structure, often a JavaScript program from
+   `projects/common/src/testMod/resources/data/cctest/computer/tests/`.
 
- - In-game functionality, such as the behaviour of blocks and items, is tested using [Minecraft's gametest
-   system][mc-test] (`projects/common/src/testMod`). These tests spin up a server, spawn a structure for each test, and
-   then run some code on the blocks defined in that structure.
-
-   These tests can be run with `./gradlew runGametest` (or `./gradle :forge:runGametest`/`./gradlew :fabric:runGametest`
-   for a single loader).
-
-For more information, [see the architecture document][architecture].
+   These tests can be run with `./gradlew runGametest` (or `./gradlew :forge:runGametest`/
+   `./gradlew :fabric:runGametest` for a single loader).
 
 ## Writing documentation
-When writing documentation for [CC: Tweaked's documentation website][docs], it may be useful to build the documentation
-and preview it yourself before submitting a PR.
+The documentation website inherited from CC: Tweaked (`./gradlew docWebsite`) is currently disabled, as it is built
+for the Lua API ([#17][docs-issue]). For now, the JavaScript API is documented in the javadoc of the Java API classes
+(which also generates the TypeScript type definitions) and in the `JS_*.md` documents above.
 
-You'll first need to [set up a development environment as above](#setting-up-a-development-environment).
-
-Once this is set up, you can now run `./gradlew docWebsite`. This generates documentation from our Lua and Java code,
-writing the resulting HTML into `./projects/web/build/site`, which can then be opened in a browser. When iterating on
-documentation, you can instead run `./gradlew :web:assemble -x :web:compileTeaVM -t`, which will rebuild documentation
-every time you change a file.
-
-Documentation is built using [illuaminate] which, while not currently documented (somewhat ironic), is largely the same
-as [ldoc][ldoc]. Documentation comments are written in Markdown, though note that we do not support many GitHub-specific
-markdown features. If you can, do check what the documentation looks like locally!
-
-When writing long-form documentation (such as the guides in [doc/guides](doc/guides)), I find it useful to tell a
-narrative. Think of what you want the user to learn or achieve, then start introducing a simple concept, and then talk
-about how you can build on that until you've covered everything!
-
-[new-issue]: https://github.com/cc-tweaked/CC-Tweaked/issues/new/choose "Create a new issue"
-[community]: README.md#community "Get in touch with the community."
+[new-issue]: https://github.com/average-web-dev/CC-Rhino/issues/new/choose "Create a new issue"
+[docs-issue]: https://github.com/average-web-dev/CC-Rhino/issues/17 "Re-enable the docs website"
 [Adoptium]: https://adoptium.net/temurin/releases?version=25 "Download OpenJDK 25"
-[illuaminate]: https://github.com/SquidDev/illuaminate/ "Illuaminate on GitHub"
-[docs]: https://tweaked.cc/ "CC: Tweaked documentation"
-[ldoc]: http://stevedonovan.github.io/ldoc/ "ldoc, a Lua documentation generator."
 [mc-test]: https://www.youtube.com/watch?v=vXaWOJTCYNg
-[busted]: https://github.com/Olivine-Labs/busted "busted: Elegant Lua unit testing."
 [node]: https://nodejs.org/en/ "Node.js"
 [architecture]: projects/ARCHITECTURE.md
-[Crowdin]: https://crowdin.com/project/cc-tweaked/
