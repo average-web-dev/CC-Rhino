@@ -4,8 +4,10 @@
 
 package dan200.computercraft.gametest.core;
 
-import dan200.computercraft.api.scripting.IComputerSystem;
+import dan200.computercraft.api.component.ComputerComponents;
 import dan200.computercraft.api.scripting.IComputerAPI;
+import dan200.computercraft.api.scripting.IComputerSystem;
+import dan200.computercraft.api.scripting.MethodResult;
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.gametest.api.ComputerState;
@@ -20,7 +22,7 @@ import java.util.Optional;
 /**
  * API exposed to computers to help write tests.
  * <p>
- * Note, we extend this API within startup file of computers (see {@code cctest.lua}).
+ * Note, the test bios extends this API with assertion helpers (see {@code ManagedComputers.TEST_BIOS}).
  *
  * @see TestExtensionsKt#thenComputerOk(GameTestSequence, String, String)   To check tests on the computer have passed.
  */
@@ -82,5 +84,32 @@ public class TestAPI extends ComputerState implements IComputerAPI {
     @ScriptFunction
     public final void log(String message) {
         LOG.info("[Computer '{}'] {}", label, message);
+    }
+
+    /**
+     * Queue an event on this computer, as if it came from outside (for instance {@code terminate} from Ctrl+T).
+     *
+     * @param event The name of the event to queue.
+     */
+    @ScriptFunction
+    public final void queueEvent(String event) {
+        system.queueEvent(event);
+    }
+
+    /**
+     * Run a turtle command whose {@link dan200.computercraft.api.turtle.TurtleCommand#execute} throws, as a buggy
+     * addon command might.
+     *
+     * @param message The message of the thrown exception.
+     * @return The command's result, which is never produced: the call should throw {@code message} instead.
+     * @throws ScriptException If this computer is not a turtle.
+     */
+    @ScriptFunction
+    public final MethodResult runFaultyTurtleCommand(String message) throws ScriptException {
+        var turtle = system.getComponent(ComputerComponents.TURTLE);
+        if (turtle == null) throw new ScriptException("Not a turtle");
+        return turtle.executeCommand(t -> {
+            throw new IllegalStateException(message);
+        });
     }
 }

@@ -13,6 +13,7 @@ import dan200.computercraft.api.turtle.ITurtleUpgrade
 import dan200.computercraft.api.turtle.TurtleSide
 import dan200.computercraft.api.upgrades.UpgradeData
 import dan200.computercraft.core.apis.PeripheralAPI
+import dan200.computercraft.core.computer.ComputerSide
 import dan200.computercraft.gametest.api.*
 import dan200.computercraft.gametest.core.TestHooks
 import dan200.computercraft.impl.TurtleUpgrades
@@ -27,6 +28,7 @@ import dan200.computercraft.shared.peripheral.monitor.MonitorBlock
 import dan200.computercraft.shared.peripheral.monitor.MonitorEdgeState
 import dan200.computercraft.shared.turtle.TurtleOverlay
 import dan200.computercraft.shared.turtle.apis.TurtleAPI
+import dan200.computercraft.shared.turtle.core.TurtleAccessInternal
 import dan200.computercraft.shared.turtle.core.TurtleCraftCommand
 import dan200.computercraft.shared.turtle.items.TurtleItem
 import dan200.computercraft.shared.util.WaterloggableHelpers
@@ -768,6 +770,182 @@ class Turtle_Test {
     }
 
     /**
+     * A JS program's `turtle.forward()` suspends until the standard `task_complete` event, and returns a `Result`.
+     *
+     * @see [average-web-dev/CC-Rhino#15](https://github.com/average-web-dev/CC-Rhino/issues/15)
+     */
+    @GameTest(timeoutTicks = Timeouts.COMPUTER_TIMEOUT)
+    fun Move_task_complete(helper: GameTestHelper) = helper.sequence {
+        thenComputerOk()
+        thenExecute {
+            helper.assertBlockPresent(ModRegistry.Blocks.TURTLE_NORMAL.get(), BlockPos(2, 2, 2))
+            helper.assertBlockPresent(Blocks.DIRT, BlockPos(2, 2, 3))
+        }
+    }
+
+    /**
+     * Timers and redstone events are dispatched to a JS program's listeners while a turtle command waits for a move
+     * to finish animating.
+     */
+    @GameTest(timeoutTicks = Timeouts.COMPUTER_TIMEOUT)
+    fun Move_dispatches_events(helper: GameTestHelper) = helper.sequence {
+        // The turtle has made its first move, and is now waiting for its animation to finish.
+        thenComputerOk(marker = "moving")
+        thenExecute { helper.setBlock(BlockPos(1, 2, 2), Blocks.REDSTONE_BLOCK) }
+        thenComputerOk()
+        thenExecute { helper.assertBlockPresent(ModRegistry.Blocks.TURTLE_NORMAL.get(), BlockPos(2, 2, 3)) }
+    }
+
+    /**
+     * An exception thrown by a turtle command surfaces as a JS error, rather than hanging the program (or crashing the
+     * server).
+     */
+    @GameTest(timeoutTicks = Timeouts.COMPUTER_TIMEOUT)
+    fun Command_error(helper: GameTestHelper) = helper.sequence { thenComputerOk() }
+
+    /**
+     * Terminating (Ctrl+T) a program while a turtle command is in flight makes that call throw `Terminated`. The
+     * queued command still runs.
+     */
+    @GameTest(timeoutTicks = Timeouts.COMPUTER_TIMEOUT)
+    fun Terminate_command(helper: GameTestHelper) = helper.sequence {
+        thenComputerOk()
+        // Moved forward twice (the second move was terminated, but still ran), then back once.
+        thenExecute { helper.assertBlockPresent(ModRegistry.Blocks.TURTLE_NORMAL.get(), BlockPos(2, 2, 1)) }
+    }
+
+    /**
+     * A turtle accepts energy pushed in by its neighbour at the per-side charge rate, and none through a side whose
+     * charge rate is 0.
+     *
+     * In the energy tests, the neighbouring energy storage is another (switched off) turtle, which is exposed as Forge
+     * Energy on NeoForge and Tech Reborn Energy on Fabric.
+     */
+    @GameTest
+    fun Energy_charge_rate(helper: GameTestHelper) = helper.sequence {
+        thenExecute { helper.getNeighbourTurtle().setDischargeRate(ComputerSide.BACK, 1000) }
+        thenOnComputer {
+            setChargeRate(ComputerSide.FRONT, 0)
+            assertEquals(0, turtle.getChargeRate(ComputerSide.FRONT))
+            assertEquals(Int.MAX_VALUE, turtle.getChargeRate(ComputerSide.BACK), "Other sides are unchanged")
+
+            sleep(100.milliseconds) // Let any tick which used the old rate finish.
+            val blocked = turtle.energy
+            sleep(200.milliseconds)
+            assertEquals(blocked, turtle.energy, "No energy through a disabled side")
+
+            setChargeRate(ComputerSide.FRONT, 50)
+            val before = turtle.energy
+            sleep(200.milliseconds)
+            val gained = turtle.energy - before
+            assertTrue(gained > 0 && gained % 50 == 0, "Charged at 50 FE/t (gained $gained FE)")
+
+            setChargeRate(ComputerSide.FRONT, 0)
+        }
+        thenExecute {
+            val total = helper.getTestTurtle().energyLevel + helper.getNeighbourTurtle().energyLevel
+            assertEquals(20000, total, "Energy is conserved")
+        }
+    }
+
+    /**
+     * A turtle with a discharge rate actively pushes energy into its neighbour, at that side's rate.
+     */
+    @GameTest
+    fun Energy_push(helper: GameTestHelper) = helper.sequence {
+        thenOnComputer {
+            assertEquals(0, turtle.getDischargeRate(ComputerSide.FRONT), "Discharging is off by default")
+            setDischargeRate(ComputerSide.FRONT, 100)
+            setDischargeRate(ComputerSide.LEFT, 100) // Nothing to the left, so this loses no energy.
+            assertEquals(100, turtle.getDischargeRate(ComputerSide.FRONT))
+            assertEquals(0, turtle.getDischargeRate(ComputerSide.BACK), "Other sides are unchanged")
+
+            sleep(200.milliseconds)
+            setDischargeRate(ComputerSide.FRONT, 0)
+            sleep(100.milliseconds)
+
+            val pushed = 10000 - turtle.energy
+            assertTrue(pushed > 0 && pushed % 100 == 0, "Pushed at 100 FE/t (pushed $pushed FE)")
+        }
+        thenExecute {
+            val pushed = 10000 - helper.getTestTurtle().energyLevel
+            assertEquals(pushed, helper.getNeighbourTurtle().energyLevel, "Pushed energy arrived in the neighbour")
+        }
+    }
+
+    /**
+     * `turtle.transferEnergy` is capped by [Config.turtleMaxDischargeRate].
+     *
+     * @see [average-web-dev/CC-Rhino#21](https://github.com/average-web-dev/CC-Rhino/issues/21)
+     */
+    @GameTest(batch = "turtle_energy_discharge_cap")
+    fun Energy_transfer_caps(helper: GameTestHelper) = helper.sequence {
+        thenExecute { helper.overrideConfig(Config::turtleMaxDischargeRate, 150) }
+        thenOnComputer {
+            assertEquals(150, turtle.maxDischargeRate)
+            assertEquals(100, transferEnergy(ComputerSide.FRONT, 100), "Below the cap")
+            assertEquals(150, transferEnergy(ComputerSide.FRONT, 1000), "Capped by turtleMaxDischargeRate")
+            assertEquals(750, turtle.energy)
+
+            assertEquals(0, transferEnergy(ComputerSide.BACK, 100), "No energy storage behind")
+            assertEquals(0, absorbEnergy(ComputerSide.FRONT, 100), "Neighbour does not discharge")
+        }
+        thenExecute {
+            assertEquals(750, helper.getTestTurtle().energyLevel)
+            assertEquals(250, helper.getNeighbourTurtle().energyLevel)
+        }
+    }
+
+    /**
+     * `turtle.absorbEnergy` is capped by [Config.turtleMaxChargeRate].
+     *
+     * @see [average-web-dev/CC-Rhino#21](https://github.com/average-web-dev/CC-Rhino/issues/21)
+     */
+    @GameTest(batch = "turtle_energy_charge_cap")
+    fun Energy_absorb_caps(helper: GameTestHelper) = helper.sequence {
+        thenExecute { helper.overrideConfig(Config::turtleMaxChargeRate, 200) }
+        // Stop the neighbour pushing energy into us, so we only measure what absorbEnergy pulls.
+        thenOnComputer { setChargeRate(ComputerSide.FRONT, 0) }
+        thenExecute { helper.getNeighbourTurtle().setDischargeRate(ComputerSide.BACK, Int.MAX_VALUE) }
+        thenOnComputer {
+            assertEquals(200, turtle.maxChargeRate)
+            assertEquals(50, absorbEnergy(ComputerSide.FRONT, 50), "Below the cap")
+            assertEquals(200, absorbEnergy(ComputerSide.FRONT, 1000), "Capped by turtleMaxChargeRate")
+            assertEquals(250, turtle.energy)
+        }
+        thenExecute {
+            assertEquals(250, helper.getTestTurtle().energyLevel)
+            assertEquals(750, helper.getNeighbourTurtle().energyLevel)
+        }
+    }
+
+    /**
+     * When turtles don't need fuel, they never exchange energy with their neighbours, as their energy is never
+     * consumed.
+     *
+     * @see [average-web-dev/CC-Rhino#21](https://github.com/average-web-dev/CC-Rhino/issues/21)
+     */
+    @GameTest(batch = "turtle_energy_no_fuel")
+    fun Energy_no_fuel(helper: GameTestHelper) = helper.sequence {
+        thenExecute {
+            helper.overrideConfig(Config::turtlesNeedFuel, false)
+            helper.getNeighbourTurtle().setDischargeRate(ComputerSide.BACK, 1000)
+        }
+        thenOnComputer {
+            assertFalse(turtle.isEnergyNeeded)
+            assertEquals(0, transferEnergy(ComputerSide.FRONT, 100), "transferEnergy moves nothing")
+            assertEquals(0, absorbEnergy(ComputerSide.FRONT, 100), "absorbEnergy moves nothing")
+
+            setDischargeRate(ComputerSide.FRONT, 1000)
+            sleep(200.milliseconds)
+        }
+        thenExecute {
+            assertEquals(1000, helper.getTestTurtle().energyLevel, "Turtle neither pushed nor received energy")
+            assertEquals(1000, helper.getNeighbourTurtle().energyLevel, "Neighbour neither pushed nor received energy")
+        }
+    }
+
+    /**
      * Loads a structure created on an older version of the game, and checks that data fixers have been applied.
      */
     @GameTest
@@ -1075,6 +1253,32 @@ class Turtle_Test {
 }
 
 private val ScriptTaskContext.turtle get() = getApi<TurtleAPI>()
+
+/** Call the main-thread `turtle.setChargeRate` function. */
+private suspend fun ScriptTaskContext.setChargeRate(side: ComputerSide, rate: Int) {
+    context.executeMainThreadTask { turtle.setChargeRate(side, rate); null }.await()
+}
+
+/** Call the main-thread `turtle.setDischargeRate` function. */
+private suspend fun ScriptTaskContext.setDischargeRate(side: ComputerSide, rate: Int) {
+    context.executeMainThreadTask { turtle.setDischargeRate(side, rate); null }.await()
+}
+
+/** Call the main-thread `turtle.transferEnergy` function. */
+private suspend fun ScriptTaskContext.transferEnergy(side: ComputerSide, amount: Int): Any? =
+    context.executeMainThreadTask { turtle.transferEnergy(side, amount) }.awaitValue()
+
+/** Call the main-thread `turtle.absorbEnergy` function. */
+private suspend fun ScriptTaskContext.absorbEnergy(side: ComputerSide, amount: Int): Any? =
+    context.executeMainThreadTask { turtle.absorbEnergy(side, amount) }.awaitValue()
+
+/** The turtle under test in the energy tests. */
+private fun GameTestHelper.getTestTurtle(): TurtleAccessInternal =
+    getBlockEntity(BlockPos(2, 2, 1), ModRegistry.BlockEntities.TURTLE_NORMAL.get()).access as TurtleAccessInternal
+
+/** The (switched off) turtle in front of the [test turtle][getTestTurtle], acting as its neighbouring energy storage. */
+private fun GameTestHelper.getNeighbourTurtle(): TurtleAccessInternal =
+    getBlockEntity(BlockPos(2, 2, 2), ModRegistry.BlockEntities.TURTLE_NORMAL.get()).access as TurtleAccessInternal
 
 /** Energy (in FE) gained from burning an item, see [dan200.computercraft.shared.turtle.FurnaceRefuelHandler]. */
 private val COAL_ENERGY get() = 1600 * Config.turtleFuelToEnergyFactor

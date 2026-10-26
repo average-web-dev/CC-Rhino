@@ -120,6 +120,8 @@ object ManagedComputers : IMachine.Factory {
                 ok: function (marker) { native.ok(marker); },
                 fail: function (message) { native.fail(String(message)); },
                 log: function (message) { native.log(String(message)); },
+                queueEvent: function (event) { native.queueEvent(String(event)); },
+                runFaultyTurtleCommand: function (message) { return native.runFaultyTurtleCommand(String(message)); },
                 assert: function (value, message) {
                     if (value) return value;
                     test.fail(message !== undefined ? message : 'Assertion failed');
