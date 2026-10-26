@@ -343,11 +343,11 @@ public final class ConfigSpec {
                 .defineInRange("fuel_to_energy_factor", Config.turtleFuelToEnergyFactor, 0, Integer.MAX_VALUE);
 
             turtleMaxChargeRate = builder
-                .comment("The maximum Forge Energy (FE/t) a turtle may passively accept, capping any per-side charge rate.")
+                .comment("The maximum Forge Energy (FE/t) a turtle may accept, capping any per-side charge rate and each turtle.absorbEnergy call.")
                 .defineInRange("max_charge_rate", Config.turtleMaxChargeRate, 0, Integer.MAX_VALUE);
 
             turtleMaxDischargeRate = builder
-                .comment("The maximum Forge Energy (FE/t) a turtle may passively emit, capping any per-side discharge rate.")
+                .comment("The maximum Forge Energy (FE/t) a turtle may emit, capping any per-side discharge rate and each turtle.transferEnergy call.")
                 .defineInRange("max_discharge_rate", Config.turtleMaxDischargeRate, 0, Integer.MAX_VALUE);
 
             turtlesCanPush = builder

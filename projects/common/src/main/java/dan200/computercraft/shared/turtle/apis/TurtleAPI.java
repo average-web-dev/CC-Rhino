@@ -594,8 +594,10 @@ public class TurtleAPI implements IComputerAPI {
     /**
      * Determine whether this turtle consumes energy to move.
      * <p>
-     * When this is {@code false} (the {@code turtlesNeedFuel} config is disabled) movement is free, but the
-     * turtle still has a real energy level and may still transfer energy to or from neighbouring blocks.
+     * When this is {@code false} (the {@code turtlesNeedFuel} config is disabled) movement is free and the turtle's
+     * energy is never consumed. To stop that from being used as an infinite energy source, the turtle then neither
+     * exchanges energy with neighbouring blocks: {@link #transferEnergy} and {@link #absorbEnergy} always return
+     * {@code 0}, and the turtle exposes no energy storage to adjacent machines.
      *
      * @return Whether this turtle needs energy to move.
      * @cc-r.return boolean
@@ -796,37 +798,67 @@ public class TurtleAPI implements IComputerAPI {
 
     /**
      * Push energy out of this turtle into the energy store of the block on the given side.
+     * <p>
+     * This is a one-shot transfer: it moves at most {@code amount} FE, further capped by the turtle's stored energy
+     * and the server's {@link #getMaxDischargeRate() maximum discharge rate}, and by however much the neighbour
+     * accepts. Every FE delivered is taken from the turtle's energy.
+     * <p>
+     * The per-side {@link #setDischargeRate discharge rate} is <em>not</em> applied: it only governs energy which
+     * adjacent blocks pull from (or the turtle automatically pushes into) that side.
+     * <p>
+     * If this turtle does not {@link #isEnergyNeeded() need energy}, its energy is never consumed, so this transfers
+     * nothing and returns {@code 0}.
      *
      * @param side   The turtle-relative side to push to.
      * @param amount The maximum FE to transfer.
      * @return The amount of FE actually transferred.
+     * @cc-r.return number
+     * @see #absorbEnergy(ComputerSide, int)
+     * @see #getMaxDischargeRate()
      */
     @ScriptFunction(mainThread = true)
     public final int transferEnergy(ComputerSide side, int amount) {
-        var available = Math.min(amount, turtle.getEnergyLevel());
+        if (!turtle.isEnergyNeeded()) return 0;
+        var available = Math.min(Math.min(amount, Config.turtleMaxDischargeRate), turtle.getEnergyLevel());
         if (available <= 0) return 0;
         var handle = neighbourEnergy(side);
         if (handle == null) return 0;
-        var moved = handle.receiveEnergy(available, false);
-        if (moved > 0) turtle.consumeEnergy(moved);
+        // Never report (or charge for) more than we offered, even if the neighbour misbehaves.
+        var moved = Math.min(handle.receiveEnergy(available, false), available);
+        if (moved <= 0) return 0;
+        // moved <= available <= our energy level, so this always succeeds and drains exactly what was delivered.
+        turtle.consumeEnergy(moved);
         return moved;
     }
 
     /**
      * Pull energy from the energy store of the block on the given side into this turtle.
+     * <p>
+     * This is a one-shot transfer: it moves at most {@code amount} FE, further capped by the turtle's free capacity
+     * and the server's {@link #getMaxChargeRate() maximum charge rate}, and by however much the neighbour supplies.
+     * <p>
+     * The per-side {@link #setChargeRate charge rate} is <em>not</em> applied: it only governs energy which adjacent
+     * blocks push into that side.
+     * <p>
+     * If this turtle does not {@link #isEnergyNeeded() need energy}, this absorbs nothing and returns {@code 0}.
      *
      * @param side   The turtle-relative side to pull from.
      * @param amount The maximum FE to absorb.
      * @return The amount of FE actually absorbed.
+     * @cc-r.return number
+     * @see #transferEnergy(ComputerSide, int)
+     * @see #getMaxChargeRate()
      */
     @ScriptFunction(mainThread = true)
     public final int absorbEnergy(ComputerSide side, int amount) {
-        var space = Math.min(amount, turtle.getEnergyCapacity() - turtle.getEnergyLevel());
+        if (!turtle.isEnergyNeeded()) return 0;
+        var space = Math.min(Math.min(amount, Config.turtleMaxChargeRate), turtle.getEnergyCapacity() - turtle.getEnergyLevel());
         if (space <= 0) return 0;
         var handle = neighbourEnergy(side);
         if (handle == null) return 0;
-        var moved = handle.extractEnergy(space, false);
-        if (moved > 0) turtle.addEnergy(moved);
+        var moved = Math.min(handle.extractEnergy(space, false), space);
+        if (moved <= 0) return 0;
+        turtle.addEnergy(moved);
         return moved;
     }
 
