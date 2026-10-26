@@ -33,13 +33,7 @@ public class SystemAPI implements IComputerAPI {
 
     private int nextAlarmToken = 0;
 
-    private record Alarm(double time, int day) implements Comparable<Alarm> {
-        @Override
-        public int compareTo(Alarm o) {
-            var t = day * 24.0 + time;
-            var ot = day * 24.0 + time;
-            return Double.compare(t, ot);
-        }
+    private record Alarm(double time, int day) {
     }
 
     public SystemAPI(IAPIEnvironment environment) {
@@ -74,7 +68,7 @@ public class SystemAPI implements IComputerAPI {
             var day = apiEnvironment.getComputerEnvironment().getDay();
 
             if (time > previousTime || day > previousDay) {
-                var now = this.day * 24.0 + this.time;
+                var now = day * 24.0 + time;
                 Iterator<Int2ObjectMap.Entry<Alarm>> it = alarms.int2ObjectEntrySet().iterator();
                 while (it.hasNext()) {
                     var entry = it.next();
