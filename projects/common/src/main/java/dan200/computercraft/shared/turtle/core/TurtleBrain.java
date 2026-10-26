@@ -49,6 +49,8 @@ import net.minecraft.world.level.material.PushReaction;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -56,6 +58,8 @@ import java.util.concurrent.TimeUnit;
 import static dan200.computercraft.shared.util.WaterloggableHelpers.WATERLOGGED;
 
 public class TurtleBrain implements TurtleAccessInternal {
+    private static final Logger LOG = LoggerFactory.getLogger(TurtleBrain.class);
+
     public static final String NBT_FUEL = "Fuel";
     public static final String NBT_OVERLAY = "Overlay";
     public static final String NBT_COLOUR = "Color";
@@ -672,13 +676,15 @@ public class TurtleBrain implements TurtleAccessInternal {
             result = nextCommand.command().execute(this);
         } catch (RuntimeException e) {
             // A genuine fault in the command (not an expected action failure): surface it to the script as a
-            // thrown error via task_complete, then rethrow so the server still sees it. Without this the
-            // awaiting continuation would hang, as no completion event would ever fire.
+            // thrown error via task_complete, and log it. Without the event the awaiting continuation would hang,
+            // as no completion would ever fire. It is not rethrown: an exception escaping a block entity tick
+            // crashes the whole server.
+            LOG.error("Error running turtle command {} at {}", nextCommand.command(), getPosition(), e);
             if (computer != null) {
                 computer.getMainThreadMonitor().trackWork(System.nanoTime() - start, TimeUnit.NANOSECONDS);
                 computer.queueEvent("task_complete", new Object[]{ nextCommand.taskId(), false, e.getMessage() });
             }
-            throw e;
+            return;
         }
         var end = System.nanoTime();
 

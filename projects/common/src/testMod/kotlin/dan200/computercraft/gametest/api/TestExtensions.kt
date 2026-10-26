@@ -6,6 +6,7 @@ package dan200.computercraft.gametest.api
 
 import dan200.computercraft.api.peripheral.IPeripheral
 import dan200.computercraft.gametest.core.ManagedComputers
+import dan200.computercraft.mixin.gametest.GameTestHelperAccessor
 import dan200.computercraft.mixin.gametest.GameTestInfoAccessor
 import dan200.computercraft.mixin.gametest.GameTestSequenceAccessor
 import dan200.computercraft.shared.platform.PlatformHelper
@@ -39,6 +40,7 @@ import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.Vec3
 import org.hamcrest.Matchers
 import org.hamcrest.StringDescription
+import kotlin.reflect.KMutableProperty0
 
 /**
  * Globally usable structures.
@@ -129,6 +131,29 @@ fun GameTestHelper.sequence(run: GameTestSequence.() -> Unit) {
     val sequence = startSequence()
     run(sequence)
     sequence.thenSucceed()
+}
+
+/**
+ * Set a config option (such as a field of [dan200.computercraft.shared.config.Config]) for the duration of this test,
+ * restoring its original value once the test passes or fails.
+ *
+ * Config options are global, so tests which change them should run in their own [GameTest.batch]: tests within a
+ * batch run concurrently, while batches run one after another.
+ */
+fun <T> GameTestHelper.overrideConfig(option: KMutableProperty0<T>, value: T) {
+    val original = option.get()
+    option.set(value)
+    (this as GameTestHelperAccessor).testInfo.addListener(
+        object : GameTestListener {
+            override fun testStructureLoaded(info: GameTestInfo) {}
+
+            override fun testPassed(info: GameTestInfo, runner: GameTestRunner) = option.set(original)
+
+            override fun testFailed(info: GameTestInfo, runner: GameTestRunner) = option.set(original)
+
+            override fun testAddedForRerun(oldInfo: GameTestInfo, newInfo: GameTestInfo, runner: GameTestRunner) {}
+        },
+    )
 }
 
 /**

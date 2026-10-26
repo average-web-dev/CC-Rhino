@@ -709,7 +709,7 @@ computer keeps processing other events meanwhile — exactly as today, just on t
 - [x] **14.3** `TurtleBrain.dispatchCommand` — emit `task_complete` `[taskId, true, value]`; emit `[taskId, false, message]` only for a thrown `command.execute` exception (also fixes the previously-hung continuation on such a throw)
 - [x] **14.4** Move result shaping (Result / boolean / data) to the completion site — *done in `0497a0e22` (queued turtle commands return `Result`)*
 - [x] **14.5** Delete `CommandCallback`, the `turtle_response` event, the `commandsIssued` counter, and its `callbackID` plumbing (`TurtleCommandQueueEntry.callbackID:int` → `taskId:long`); refresh the `ITurtleAccess.executeCommand` javadoc
-- [ ] **14.6** Verify at runtime: `turtle.forward()` halts and resumes via the standard continuation; multi-tick movement still lets other events dispatch — *Java compiles; value-equivalence reasoned through (`JSValues.toJs` deep-converts the nested array); no turtle integration test exists yet*
+- [x] **14.6** Verify at runtime: `turtle.forward()` halts and resumes via the standard continuation; multi-tick movement still lets other events dispatch — *covered by the `Turtle_Test` gametests (`Move_task_complete`, `Move_dispatches_events`, `Command_error`, `Terminate_command`, `Energy_*`)*
 - [ ] **Commit** — stage Phase 14 files; propose commit message; wait for user approval
 
 ---
