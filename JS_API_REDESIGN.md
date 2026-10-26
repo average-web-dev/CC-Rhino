@@ -372,7 +372,9 @@ build); the tsdoclet fails the build on an `unknown` it cannot justify. Shapes:
 Detail tables (`ItemDetail`, `BlockDetail`, `EntityDetail`, …) stay Java `Map`s because other mods' detail
 providers add fields; they are declared by hand in `projects/core/src/ts/types/details.d.ts` with an index
 signature. Slot/tank maps stay `Record<number, …>` (sparse, keyed by 1-based slot). Events are declared as `@Event`
-records (`CoreEvents`, `PeripheralEvents`) and form the generated `EventMap`.
+records (`CoreEvents`, `PeripheralEvents`) and form the generated `EventMap`; all core/common code queues events by
+constructing these records (`queueEvent(Record)`), so the declared shape is the queued shape. A varargs record
+(`computer_command(...args: string[])`) spreads its last component.
 
 ## Async model (promises)
 
@@ -391,8 +393,9 @@ promises keeps working if Rhino ever gains `async`/`await`.
   Functions that never block return an already-settled promise; failures reject with the same `Error` the blocking
   form would throw (including properties like fs `code`). Node-style pairs collapse as in Node's `fs/promises`:
   `fooSync` + callback `foo` → promise-returning `foo` (`fsP.readFile(path)`). Objects returned through a
-  `/promises` module get promise-returning methods too. Each has its own generated `.d.ts` (`TurtleAPIPromises`, …).
-  `parallel/promises`' `waitFor*` return a promise settled with the group.
+  `/promises` module get promise-returning methods too. Each has its own generated `.d.ts` (`TurtleAPIPromises`, …),
+  and so does every object type (`HttpResponseHandlePromises`, `TransferredFilePromises`, …), which the promise
+  modules' return types use. `parallel/promises`' `waitFor*` return a promise settled with the group.
 - **`require('async')`** bridges both styles:
   - `run(genFn, ...args)` runs a generator function as an async function — `yield promise` awaits it (rejections are
     thrown at the `yield`). Returns a `Promise` of the return value. It is the same helper tsc uses.
@@ -400,20 +403,35 @@ promises keeps working if Rhino ever gains `async`/`await`.
     values are returned unchanged). The blocking-code counterpart of `await`.
 - **Blocking inside async code is an error**, never silently a promise: inside generators (and so `async`
   functions) and promise callbacks no continuation can be captured, so `turtle.dig()` throws
-  `turtle.dig blocks and cannot be used inside async code — use require('turtle/promises') instead`. Functions known
-  to block (a `MethodResult` return or `mainThread = true`) are rejected *before* running, so they have no effect;
-  `async.unwrap` and `parallel.waitFor*` likewise. The same applies to callbacks run by native code (e.g.
-  `Array.prototype.forEach`), with a slightly different message.
+  `turtle.dig blocks and cannot be used inside async code — use require('turtle/promises') instead`. The same applies
+  to callbacks run by native code (`Array.prototype.forEach`, a `Promise` executor, …), with a slightly different
+  message. Functions that may block are rejected *before* running, so they have no effect: the engine captures the
+  continuation before calling them (and drops it if they return immediately). "May block" is known for
+  `@ScriptFunction`s (a `MethodResult` return or `mainThread = true`); functions returned as `IFunction` and methods
+  of `IDynamicObject`s count as blocking unless they declare otherwise (`IFunction.nonYielding(fn)`,
+  `IDynamicObject.isNonYielding(method)`), since the engine cannot know before calling them. `async.unwrap` and
+  `parallel.waitFor*` always block.
 - **Threads:** a promise reaction (`then`/`catch`/`finally`, `await`) belongs to the thread that registered it: it
   runs as that thread, and never once that thread has been stopped. An operation started through `/promises` belongs
   to the calling thread; if that thread is stopped, the operation is discarded and its promise rejects with
   `Error("Terminated")` — invisible to the stopped thread itself (its reactions don't run), but other threads awaiting
   the promise don't hang. Ctrl+T reaches a foreground thread blocked in `async.unwrap` like any other blocking call;
   pending `/promises` operations are not terminated directly, but end with their thread.
+- **Unhandled rejections:** a promise rejected without a handler by the end of the microtask drain is reported, as in
+  Node. If the thread that created it is still running, it fails with `Error("Unhandled promise rejection: <msg>")`
+  (`cause` = the reason, `stack` = the reason's) — like Node ≥ 15, which exits the process: an async program that lost
+  an error would otherwise continue half-dead. A foreground program thus ends, and bash prints the error. Rejections
+  of the root thread (bios, shell) or of a thread that already returned are emitted as the `unhandled_rejection` event
+  instead, which bash prints. Promises of a stopped thread never report. Attaching any handler (`then`, `catch`,
+  `finally`, `await`, `Promise.all`, …) before the drain ends counts as handling it.
 - **TypeScript:** the ROM compiles with `target: es2015` + `importHelpers`; `tslib` is a native module providing
-  `__awaiter`, `__assign` and `__rest` (declared in `types/tslib.d.ts`, so code needing another helper — e.g. async
-  generators — fails to compile instead of at runtime). The Rhino authoring constraints still apply inside `async`
-  functions (no `const` in loops, no spread).
+  `__awaiter`, `__assign`, `__rest` and, for async generators / `for await`, `__await`, `__asyncGenerator`,
+  `__asyncDelegator` and `__asyncValues` (`Symbol.asyncIterator` is polyfilled — Rhino lacks it). They are declared in
+  `types/tslib.d.ts`, so code needing another helper fails to compile instead of at runtime. The build compiles with
+  `src/build/compile-ts.mjs`, which parenthesizes every `yield` in tsc's output: Rhino rejects `f(yield x)` (from
+  `f(await x)`) and parses `yield a, b` as `yield (a, b)`. TypeScript compiled elsewhere needs the same treatment, and
+  plain-JS generators should parenthesize `yield` inside expressions. The Rhino authoring constraints still apply
+  inside `async` functions (no `const` in loops, no spread).
 
 ```js
 var turtleP = require('turtle/promises');

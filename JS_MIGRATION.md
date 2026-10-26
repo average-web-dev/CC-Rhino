@@ -750,7 +750,12 @@ Work done after this plan was written, mostly from the code review in October 20
   `absorbEnergy` exploit fixed (#21); alarms (#31).
 - **Async model (#35):** Rhino promise jobs drained in the microtask phase; engine-generated
   `require('<module>/promises')` modules (with `.d.ts` from tsdoclet); `require('async')` (`run`, `unwrap`) and a
-  native `tslib`, so TS `async` functions work (ROM `target: es2015` + `importHelpers`); blocking calls inside async
-  code throw a clear error; promise reactions owned by the registering thread (`JSPromises`, `Waiter`).
+  native `tslib`, so TS `async` functions, async generators and `for await` work (ROM `target: es2015` +
+  `importHelpers`, compiled by `src/build/compile-ts.mjs`, which parenthesizes `yield` for Rhino's parser); blocking
+  calls inside async code and native callbacks throw a clear error before running; promise reactions owned by the
+  registering thread (`JSPromises`, `Waiter`); unhandled rejections fail the owning program (Node ≥ 15) or reach the
+  `unhandled_rejection` event; promise-flavour types for every script object.
+- **Events (#12 follow-up):** all events are queued through their `@Event` records (`queueEvent(Record)`), so
+  `EventMap` cannot drift from what is queued; `computer_command` added.
 - **Planned:** native array loops ignoring aborts (#37); compatibility layer for CC: Tweaked addons (#33).
 
