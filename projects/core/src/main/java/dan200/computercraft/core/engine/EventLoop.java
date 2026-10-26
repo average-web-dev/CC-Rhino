@@ -33,6 +33,8 @@ public final class EventLoop {
 
     private record IOEntry(ContinuationPending pending, MethodResult mr) {}
 
+    private final JSCallShim shim;
+
     // Phase 1 — timer ID → sleep continuation
     private final Map<Integer, ContinuationPending> timerMap = new HashMap<>();
 
@@ -48,6 +50,10 @@ public final class EventLoop {
     // Phase 4 — setImmediate callbacks (LinkedHashMap keeps insertion order so clearImmediate by ID works)
     private final LinkedHashMap<Integer, Callable> checkMap = new LinkedHashMap<>();
     private int nextCheckId = 0;
+
+    EventLoop(JSCallShim shim) {
+        this.shim = shim;
+    }
 
     // ------------------------------------------------------------------ scheduling
 
@@ -114,25 +120,32 @@ public final class EventLoop {
     ) {
         var bucket = ioMap.remove(key);
         if (bucket == null || bucket.isEmpty()) return MachineResult.OK;
-        for (var entry : bucket) {
+        for (int i = 0; i < bucket.size(); i++) {
+            var entry = bucket.get(i);
             var callback = entry.mr().getCallback();
             if (callback == null) continue;
-            MethodResult newMr;
+            Object jsResult;
             try {
-                newMr = callback.resume(fullArgs);
+                var newMr = callback.resume(fullArgs);
+                if (newMr.getCallback() != null) {
+                    // Chain still waiting — re-bucket with updated MethodResult.
+                    entry.pending().setApplicationState(newMr);
+                    ioMap.computeIfAbsent(filterOf(newMr), k -> new ArrayList<>())
+                         .add(new IOEntry(entry.pending(), newMr));
+                    continue;
+                }
+                // Callback chain complete — resume the stored Rhino continuation with its result.
+                jsResult = JSValues.toJsResult(cx, scope, newMr.getResult());
             } catch (ScriptException e) {
-                return MachineResult.error(e.getMessage() != null ? e.getMessage() : e.toString());
+                // The call failed — resume so that it throws at its JS call site (see JSCallShim).
+                jsResult = shim.failure(cx, scope, e.getMessage() != null ? e.getMessage() : e.toString());
             }
-            if (newMr.getCallback() == null) {
-                // Callback chain complete — resume the stored Rhino continuation.
-                var jsResult = JSValues.toJsResult(cx, scope, newMr.getResult());
-                var r = resumeContinuation(cx, scope, entry.pending(), jsResult);
-                if (r.isError()) return r;
-            } else {
-                // Chain still waiting — re-bucket with updated MethodResult.
-                entry.pending().setApplicationState(newMr);
-                ioMap.computeIfAbsent(filterOf(newMr), k -> new ArrayList<>())
-                     .add(new IOEntry(entry.pending(), newMr));
+            var r = resumeContinuation(cx, scope, entry.pending(), jsResult);
+            if (r.isError()) {
+                // Keep the entries we haven't visited yet parked, ahead of any re-bucketed during this pass.
+                var rest = bucket.subList(i + 1, bucket.size());
+                if (!rest.isEmpty()) ioMap.computeIfAbsent(key, k -> new ArrayList<>()).addAll(0, rest);
+                return r;
             }
         }
         return MachineResult.OK;

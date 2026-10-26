@@ -73,7 +73,7 @@ public class JSMachine implements IMachine {
     private volatile @Nullable Thread executionThread;
     private @Nullable Runnable abortListener;
 
-    private final EventLoop eventLoop = new EventLoop();
+    private final EventLoop eventLoop;
 
     private boolean started = false;
     private volatile boolean isDisposed = false;
@@ -108,6 +108,8 @@ public class JSMachine implements IMachine {
             biosScript = cx.compileString(biosSource, "bios.js", 1, null);
 
             emitter = new JSEventEmitter();
+            var shim = new JSCallShim(cx, scope);
+            eventLoop = new EventLoop(shim);
 
             // Build the module loader and register all CC APIs as native modules.
             var loader = new JSRequire(scope, environment.fileSystem());
@@ -115,14 +117,14 @@ public class JSMachine implements IMachine {
             var methods = environment.luaMethods();
             for (var api : environment.apis()) {
                 for (var name : api.getNames()) {
-                    var obj = JSAPIBuilder.build(cx, scope, api, context, methods);
+                    var obj = JSAPIBuilder.build(cx, scope, shim, api, context, methods);
                     loader.registerNative(name, obj);
                 }
             }
 
             // Register the engine-internal 'events' module (emitter + scheduler).
             var eventsApi = new EventsAPI(emitter, eventLoop);
-            loader.registerNative("events", JSAPIBuilder.build(cx, scope, eventsApi, context, methods));
+            loader.registerNative("events", JSAPIBuilder.build(cx, scope, shim, eventsApi, context, methods));
 
             // Expose loader, run the JS require() setup, then remove the loader from global scope.
             // The setup script captures a reference via closure so require() still works after deletion.
