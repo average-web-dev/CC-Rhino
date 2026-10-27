@@ -34,6 +34,36 @@ class JSSafePointTest {
             softAbort = true;
             updateListeners();
         }
+
+        synchronized void triggerPause() {
+            paused = true;
+            updateListeners();
+        }
+    }
+
+    /**
+     * A paused timeout (timeslice used up while other computers wait) must not stall the machine: nothing clears the
+     * flag while it runs, so waiting for it used to end in "Too long without yielding".
+     */
+    @Test
+    void pause_does_not_stall_execution() {
+        assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
+            var timeout = new FlippableTimeout();
+            timeout.triggerPause();
+            var probe = new JSMachineBuilder.Recorder();
+            var machine = new JSMachineBuilder()
+                .api(probe, probe.methods())
+                .bios("var n = 0; for (var i = 0; i < 200000; i++) n += i; require('probe').record(n);")
+                .timeout(timeout)
+                .build();
+            try {
+                var result = machine.handleEvent(null, null);
+                assertTrue(!result.isError(), "a paused machine keeps running: " + result.getMessage());
+                assertEquals(1, probe.values.size());
+            } finally {
+                machine.close();
+            }
+        });
     }
 
     @Test

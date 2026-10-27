@@ -14,7 +14,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.concurrent.locks.LockSupport;
 
 public class JSMachine implements IMachine {
     static final String STACK_OVERFLOW_MESSAGE = "stack overflow";
@@ -101,10 +100,6 @@ public class JSMachine implements IMachine {
     private final JSEventEmitter emitter;
     private final Runnable scheduleTick;
 
-    // Stored by observeInstructionCount so the abort listener can unpark this thread.
-    private volatile @Nullable Thread executionThread;
-    private @Nullable Runnable abortListener;
-
     private final EventLoop eventLoop;
 
     private boolean started = false;
@@ -183,15 +178,6 @@ public class JSMachine implements IMachine {
             ScriptableObject.putProperty(scope, "__cc_loader__", loader);
             cx.evaluateString(scope, REQUIRE_SETUP_JS, "require-setup.js", 1, null);
             ScriptableObject.deleteProperty(scope, "__cc_loader__");
-
-            // Wake up the pause spin-loop immediately when a hard abort is requested.
-            abortListener = () -> {
-                if (timeout.isHardAborted()) {
-                    var t = executionThread;
-                    if (t != null) LockSupport.unpark(t);
-                }
-            };
-            timeout.addListener(abortListener);
         } finally {
             Context.exit();
         }
@@ -219,7 +205,6 @@ public class JSMachine implements IMachine {
     public MachineResult handleEvent(@Nullable String eventName, @Nullable Object @Nullable [] arguments) {
         if (isDisposed) return MachineResult.OK;
 
-        executionThread = Thread.currentThread();
         // Rhino contexts are thread-affine; bind ours to this worker thread for the duration of the execution.
         // CC runs a given computer on one worker at a time, so the single `cx` is free between events.
         factory.enterContext(cx);
@@ -311,7 +296,6 @@ public class JSMachine implements IMachine {
             return MachineResult.error(OUT_OF_MEMORY_MESSAGE);
         } finally {
             Context.exit();
-            executionThread = null;
         }
     }
 
@@ -349,11 +333,6 @@ public class JSMachine implements IMachine {
         if (isDisposed) return;
         isDisposed = true;
         eventLoop.clear();
-        var listener = abortListener;
-        if (listener != null) {
-            timeout.removeListener(listener);
-            abortListener = null;
-        }
         // The context is entered/exited per execution (constructor + handleEvent), not held open across the
         // machine's lifetime, so there is nothing to exit here — and close() may run on a thread that never
         // entered it.
@@ -398,12 +377,10 @@ public class JSMachine implements IMachine {
         protected void observeInstructionCount(Context cx, int instructionCount) {
             if (isDisposed || timeout.isHardAborted()) throw abort(JSAbort.hard());
             if (timeout.isSoftAborted()) throw abort(JSAbort.soft());
-            while (timeout.isPaused()) {
-                executionThread = Thread.currentThread();
-                if (isDisposed || timeout.isHardAborted()) throw abort(JSAbort.hard());
-                LockSupport.parkNanos(1_000_000L); // 1 ms; listener unparks on hard abort
-            }
-            executionThread = null;
+            // TimeoutState.isPaused() (timeslice used up while other computers wait) is deliberately not honoured
+            // here: Rhino cannot suspend arbitrary code at a safepoint, and nothing clears the flag while the machine
+            // is still running, so waiting for it only ended in "Too long without yielding". The computer gives up
+            // its thread at the next blocking call or when the event is handled.
         }
 
         /** Tell the event loop, as Rhino's promise machinery would otherwise swallow the abort. */
