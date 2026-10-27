@@ -4,26 +4,22 @@
 // /rom/os/bin/peripherals.ts — list every attached peripheral and its side.
 
 const peripheral = require('peripheral');
-const term       = require('term');
+const util       = require('util');
 
 function main(): void {
-    const canColor = term.isColor();
-
     // getSides() returns all six physical sides; keep only the ones with something on them.
-    const attached = peripheral.getSides().filter(side => peripheral.isPresent(side));
+    let attached = peripheral.getSides().filter(side => peripheral.isPresent(side));
 
     if (attached.length === 0) {
-        print('No peripherals attached.');
+        console.log('No peripherals attached.');
         return;
     }
 
-    print(`Attached peripherals (${attached.length}):`);
+    console.log(`Attached peripherals (${attached.length}):`);
     for (let side of attached) {
         let types = peripheral.getType(side) ?? [];
-        if (canColor) term.setTextColor(32);   // lime — side
-        write('  ' + side);
-        if (canColor) term.setTextColor(1);     // white — type
-        print(': ' + (types.length > 0 ? types.join(', ') : '?'));
+        // Side in lime (an ANSI style, ignored on monochrome terminals), type in white.
+        console.log('  ' + util.styleText('greenBright', side) + ': ' + (types.length > 0 ? types.join(', ') : '?'));
     }
 }
 

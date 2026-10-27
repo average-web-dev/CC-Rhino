@@ -5,31 +5,18 @@
 // Responsibilities: boot log, device detection, PATH setup, shell handoff.
 // Everything after this (aliases, autorun, completion) is bash's or future layers' job.
 
-const term   = require('term');
 const system = require('system');
-const fs     = require('fs');
-
-const canColor = term.isColor();
+const util   = require('util');
 
 // ── Kernel log ─────────────────────────────────────────────────────────────────
-// Inspired by Linux dmesg / systemd service lines.
-
-const COL_WHITE: Color = 1;
-const COL_LIME:  Color = 32;    // [  OK  ]
-const COL_RED:   Color = 16384; // [ FAIL ]
-const COL_GREY:  Color = 256;   // [      ] info
+// Inspired by Linux dmesg / systemd service lines. The tag colours are ANSI styles, which process.stdout maps onto the
+// terminal's colours (and ignores on monochrome terminals).
 
 function klog(level: 'ok' | 'info' | 'fail', msg: string): void {
-    const tag = level === 'ok'   ? '[  OK  ] '
-              : level === 'fail' ? '[ FAIL ] '
-                                 : '[      ] ';
-    if (canColor) {
-        term.setTextColor(level === 'ok' ? COL_LIME : level === 'fail' ? COL_RED : COL_GREY);
-        term.write(tag);
-        term.setTextColor(COL_WHITE);
-    }
-    // print() is the global defined by bios.ts; it writes from current cursor pos then newlines.
-    print(canColor ? msg : tag + msg);
+    const tag = level === 'ok'   ? util.styleText('greenBright', '[  OK  ]')
+              : level === 'fail' ? util.styleText('red', '[ FAIL ]')
+                                 : util.styleText('white', '[      ]');
+    console.log(tag + ' ' + msg);
 }
 
 // ── Device detection ───────────────────────────────────────────────────────────
@@ -89,5 +76,5 @@ try {
 
     bash.start();
 } catch (error: any) {
-    print(formatError('/rom/bin/bash.js', error));
+    console.error(formatError('/rom/bin/bash.js', error));
 }

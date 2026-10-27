@@ -4,8 +4,8 @@
 
 // ── Firmware / Bootloader ──────────────────────────────────────────────────
 // Responsibilities (in order):
-//   1. Terminal hardware reset
-//   2. Define the global `print` helper (bios.ts runs in global scope)
+//   1. Install the Node-style globals `process` and `console` (and with them the terminal driver)
+//   2. Terminal hardware reset
 //   3. Set require.paths so /rom/lib and /rom/bin are resolvable
 //   4. Discover alternate boot entries (disk drives, local /boot.js)
 //   5. If only the default OS → boot it directly (synchronous)
@@ -14,61 +14,20 @@
 //
 // Everything after the handoff (PATH, aliases, startup scripts, shell) is
 // the OS layer's job (/rom/os/index.ts).
+//
+// The bios runs in the global scope, so everything lives in a function: the only globals it leaves behind are
+// `process` and `console` (plus the engine's `require`), like Node.
 
+// Must come first: loading `process` registers the terminal driver's input listeners, which have to belong to the
+// root thread and run before any other listener (see /rom/lib/internal/tty.ts).
+require('/rom/lib/internal/globals');
 
-// TODO: change bios loading so nothing leaks anymore and only the exports are callable from the global scope
-// FIX scoping problem bios has leaked all methodes.
 (function (){
   const term   = require('term');
   const fs     = require('fs');
   const events = require('events');
   const system = require('system');
   const peripheral = require('peripheral');
-
-  // ── Global print / write ───────────────────────────────────────────────────
-  // Defined here in global scope so they are available to all subsequent code
-  // (bios.ts is eval'd directly in the Rhino global scope, not as a module).
-  //
-  // `term.write` is a non-wrapping primitive — it clips at the right edge. write()
-  // and print() layer wrapping on top: text wider than the terminal continues on
-  // the next row (scrolling at the bottom), matching CC's write()/print() helpers.
-
-  function newLine(): void {
-      const { y } = term.getCursorPos();
-      const { height } = term.getSize();
-      if (y + 1 >= height) {
-          term.scroll(1);
-          term.setCursorPos({ x: 0, y: height - 1 });
-      } else {
-          term.setCursorPos({ x: 0, y: y + 1 });
-      }
-  }
-
-  /** Write text at the cursor, wrapping to the next row at the terminal edge. */
-  function write(text: string): void {
-      const { width } = term.getSize();
-      const segments = text.split('\n');
-      for (let i = 0; i < segments.length; i++) {
-          let segment = segments[i] as string;
-          while (segment.length > 0) {
-              const room = width - term.getCursorPos().x;
-              if (room <= 0) { newLine(); continue; }          // cursor sat at the edge
-              if (segment.length <= room) { term.write(segment); break; }
-              term.write(segment.slice(0, room));               // fill the row, then wrap
-              segment = segment.slice(room);
-              newLine();
-          }
-          if (i < segments.length - 1) newLine();               // honour embedded "\n"
-      }
-  }
-
-  function print(...args: unknown[]): void {
-      write(args.map(String).join('\t'));
-      newLine();
-  }
-
-  globalThis.print = print;
-  globalThis.write = write;
 
   // ── Boot entry ─────────────────────────────────────────────────────────────
 
@@ -209,8 +168,8 @@
               require.uncached(entry.path);
           } catch (e: unknown) {
               const msg: string = (e as any)?.message ?? String(e);
-              print(`bios: failed to boot '${entry.label}'`);
-              print(msg);
+              console.error(`bios: failed to boot '${entry.label}'`);
+              console.error(msg);
               // No listeners remain — machine halts.
           }
       }
@@ -258,17 +217,17 @@
   if (bootEntries.length === 1) {
       // Fast path — boot directly, no menu needed.
       const target = bootEntries[0];
-      print("CC: Rhino");
-      print(`Computer ${require('system').getComputerID()}`);
-      print("");
+      console.log("CC: Rhino");
+      console.log(`Computer ${system.getComputerID()}`);
+      console.log("");
       try {
           require.uncached(target.path);
       } catch (e: unknown) {
           const msg: string = (e as any)?.message ?? String(e);
           term.clear();
           term.setCursorPos({ x: 0, y: 0 });
-          print(`bios: failed to boot '${target.label}'`);
-          print(msg);
+          console.error(`bios: failed to boot '${target.label}'`);
+          console.error(msg);
       }
   } else {
       // Alternates detected — start async menu and return.

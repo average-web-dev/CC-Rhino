@@ -80,6 +80,7 @@ part of `assemble`.
 | Deferring JS callbacks from native code onto the event loop (e.g. fs callbacks) | `core/engine/JSScheduler.java` |
 | Promises: `/promises` modules, promise jobs, `async`/`tslib` modules, async-code detection | `core/engine/JSPromises.java`, `Waiter.java`, `JSAPIBuilder.java` (+ `EventLoop`) |
 | Safepoint aborts, resource limits | `core/engine/JSAbort.java`, `JSLimits.java`, `core/CoreConfig.java` (+ `ConfigSpec`) |
+| Node-style stdio: `process`, `console`, `util`, `readline` (+`/promises`), terminal driver + job control | `projects/core/src/ts/rom/lib/` (`internal/tty.ts`, `internal/globals.ts`, `internal/emitter.ts`); types in `src/ts/types/{process,console,util,readline}.d.ts` |
 | Event bus (`events.on/once/off/emit`, `fireNow`, native-name registry) | `core/engine/JSEventEmitter.java` (incl. the JS `emit`), `core/apis/EventsAPI.java`, `EventLoop.emitPlan`/`dispatchNow`, core-api `scripting/Events.java` |
 | Core APIs (`fs`, `system`, `term`, `http`, `peripheral`, `redstone`) | `projects/core/src/main/java/dan200/computercraft/core/apis/` |
 | Scripting API for addon mods (`@ScriptFunction`, `MethodResult`, `Result`, `TaskCompletion`) | `projects/core-api/src/main/java/dan200/computercraft/api/scripting/` |
@@ -89,14 +90,28 @@ part of `assemble`.
 | ROM (TypeScript, transpiled to `/rom`, bios to `bios.js`) | `projects/core/src/ts/` (`bios.ts`, `rom/os`, `rom/bin`, `rom/os/bin`, `rom/lib`, `types/`) |
 | Legacy Lua ROM (reference only, not shipped to the JS machine) | `projects/core/src/main/resources/data/computercraft/lua/` |
 | Core test harness (runs `/test.js` on a real computer) | `projects/core/src/test/java/dan200/computercraft/core/computer/ComputerBootstrap.java` |
+| Interactive harness (real bios/ROM, type keys, read the screen) | `core/computer/TerminalHarness.java` (used by `StdioShellTest`, `StdioTerminalTest`); ROM library tests: `StdioLibraryTest` + `src/test/resources/stdio/*.js` |
 | Engine unit tests (`JSMachineBuilder` + `Recorder` probe API) | `projects/core/src/test/java/dan200/computercraft/core/engine/` |
 | Gametest mod (JS test programs, structures, Kotlin tests) | `projects/common/src/testMod/` |
 
 ## Runtime model (short)
 
-- `require` is the **only** injected global (bios additionally sets `print`/`write`). Every API is a native module:
+- Globals, like Node: the engine injects only `require`; the bios adds `process` and `console`
+  (`/rom/lib/internal/globals`, also `require('process')` / `require('console')`, same objects). There is no
+  `print`/`write`: use `console.log` / `process.stdout.write`. Every computer API is a native module:
   `require('fs')`, `require('system')`, `require('events')`, `require('turtle')` … Native modules only exist when
   the hardware is present (e.g. `turtle` only on turtles).
+- Node-style stdio (#34) is ROM TypeScript in `/rom/lib`: `process`, `console`, `util`, `readline`,
+  `readline/promises`. These "ROM core modules" resolve before `require.paths` and with a `node:` prefix
+  (`JSRequire.ROM_CORE_MODULES`). `/rom/lib/internal/tty.ts` is the terminal driver: stdout/stderr write with VT
+  semantics (wrapping, ANSI SGR colours → CC colours, cursor/erase CSI sequences; stderr in red); stdin turns
+  `char`/`key`/`paste` into a Node TTY stream (cooked line discipline or raw VT sequences, `'keypress'` events). Its
+  input listeners are registered by the bios (root thread) first; `process.stdin.on(...)` registers native listeners
+  in the *calling* thread, so a program's stdin handlers may block and die with the program. bash runs each program
+  as a job (`tty.beginJob/waitForJob/endJob`): fresh stdin, `process.argv`, cwd restored afterwards, and the program
+  keeps running while it reads stdin (like a Node process) until it closes its interface or calls `process.exit()`.
+  `readline.Interface#question` without a callback **blocks**; `readline/promises` returns a promise (hand-written —
+  the engine's generated `/promises` modules exist only for native modules).
 - Blocking calls look synchronous. A Java method returns a `MethodResult` with a destination
   (`TIMER` / `IO` / `YIELD`); `JSMethodBridge` captures a Rhino continuation, `EventLoop` parks it in the matching
   bucket, and `JSMachine.handleEvent` resumes it when the event arrives. Other `events.on` listeners keep running
@@ -158,10 +173,16 @@ part of `assemble`.
 
 - **Rhino authoring constraints** for all ROM/bios TS: no `const` inside loops/blocks (use `let`), no spread in calls
   or array literals (use `.concat()` / `.apply()`). TS targets ES2015 (`async` → generators + native `tslib`),
-  CommonJS (`export = {...}`). In plain JS generators (`async.run`), parenthesize `yield` inside expressions
+  CommonJS (`export = {...}`). No `class` syntax (use constructor functions + prototypes). Functions that may be
+  called through `Function.prototype.apply` must not use rest parameters (Rhino 1.9.1 passes `[thisArg, argsArray]`
+  as the rest array) — read `arguments` instead. Avoid local variables named after `Object.prototype` members
+  (`constructor`, `toString`, …): in `util.ts` a `let constructor` resolved to `Object`. In plain JS generators (`async.run`), parenthesize `yield` inside expressions
   (`f((yield p))`, `x = (yield p), y`).
-- Programs in `rom/bin` / `rom/os/bin` export `main(args, cwd)`; bash calls it. Interactive programs suspend bash's
-  `char`/`key` listeners and register their own.
+- Programs in `rom/bin` / `rom/os/bin` export `main(args, cwd)` (same as `process.argv.slice(2)` /
+  `process.cwd()`); bash calls it, or just runs the module's top-level code (Node style). Line-oriented programs use
+  `readline` / `process.stdin`; full-screen programs (`edit`) may still listen to raw `char`/`key` events — bash
+  pauses its own interface while a program runs. ROM code cannot use `class` syntax (Rhino): Node-style classes
+  (`Console`, `readline.Interface`, the internal `EventEmitter`) are constructor functions with prototypes.
 - New source files carry the MPL-2.0 SPDX header (`average-web-dev`, current year).
 - Java style follows the surrounding upstream code (jspecify `@Nullable`, `var`, records).
 - After changing `@ScriptFunction` signatures, regenerate types (`:common:generateTsTypes`) and fix ROM TS errors.

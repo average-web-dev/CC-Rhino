@@ -21,6 +21,8 @@ import java.io.UncheckedIOException;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 /**
  * A basic implementation of {@link ComputerEnvironment} and {@link GlobalEnvironment}, suitable for a context which
@@ -69,7 +71,19 @@ public class BasicEnvironment implements ComputerEnvironment, GlobalEnvironment 
 
     @Override
     public Mount createResourceMount(String domain, String subPath) {
-        return createMount(ComputerContext.class, "data/" + domain + "/" + subPath, "main");
+        var path = "data/" + domain + "/" + subPath;
+        // Prefer the processed resources on the classpath: they contain the ROM transpiled from TypeScript, which the
+        // source resource folders do not.
+        var url = ComputerContext.class.getClassLoader().getResource(path);
+        if (url != null && url.getProtocol().equals("file")) {
+            try {
+                var dir = Path.of(url.toURI());
+                if (Files.isDirectory(dir)) return new FileMount(dir);
+            } catch (URISyntaxException e) {
+                // Fall back to locating the mount below.
+            }
+        }
+        return createMount(ComputerContext.class, path, "main");
     }
 
     @Override

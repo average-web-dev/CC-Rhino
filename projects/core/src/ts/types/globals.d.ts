@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-// Runtime globals. Per the migration design, `require` is the only API entry point;
-// timers and `sleep` are the few additional globals (Node-style).
+// Runtime globals. `require` is installed by the engine; the bios adds the Node-style `process` and `console`
+// (declared in process.d.ts / console.d.ts).
 
 // --- CommonJS ---
 
@@ -35,10 +35,6 @@ declare namespace require {
 
 declare const module: { exports: unknown };
 declare const exports: unknown;
-
-declare function print(...args: unknown[]): void
-/** Write text at the cursor without a trailing newline, wrapping at the terminal edge. */
-declare function write(text: string): void
 
 // --- Global timer functions (Node-style, layered on the CC timer mechanism) ---
 

@@ -128,10 +128,11 @@ In Node these do **not** belong in `fs`. Proposal: a dedicated `path` module.
 
 ---
 
-The old `os` is split up: **`process`** (computer control/info), **`events`** (event bus),
-and global **timer functions** (Node style).
+The old `os` is split up: **`system`** (computer control/info), **`events`** (event bus),
+and global **timer functions** (Node style). Node's `process` exists as well, but for the terminal streams, argv,
+env, cwd and exit codes (see [Node-style stdio](#node-style-stdio-process-console-util-readline-34)).
 
-## `process` — computer control & info (Node `process` analog)
+## `system` — computer control & info
 
 Trimmed down: date/time removed (→ `new Date()`), only the MC-specific in-game values remain.
 
@@ -215,6 +216,114 @@ In Node these are **globals**, not a module — layered on top of the CC timer m
 | `clearTimeout` | `id` | `void` | |
 | `clearInterval` | `id` | `void` | |
 | `sleep` | `seconds` | `void` | **blocking**, CC extension (deliberately absent in Node) |
+
+---
+
+## Node-style stdio: `process`, `console`, `util`, `readline` (#34)
+
+There are no `print`/`write` globals. Like Node, the globals are `require` (engine), `process` and `console`
+(installed by the bios); `require('process')` / `require('console')` return the same objects. All four modules are
+TypeScript in the ROM (`/rom/lib`), ported from Node's JS sources, and resolve as "ROM core modules": before
+`require.paths`, also with a `node:` prefix (`require('node:readline')`). Things a computer does not have (pid,
+signals, memory usage, colour inspection, …) are absent rather than faked.
+
+### `process`
+
+| Member | Notes |
+|---|---|
+| `stdout`, `stderr` | `tty.WriteStream`-like: `write(chunk[, encoding][, cb])` (string or `Uint8Array`, Latin-1), `columns`/`rows`, `isTTY`, `cursorTo`/`moveCursor`/`clearLine`/`clearScreenDown`, `getWindowSize`, `hasColors`/`getColorDepth`. Text wraps at the right edge (VT pending-wrap) and scrolls; `\n \r \t \b` and ANSI sequences are interpreted: SGR colours map onto the 16 CC colours (ignored on monochrome terminals), plus CUU/CUD/CUF/CUB/CNL/CPL/CHA/CUP, ED, EL, SU/SD, save/restore, `?25h/l` (cursor blink). `stderr` writes in red. `'resize'` = the `term_resize` event (the computer's own terminal never resizes; a future window layer can emit it). |
+| `stdin` | `tty.ReadStream`-like, fed by `char`/`key`/`paste`: `'data'`, `'keypress'` (`(sequence, key)` with `name`/`ctrl`/`meta`/`shift`), `'end'`; `setRawMode`, `isRaw`, `pause`/`resume`/`isPaused`, `readableFlowing`, `setEncoding` (always strings). **Cooked** (default): line discipline with echo, Backspace, Ctrl+U, Enter → `'data'` = line + `"\n"`, Ctrl+D on an empty line → `'end'` (the stream stays usable, like a terminal). **Raw**: each key as the VT sequence a terminal sends (`"\x1b[A"`, `"\r"`, `"\x7f"`, Ctrl+letter → control character). Nothing is read until the stream flows (a `'data'` listener or `resume()`); input arriving meanwhile is dropped. The cursor blinks while stdin flows. |
+| `argv`, `argv0`, `execArgv` | `['bash', '/path/program.js', ...args]` while bash runs a program (`argv.slice(2)` = arguments) |
+| `env` | live view of the `env` module (`PATH` mirrors `require.paths`); values are strings |
+| `cwd()`, `chdir(dir)` | the shell's working directory; Node errors (`ENOENT`, `ENOTDIR`) |
+| `exit([code])`, `exitCode` | ends the running program (throws a signal bash catches; also works from listeners and if caught, as the job is marked as exiting); outside a program (bios/shell) it shuts the computer down |
+| `platform` | `'computercraft'` |
+| `nextTick(fn, ...args)` | microtask |
+| `hrtime([prev])`, `hrtime.bigint()`, `uptime()` | `Date.now()`-based (millisecond resolution); `uptime` = `system.clock()` |
+| `emitWarning(msg[, type])` | prints `"Warning: msg"` to stderr |
+
+**Thread ownership / foreground model.** The terminal driver's `char`/`key`/`paste` listeners are registered by the
+bios (root thread) before anything else, so they run first for every event and translate it once.
+`process.stdin.on(...)` registers *native* listeners in the calling thread, which pick up what the driver produced:
+a program's stdin handlers therefore belong to the program — they may block, and Ctrl+T / stopping the program
+discards them. bash runs every program as a **job**, like a child process: a fresh stdin (cooked, not flowing),
+`process.argv` set, the cursor hidden until the program reads input, the working directory restored afterwards. After
+`main()` returns the job keeps running while it reads stdin (stdin listeners and stdin not paused) — exactly when
+Node would keep the process alive — so Node-style programs (`rl.on('line', …)`, then return) work; they end with
+`rl.close()`, `process.stdin.pause()` or `process.exit()`. The job's leftover stdin listeners are closed when it ends,
+and the shell's terminal state (raw mode, flowing) is restored. `main(args, cwd)` stays supported; it receives the
+same values as `process.argv.slice(2)` / `process.cwd()`.
+
+### `console`
+
+Port of Node's `lib/internal/console/constructor.js`: a `Console` class (`new Console(stdout[, stderr][, ignoreErrors])`
+or `new Console({ stdout, stderr, ignoreErrors, inspectOptions, groupIndentation })`, methods bound to the instance)
+and the global console writing to `process.stdout`/`stderr`. `require('console')` returns the global console; its
+`Console` property is the class.
+
+`log`/`info`/`debug`/`dirxml` → stdout, `warn`/`error` → stderr (red), formatted with `util.format`; `dir(obj,
+options)`; `trace(...)` ("Trace: …" + stack, stderr); `assert(value, ...msg)`; `count`/`countReset`;
+`group`/`groupCollapsed`/`groupEnd` (indentation, default 2); `time`/`timeLog`/`timeEnd` (Node's time format);
+`table(data[, properties])` (arrays, objects, `Map`, `Set`); `clear()`. Differences: tables use ASCII borders (`+-|`;
+the terminal font has no box-drawing characters), inspected values break lines at the stream's width rather than 80
+columns, no colour mode.
+
+### `util`
+
+`format` / `formatWithOptions` (`%s %d %i %f %j %o %O %c %%`, Node semantics incl. `%s` inspecting objects without
+own `toString`, `-0`, `[Circular]`), `inspect` (port of `lib/internal/util/inspect.js`: `depth`, `showHidden`,
+`maxArrayLength`, `maxStringLength`, `breakLength`, `compact` (incl. array grouping), `sorted`, `getters`,
+`customInspect` + `inspect.custom`, `inspect.defaultOptions`; circular references as `<ref *1>` / `[Circular *1]`;
+Maps, Sets, typed arrays, errors with stack, boxed primitives, null-prototype objects; `colors` is accepted and
+ignored; promise states cannot be read on Rhino), `inherits`, `promisify` (+ `promisify.custom`),
+`stripVTControlCharacters`, `styleText(format, text)` (ANSI codes, which stdout maps onto CC colours),
+`isDeepStrictEqual`.
+
+### `readline` and `readline/promises`
+
+Port of Node's `lib/internal/readline/interface.js`. `createInterface({ input, output, prompt, completer, terminal,
+history, historySize, removeHistoryDuplicates, crlfDelay, tabSize })` (or positional arguments); `Interface` with
+`'line'`, `'close'`, `'pause'`, `'resume'`, `'history'`, `'SIGINT'` events, `prompt([preserveCursor])`,
+`setPrompt`/`getPrompt`, `question`, `pause`/`resume`, `write(data[, key])`, `close`, `line`/`cursor`/`history`,
+`getCursorPos()`, async iteration (`for await (const line of rl)`), and the module functions `cursorTo`,
+`moveCursor`, `clearLine`, `clearScreenDown`, `emitKeypressEvents`.
+
+- Terminal mode (default when `output.isTTY`): raw mode + keypress events, editing with Left/Right, Home/End
+  (Ctrl+A/E), Backspace/Delete, Ctrl+B/F, word jumps (Ctrl+Left/Right, Meta+B/F), word deletion (Ctrl+W,
+  Ctrl+Backspace, Meta+D), Ctrl+U/K, Ctrl+L, history (Up/Down, Ctrl+P/N, newest first, prefix search like Node,
+  `historySize` default 30), tab completion via `completer` (sync, callback or promise; first Tab completes the common
+  prefix, second Tab lists), Ctrl+C → `'SIGINT'` (or close without listeners), Ctrl+D on an empty line → close.
+  Lines wrap over several rows. Non-terminal mode splits `'data'` into lines.
+- **`question(query[, options][, callback])`**: with a callback as in Node; **without one it blocks** the calling
+  thread and returns the answer (the blocking-by-default model). `require('readline/promises')` has the same
+  `Interface` with a promise-returning `question`; closing the interface rejects a pending question with an
+  `AbortError`. This module is hand-written like Node's: the engine generates `<module>/promises` only for native
+  modules, ROM modules provide their promise flavour themselves where Node has one.
+- Differences: a paused interface ignores input (process.stdin is shared with the shell, which pauses its own
+  interface while a program runs); no kill ring/yank, undo or reverse search.
+
+```js
+// Blocking (default)
+const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
+const name = rl.question('Name? ');
+console.log(`Hi ${name}`);
+rl.close();
+
+// Node style: the program keeps running until the interface is closed
+const repl = require('readline').createInterface({ input: process.stdin, output: process.stdout, prompt: 'calc> ' });
+repl.on('line', (line) => { if (line === 'quit') return repl.close(); console.log(eval(line)); repl.prompt(); });
+repl.prompt();
+```
+
+```ts
+import readline = require("readline/promises");
+async function confirm(): Promise<boolean> {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const answer = await rl.question("Continue? ");
+    rl.close();
+    return answer === "y";
+}
+```
 
 ---
 
@@ -465,7 +574,7 @@ var turtleP = require('turtle/promises');
 var async = require('async');
 
 // Promise style: start two moves at once, continue when both are done.
-Promise.all([turtleP.dig(), turtleP.digUp()]).then(function (r) { print(r[0].success && r[1].success); });
+Promise.all([turtleP.dig(), turtleP.digUp()]).then(function (r) { console.log(r[0].success && r[1].success); });
 
 // Generator style, blocking the program until it finishes.
 var mined = async.unwrap(async.run(function* () {
@@ -490,7 +599,7 @@ async function mine(): Promise<number> {
 1. **`fs` split:** path logic → dedicated **`path` module**; `attributes`/`getSize`/`isDir` →
    `stat()` with a `Stats` object; `…Sync` + callback variant everywhere; `readFile`/`writeFile`
    convenience added.
-2. **`os` broken apart** into **`process`** (computer control + in-game time), **`events`**
+2. **`os` broken apart** into **`system`** (computer control + in-game time), **`events`**
    (event bus, emitter preferred), and global **`setTimeout`/`setInterval`**. `date`,
    `dateString` and `utc`/`local` dropped (→ `Date`).
 3. **`http`:** `request`/`get` as callback + `…Sync` blocking, `Response` object with
@@ -504,4 +613,6 @@ async function mine(): Promise<number> {
 - **(a)** turtle/pocket result as **`{success, reason}`** ✅ (tuple `[ok, reason]` rejected)
 - **(b)** `term` coordinates **0-based** ✅
 - **(c)** path helpers in a **dedicated `path` module** ✅
-- **(d)** computer control named **`process`** ✅
+- **(d)** computer control named **`system`** ✅ (`process` is Node's process object, see #34)
+- **(e)** no `print`/`write` globals: Node-style `console` / `process` globals and `util` / `readline` ROM modules ✅
+  (#34)

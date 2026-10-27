@@ -4,17 +4,21 @@
 // /rom/bin/bash.ts — interactive shell
 //
 // Exports:
-//   run(path, ...args)  — load a program module and call its main(args, cwd).
-//   start()             — enter the event-driven REPL loop (blocks via listeners).
-//   getCwd()            — current working directory (used by programs that need it).
-//   setCwd(p)           — set cwd externally (e.g. from a parent shell wrapper).
+//   run(path, ...args)  — run a program as a foreground job: load its module and call its main(args, cwd).
+//   start()             — start the interactive prompt (a readline interface on process.stdin/stdout) and return;
+//                         the shell lives on in its listeners.
+//   getCwd()            — current working directory (process.cwd()).
+//   setCwd(p)           — set the working directory (process.chdir()).
+
+import readline = require('/rom/lib/readline');
+import tty = require('/rom/lib/internal/tty');
 
 const events   = require('events');
 const term     = require('term');
 const fs       = require('fs');
 const env      = require('env');
 const parallel = require('parallel');
-const canColor = term.isColor();
+const util     = require('util');
 
 // Names that may follow `$` / `${...}` during variable expansion.
 const VAR_RE = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g;
@@ -26,15 +30,11 @@ function expandVars(text: string): string {
     return text.replace(VAR_RE, (_m, braced, bare) => env.get(braced ?? bare) ?? '');
 }
 
-// ── State ──────────────────────────────────────────────────────────────────────
-
-let cwd = '/';
-
 // ── Path helpers ───────────────────────────────────────────────────────────────
 function resolvePath(p: string): string {
     if (p.startsWith('/')) return p;
-    const raw = cwd.replace(/\/$/, '') + '/' + p;
-    const out: string[] = [];
+    let raw = process.cwd().replace(/\/$/, '') + '/' + p;
+    let out: string[] = [];
     for (let seg of raw.split('/')) {
         if (seg === '' || seg === '.') continue;
         if (seg === '..') { out.pop(); } else { out.push(seg); }
@@ -44,22 +44,25 @@ function resolvePath(p: string): string {
 
 // ── Public API ─────────────────────────────────────────────────────────────────
 
-function getCwd(): string  { return cwd; }
-function setCwd(p: string) { cwd = p;    }
+function getCwd(): string  { return process.cwd(); }
+function setCwd(p: string) { process.chdir(p); }
 
 /**
  * Format an error as a single `file:line: message` line. The location is taken from the first stack frame outside
  * the module loader, as errors created with `new Error()` carry no fileName/lineNumber of their own.
  */
 function formatError(fallbackFile: string, e: any): string {
-    const msg = e?.message ?? String(e);
-    const frames = String(e?.stack ?? '').split('\n');
+    let msg = e?.message ?? String(e);
+    let frames = String(e?.stack ?? '').split('\n');
     for (let frame of frames) {
         let m = /^\s*at (.+?):(\d+)(?: \(.*\))?$/.exec(frame);
         if (m && m[1] !== 'require-setup.js') return `${m[1]}:${m[2]}: ${msg}`;
     }
     return `${fallbackFile}: ${msg}`;
 }
+
+/** Exit code of the last program (0 unless it failed or called process.exit). */
+let lastExitCode = 0;
 
 /**
  * Load a program and call its `main(args, cwd)` if present.
@@ -69,28 +72,60 @@ function formatError(fallbackFile: string, e: any): string {
  * effect immediately. Returns false only if the program itself was not found; errors raised by the program
  * (including a missing dependency) are printed and still count as found.
  *
- * The program runs as the foreground job: its own green thread, waited for with parallel.waitForAll. Ctrl+T makes
- * the call it is blocked in throw `Error("Terminated")`; if the program does not catch it, the thread ends, every
- * events.on listener / callback / thread it started is discarded, and we print "Terminated". Listeners a program
- * leaves behind when it returns normally stay registered (they then belong to the shell).
+ * The program runs as a foreground job, like a child process: its own green thread (waited for with
+ * parallel.waitForAll), its own stdin state (see internal/tty), `process.argv` = ['bash', path, ...args], and the
+ * working directory is restored afterwards. After main() returns the job keeps running while it reads stdin (a
+ * readline interface or stdin listener left open, as a Node process would), until it closes them or calls
+ * process.exit(). Ctrl+T makes the call it is blocked in throw `Error("Terminated")`; if the program does not catch
+ * it, the thread ends, every events.on listener / callback / thread it started is discarded, and we print
+ * "Terminated". Other listeners a program leaves behind when it returns normally stay registered (they then belong
+ * to the shell); its stdin listeners are closed.
  */
-function run(path: string, ...args: string[]): boolean {
-    const isPath = path.startsWith('/') || path.startsWith('./') || path.startsWith('../');
-    const toRequire = isPath ? resolvePath(path) : path;
+function run(path: string): boolean {
+    // `arguments` rather than a rest parameter: Rhino mixes up `path, ...args` when run is applied.
+    return runProgram(path, Array.prototype.slice.call(arguments, 1));
+}
+
+function runProgram(path: string, args: string[]): boolean {
+    let isPath = path.startsWith('/') || path.startsWith('./') || path.startsWith('../');
+    let toRequire = isPath ? resolvePath(path) : path;
     let resolved: string;
     try {
         resolved = require.resolve(toRequire);
     } catch {
         return false;
     }
+
+    let savedArgv = process.argv;
+    let savedCwd = process.cwd();
+    let cwd = savedCwd;
+    process.argv = ['bash', '/' + resolved.replace(/^\/+/, '')].concat(args);
+    process.exitCode = undefined;
+    lastExitCode = 0;
+    let job = tty.beginJob();
     try {
         parallel.waitForAll(() => {
             let mod = require.uncached(resolved) as any;
             if (typeof mod?.main === 'function') mod.main(args, cwd);
+            tty.waitForJob(job);
         });
+        lastExitCode = typeof process.exitCode === 'number' ? process.exitCode : 0;
     } catch (e: any) {
-        if (e?.message === 'Terminated') print('Terminated');
-        else print(formatError(resolved, e));
+        let exitCode = tty.exitCodeOf(e);
+        if (exitCode !== undefined) {
+            lastExitCode = exitCode;
+        } else {
+            lastExitCode = 1;
+            // Report on a row of its own, even if the program was interrupted mid-line (e.g. at its prompt).
+            if (term.getCursorPos().x > 0) process.stdout.write('\n');
+            if (e?.message === 'Terminated') console.error('Terminated');
+            else console.error(formatError(resolved, e));
+        }
+    } finally {
+        tty.endJob(job);
+        process.argv = savedArgv;
+        process.exitCode = undefined;
+        try { process.chdir(savedCwd); } catch { /* the directory was removed meanwhile */ }
     }
     return true;
 }
@@ -99,316 +134,182 @@ function run(path: string, ...args: string[]): boolean {
 
 const BUILTINS = ['cd', 'exit', 'export', 'unset', 'env'];
 
-interface Completion {
-    word: string;     // full replacement for the token being completed
-    display: string;  // label shown when several matches are listed
-    isDir: boolean;   // directories complete with a trailing '/', everything else ' '
-}
-
-/** Longest common prefix shared by every string. */
-function commonPrefix(items: string[]): string {
-    if (items.length === 0) return '';
-    let prefix = items[0] as string;
-    for (let s of items) {
-        let i = 0;
-        while (i < prefix.length && prefix[i] === s[i]) i++;
-        prefix = prefix.slice(0, i);
-        if (prefix === '') break;
-    }
-    return prefix;
-}
-
-/** Complete a command name from the builtins and the programs on require.paths. */
-function completeCommand(prefix: string): Completion[] {
-    const names: Record<string, true> = {};
+/** Command names: the builtins and the programs on require.paths. */
+function completeCommand(prefix: string): string[] {
+    let names: Record<string, true> = {};
     for (let b of BUILTINS) names[b] = true;
     for (let dir of require.paths) {
         let entries: string[];
         try { entries = fs.readdirSync(dir); } catch { continue; }
         for (let e of entries) names[e.endsWith('.js') ? e.slice(0, -3) : e] = true;
     }
-    const out: Completion[] = [];
-    for (let name of Object.keys(names)) {
-        if (name.startsWith(prefix)) out.push({ word: name, display: name, isDir: false });
-    }
-    return out.sort((a, b) => (a.word < b.word ? -1 : 1));
-}
-
-/** Complete a filesystem path (relative to cwd) for the token being typed. */
-function completePath(word: string): Completion[] {
-    const slash = word.lastIndexOf('/');
-    const dirPart = slash >= 0 ? word.slice(0, slash + 1) : '';
-    const basePart = slash >= 0 ? word.slice(slash + 1) : word;
-    let entries: FsDirent[];
-    try { entries = fs.readdirSync(resolvePath(dirPart === '' ? '.' : dirPart), { withFileTypes: true }); }
-    catch { return []; }
-    const out: Completion[] = [];
-    for (let entry of entries) {
-        let e = entry.name;
-        if (!e.startsWith(basePart)) continue;
-        let isDir = entry.isDirectory();
-        out.push({ word: dirPart + e, display: isDir ? e + '/' : e, isDir });
-    }
-    return out.sort((a, b) => (a.word < b.word ? -1 : 1));
+    let out: string[] = [];
+    for (let name of Object.keys(names)) if (name.startsWith(prefix)) out.push(name);
+    return out.sort();
 }
 
 /**
- * Enter the interactive REPL loop.
- * Registers `char` + `key` event listeners and shows a prompt.
- * The loop is fully event-driven — start() itself returns immediately;
- * the shell stays "alive" as long as the listeners are registered.
+ * readline completer: complete the command (first word) or a path argument. Candidates are names within the
+ * directory being completed (directories with a trailing '/'); a single command or file match gets a trailing space.
+ */
+function completer(line: string): [string[], string] {
+    let wordStart = line.lastIndexOf(' ') + 1;
+    let word = line.slice(wordStart);
+    let atCommand = line.slice(0, wordStart).trim() === '';
+
+    if (atCommand && !word.includes('/')) {
+        let names = completeCommand(word);
+        return [names.length === 1 ? [names[0] + ' '] : names, word];
+    }
+
+    let slash = word.lastIndexOf('/');
+    let dirPart = slash >= 0 ? word.slice(0, slash + 1) : '';
+    let basePart = slash >= 0 ? word.slice(slash + 1) : word;
+    let entries: FsDirent[];
+    try { entries = fs.readdirSync(resolvePath(dirPart === '' ? '.' : dirPart), { withFileTypes: true }); }
+    catch { return [[], basePart]; }
+    let names: string[] = [];
+    let onlyFile = false;
+    for (let entry of entries) {
+        if (!entry.name.startsWith(basePart)) continue;
+        let isDir = entry.isDirectory();
+        names.push(isDir ? entry.name + '/' : entry.name);
+        onlyFile = !isDir;
+    }
+    names.sort();
+    if (names.length === 1 && onlyFile) names[0] += ' ';
+    return [names, basePart];
+}
+
+// ── REPL ───────────────────────────────────────────────────────────────────────
+
+/** The prompt: cwd in lime, `$` in light grey (ANSI styles; ignored on monochrome terminals). */
+function makePrompt(): string {
+    return util.styleText('greenBright', process.cwd()) + ' ' + util.styleText('white', '$') + ' ';
+}
+
+/**
+ * Start the interactive shell: a readline interface on process.stdin/stdout with history, line editing and tab
+ * completion. Returns immediately; the shell is driven by the interface's listeners. Ctrl+C clears the line, Ctrl+D
+ * on an empty line or `exit` closes the shell.
  */
 function start(): void {
-    let buffer = '';
-    let cursor = 0;             // edit position within `buffer` (0..buffer.length)
+    let rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        completer,
+        historySize: 100,
+        prompt: makePrompt(),
+    });
 
-    // Where the editable input begins on screen, captured each time the prompt is
-    // drawn. Editing assumes the line does not wrap (matching the rest of the shell).
-    let inputStartX = 0;
-    let inputY = 0;
-
-    // Command history. `history` holds past lines (oldest first); `historyIndex`
-    // is the cursor into it while browsing — history.length means "the current,
-    // not-yet-submitted line", whose in-progress text is stashed in `savedBuffer`.
-    const history: string[] = [];
-    let historyIndex = 0;
-    let savedBuffer = '';
-
-    function showPrompt(): void {
-        if (canColor) term.setTextColor(32);   // lime — directory
-        term.write(cwd + ' ');
-        if (canColor) term.setTextColor(256);  // lightGrey — sigil
-        term.write('$ ');
-        if (canColor) term.setTextColor(1);    // white — user input
-        const pos = term.getCursorPos();
-        inputStartX = pos.x;
-        inputY = pos.y;
-        term.setCursorBlink(true);             // blinking underscore at the edit position
+    function prompt(): void {
+        // Start the prompt on a fresh row if a program left the cursor mid-line.
+        if (term.getCursorPos().x > 0) process.stdout.write('\n');
+        rl.setPrompt(makePrompt());
+        rl.prompt();
     }
 
-    /** Redraw `buffer` from the input origin and park the terminal cursor at `cursor`. */
-    function render(): void {
-        term.setCursorPos({ x: inputStartX, y: inputY });
-        term.write(buffer + ' ');   // trailing space erases the cell freed by a deletion
-        term.setCursorPos({ x: inputStartX + cursor, y: inputY });
-    }
-
-    /** Replace the whole input line on screen (and in `buffer`) with `next`. */
-    function replaceLine(next: string): void {
-        const { y } = term.getCursorPos();
-        term.setCursorPos({ x: 0, y });
-        term.clearLine();
-        showPrompt();
-        buffer = next;
-        cursor = next.length;
-        term.write(buffer);
-    }
-
-    /** Replace the token under the cursor (text since the last space) with `text`. */
-    function replaceWord(wordStart: number, text: string): void {
-        buffer = buffer.slice(0, wordStart) + text + buffer.slice(cursor);
-        cursor = wordStart + text.length;
-        render();
-    }
-
-    /** Print the candidate labels below the input, then redraw the prompt + buffer. */
-    function listMatches(labels: string[]): void {
-        print('');
-        print(labels.join('  '));
-        showPrompt();
-        term.write(buffer);
-        term.setCursorPos({ x: inputStartX + cursor, y: inputY });
-    }
-
-    /** Tab — complete the command (first word) or a path argument under the cursor. */
-    function handleTab(): void {
-        const before = buffer.slice(0, cursor);
-        const wordStart = before.lastIndexOf(' ') + 1;
-        const word = before.slice(wordStart);
-        const atCommand = before.slice(0, wordStart).trim() === '';
-
-        const matches = atCommand && !word.includes('/')
-            ? completeCommand(word)
-            : completePath(word);
-        if (matches.length === 0) return;
-
-        if (matches.length === 1) {
-            const m = matches[0] as Completion;
-            replaceWord(wordStart, m.word + (m.isDir ? '/' : ' '));
-            return;
+    rl.on('line', (input: string) => {
+        try {
+            processLine(input.trim(), rl);
+        } catch (e) {
+            console.error(formatError('/rom/bin/bash.js', e));
         }
+        if (!rl.closed) prompt();
+    });
 
-        // Several matches: extend to their common prefix, or list them if we are
-        // already at it (the classic "first Tab completes, second Tab lists").
-        const prefix = commonPrefix(matches.map(m => m.word));
-        if (prefix.length > word.length) replaceWord(wordStart, prefix);
-        else listMatches(matches.map(m => m.display));
-    }
+    rl.on('SIGINT', () => {
+        // Like bash: show ^C, drop the line and start a new prompt.
+        rl.write(null, { ctrl: true, name: 'e' });
+        process.stdout.write('^C');
+        rl.clearLine();
+        rl.historyIndex = -1;
+        prompt();
+    });
 
-    function onChar(ch: string): void {
-        if (cursor === buffer.length) {
-            // Fast path: appending at the end, just echo the character.
-            buffer += ch;
-            cursor++;
-            term.write(ch);
-        } else {
-            // Insert mid-line and redraw the shifted tail.
-            buffer = buffer.slice(0, cursor) + ch + buffer.slice(cursor);
-            cursor++;
-            render();
-        }
-    }
-
-    function onKey(key: number, held: boolean): void {
-        if (held) return;
-        switch (key) {
-            case 257: case 335: {   // Enter / numpad Enter
-                print('');          // move to next line
-                const line = buffer.trim();
-                buffer = '';
-                cursor = 0;
-                if (line) {
-                    // Record in history, collapsing consecutive duplicates.
-                    if (history[history.length - 1] !== line) history.push(line);
-                    term.setCursorBlink(false);   // hide the cursor while the command runs
-                    processLine(line);
-                }
-                historyIndex = history.length;
-                savedBuffer = '';
-                showPrompt();
-                break;
-            }
-            case 265: {             // Up — recall older history entry
-                if (historyIndex > 0) {
-                    if (historyIndex === history.length) savedBuffer = buffer;
-                    historyIndex--;
-                    replaceLine(history[historyIndex] as string);
-                }
-                break;
-            }
-            case 264: {             // Down — recall newer entry / restore the in-progress line
-                if (historyIndex < history.length) {
-                    historyIndex++;
-                    replaceLine(historyIndex === history.length ? savedBuffer : history[historyIndex] as string);
-                }
-                break;
-            }
-            case 263: {             // Left — move the cursor toward the start of the line
-                if (cursor > 0) {
-                    cursor--;
-                    term.setCursorPos({ x: inputStartX + cursor, y: inputY });
-                }
-                break;
-            }
-            case 262: {             // Right — move the cursor toward the end of the line
-                if (cursor < buffer.length) {
-                    cursor++;
-                    term.setCursorPos({ x: inputStartX + cursor, y: inputY });
-                }
-                break;
-            }
-            case 259: {             // Backspace — delete the char before the cursor
-                if (cursor > 0) {
-                    buffer = buffer.slice(0, cursor - 1) + buffer.slice(cursor);
-                    cursor--;
-                    render();
-                }
-                break;
-            }
-            case 258: {             // Tab — autocomplete the command or path
-                handleTab();
-                break;
-            }
-        }
-    }
-
-    function processLine(line: string): void {
-        // Expand $VAR / ${VAR} first, then split into words. Programs receive these
-        // words verbatim — each program resolves its own paths against cwd.
-        const parts = expandVars(line).match(/\S+/g) ?? [];
-        if (parts.length === 0) return;
-        const cmd = parts[0] as string;
-        const args = parts.slice(1);
-
-        // ── Variable assignment (`NAME=value`) ───────────────────────────────
-        const assign = ASSIGN_RE.exec(cmd);
-        if (assign) {
-            env.set(assign[1] as string, assign[2] as string);
-            return;
-        }
-
-        // ── Built-ins ────────────────────────────────────────────────────────
-        if (cmd === 'cd') {
-            const raw = args[0];
-            const target = raw ? resolvePath(raw) : '/';
-            try {
-                const stat = fs.statSync(target);
-                if (stat.isDirectory()) {
-                    cwd = target === '/' ? '/' : target.replace(/\/+$/, '');
-                } else {
-                    print(`bash: cd: not a directory: ${raw ?? '/'}`);
-                }
-            } catch {
-                print(`bash: cd: no such file or directory: ${raw ?? '/'}`);
-            }
-            return;
-        }
-
-        if (cmd === 'exit') {
-            events.off('char', onChar);
-            events.off('key',  onKey);
-            term.setCursorBlink(false);
-            return;
-        }
-
-        if (cmd === 'export') {
-            for (let a of args) {
-                let m = ASSIGN_RE.exec(a);
-                if (m) env.set(m[1] as string, m[2] as string);
-                else if (!env.has(a)) env.set(a, '');   // `export NAME` declares an empty var
-            }
-            return;
-        }
-
-        if (cmd === 'unset') {
-            for (let a of args) env.unset(a);
-            return;
-        }
-
-        if (cmd === 'env') {
-            const all = env.all();
-            for (let name of Object.keys(all).sort()) print(`${name}=${all[name]}`);
-            return;
-        }
-
-        // ── External program ─────────────────────────────────────────────────
-        // Suspend our own input listeners while the program runs, so an interactive
-        // program (e.g. edit) owns char/key input exclusively and we don't both react
-        // to the same keypress. Synchronous programs return at once; interactive ones
-        // block in their main() until they exit, only then handing input back to us.
-        events.off('char', onChar);
-        events.off('key',  onKey);
-        const found = (run as (...a: string[]) => boolean).apply(null, [cmd].concat(args));
-        events.on('char', onChar);
-        events.on('key',  onKey);
-        if (!found) {
-            print((cmd as string).includes('/')
-                ? `bash: ${cmd}: No such file or directory`
-                : `bash: ${cmd}: command not found`);
-        }
-    }
-
-    events.on('char', onChar);
-    events.on('key',  onKey);
     // A promise rejected without a handler fails the program that created it (and is printed like any program error,
     // see run()). Rejections nobody owns anymore — the program already returned, or shell-level code — arrive here.
-    events.on('unhandled_rejection', (error) => print(formatError('<promise>', error)));
-    showPrompt();
+    let onRejection = (error: Error) => console.error(formatError('<promise>', error));
+    events.on('unhandled_rejection', onRejection);
+    rl.on('close', () => { events.off('unhandled_rejection', onRejection); });
+
+    prompt();
 }
+
+function processLine(line: string, rl: Interface): void {
+    // Expand $VAR / ${VAR} first, then split into words. Programs receive these
+    // words verbatim — each program resolves its own paths against cwd.
+    let parts = expandVars(line).match(/\S+/g) ?? [];
+    if (parts.length === 0) return;
+    let cmd = parts[0] as string;
+    let args = parts.slice(1);
+
+    // ── Variable assignment (`NAME=value`) ───────────────────────────────
+    let assign = ASSIGN_RE.exec(cmd);
+    if (assign) {
+        env.set(assign[1] as string, assign[2] as string);
+        return;
+    }
+
+    // ── Built-ins ────────────────────────────────────────────────────────
+    if (cmd === 'cd') {
+        let raw = args[0];
+        try {
+            process.chdir(raw ? resolvePath(raw) : '/');
+        } catch (e: any) {
+            console.error(e?.code === 'ENOTDIR'
+                ? `bash: cd: not a directory: ${raw ?? '/'}`
+                : `bash: cd: no such file or directory: ${raw ?? '/'}`);
+        }
+        return;
+    }
+
+    if (cmd === 'exit') {
+        rl.close();
+        term.setCursorBlink(false);
+        return;
+    }
+
+    if (cmd === 'export') {
+        for (let a of args) {
+            let m = ASSIGN_RE.exec(a);
+            if (m) env.set(m[1] as string, m[2] as string);
+            else if (!env.has(a)) env.set(a, '');   // `export NAME` declares an empty var
+        }
+        return;
+    }
+
+    if (cmd === 'unset') {
+        for (let a of args) env.unset(a);
+        return;
+    }
+
+    if (cmd === 'env') {
+        let all = env.all();
+        for (let name of Object.keys(all).sort()) console.log(`${name}=${all[name]}`);
+        return;
+    }
+
+    // ── External program ─────────────────────────────────────────────────
+    // Pause our interface while the program runs: the program owns the terminal (and gets a fresh stdin, see run()),
+    // and we must not react to the same keys. Interactive programs block in main() or keep reading stdin; only when
+    // the job has ended does the prompt come back.
+    rl.pause();
+    let found = runProgram(cmd, args);
+    if (!found) {
+        console.error((cmd as string).includes('/')
+            ? `bash: ${cmd}: No such file or directory`
+            : `bash: ${cmd}: command not found`);
+    }
+}
+
+/** Exit code of the last program run with run(). */
+function getExitCode(): number { return lastExitCode; }
 
 export = {
     getCwd,
     setCwd,
     run,
     start,
+    getExitCode,
 }

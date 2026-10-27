@@ -7,7 +7,7 @@
 // the time we get here the arguments are already the resolved values.
 
 function main(args: string[]): void {
-    print(args.join(' '));
+    console.log(args.join(' '));
 }
 
 export = {

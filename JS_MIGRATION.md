@@ -424,10 +424,10 @@ Implement in strict dependency order. Each item is a separate file commit.
 
 #### Tier 2 — OS layer + shell (depends on Tier 0–1)
 
-- [ ] **11.13** `src/ts/bios.ts` — hardware init only: terminal reset, banner, `require.paths`, boot `/rom/os` — *partial: boot menu, `require.paths`, boots `/rom/os`; globals leak tracked in #34*
+- [ ] **11.13** `src/ts/bios.ts` — hardware init only: terminal reset, banner, `require.paths`, boot `/rom/os` — *partial: boot menu, `require.paths`, boots `/rom/os`; installs only the Node globals `process`/`console` (#34, no more `print`/`write`)*
 - [ ] **11.14** `src/ts/rom/os/index.ts` — device detection, PATH, aliases, completion registration, autorun, startup discovery, launch bash — *partial: device detection + `require.paths`; aliases/autorun/startup in #1*
 - [ ] **11.15** `src/ts/rom/lib/cc/shell/completion.ts` — completion handler factories (`file`, `program`, `help`, `peripheral`)
-- [ ] **11.16** `src/ts/rom/bin/bash.ts` — readline loop, PATH search, alias resolution, tab-complete, built-ins (cd, exit, alias, set, help, clear, pwd) — *partial: line editing, history, `$VAR`, tab completion, cd/exit/export/unset/env, Ctrl+T; rest in #4*
+- [ ] **11.16** `src/ts/rom/bin/bash.ts` — readline loop, PATH search, alias resolution, tab-complete, built-ins (cd, exit, alias, set, help, clear, pwd) — *partial: built on `readline` (line editing, history with prefix search, tab completion, Ctrl+C), `$VAR`, cd/exit/export/unset/env, Ctrl+T, programs as jobs with `process.argv`/`process.exit` (#34); rest in #4*
 
 #### Tier 3 — Peripheral + network libraries (depends on Tier 0–2)
 
@@ -440,7 +440,8 @@ Implement in strict dependency order. Each item is a separate file commit.
 #### Tier 4 — I/O + settings (depends on Tier 0–3)
 
 - [ ] **11.22** `src/ts/rom/lib/settings.ts` — typed key-value store backed by `/.settings` JSON file; `define`, `get`, `set`, `unset`, `load`, `save`
-- [ ] **11.23** `src/ts/rom/lib/io.ts` — JS file handles (`io.open`, `io.lines`, `io.read`, `io.write`); stdout/stdin/stderr stream objects
+- [ ] **11.23** `src/ts/rom/lib/io.ts` — JS file handles (`io.open`, `io.lines`, `io.read`, `io.write`); stdout/stdin/stderr stream objects — *streams done as Node's `process.stdin/stdout/stderr` (#34); file handles are `fs`*
+- [x] **11.23a** Node-style stdio (#34): `process`, `console`, `util`, `readline`, `readline/promises` in `src/ts/rom/lib` (+ `internal/tty.ts` terminal driver and job control, `internal/emitter.ts`), `.d.ts` in `src/ts/types`; ROM core modules resolved by `JSRequire`; all ROM programs and test bioses migrated from `print`/`write`
 - [ ] **11.24** `src/ts/rom/lib/help.ts` — `setPath`, `path`, `lookup`, `completeTopic`; topics are `.txt` files in help path
 
 #### Tier 5 — Built-in programs (depends on Tier 0–4)
@@ -830,5 +831,9 @@ Work done after this plan was written, mostly from the code review in October 20
   `unhandled_rejection` event; promise-flavour types for every script object.
 - **Events (#12 follow-up):** all events are queued through their `@Event` records (`queueEvent(Record)`), so
   `EventMap` cannot drift from what is queued; `computer_command` added.
+- **Stdio (#34):** `print`/`write` globals replaced by Node's `process` and `console` (installed by the bios);
+  `util`, `readline`, `readline/promises` as ROM core modules (resolved before `require.paths`, `node:` prefix);
+  terminal driver with VT/ANSI output and cooked/raw stdin whose listeners belong to the calling thread; bash on
+  `readline`, programs run as jobs (fresh stdin, argv, cwd restore, alive while reading stdin, `process.exit`).
 - **Planned:** native array loops ignoring aborts (#37); compatibility layer for CC: Tweaked addons (#33).
 

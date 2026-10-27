@@ -85,32 +85,18 @@ object ManagedComputers : IMachine.Factory {
      * A minimal bios used by every JS computer in the test world, in place of the real ROM boot sequence (see
      * `ComputerBootstrap` for the unit-test equivalent).
      *
-     * It defines `print`/`write`, exposes the `test` API as a global (extended with the assertion helpers which were
-     * previously declared in `rom/autorun/cctest.lua`), and then runs `/startup.js` if present. The startup script
+     * Like the real bios it installs the `process` and `console` globals (from the ROM), exposes the `test` API as a
+     * global (extended with the assertion helpers which were previously declared in `rom/autorun/cctest.lua`), and
+     * then runs `/startup.js` if present. The startup script
      * (see `data/cctest/computer/startup.js`) runs `/tests/<label>.js` and reports back through [TestAPI].
      */
     private val TEST_BIOS = """
+        // Like the real bios: install the `process` and `console` globals (and the terminal driver) first.
+        require('/rom/lib/internal/globals');
+
         (function () {
-            var term = require('term');
             var fs = require('fs');
             var native = require('test');
-
-            function newLine() {
-                var pos = term.getCursorPos();
-                var size = term.getSize();
-                if (pos.y + 1 >= size.height) {
-                    term.scroll(1);
-                    term.setCursorPos({ x: 0, y: size.height - 1 });
-                } else {
-                    term.setCursorPos({ x: 0, y: pos.y + 1 });
-                }
-            }
-
-            globalThis.write = function (text) { term.write(String(text)); };
-            globalThis.print = function () {
-                term.write(Array.prototype.map.call(arguments, String).join('\t'));
-                newLine();
-            };
 
             function describe(value) {
                 return typeof value === 'string' ? JSON.stringify(value) : String(value);
