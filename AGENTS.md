@@ -65,6 +65,16 @@ part of `assemble`.
 - The ROM and the TS test fixtures are compiled by `projects/core/src/build/compile-ts.mjs` (tsc via the TS API, plus a
   transform that parenthesizes every `yield`: Rhino rejects `f(yield x)` and parses `yield`'s operand as a comma
   expression).
+- Test programs are TypeScript too, type-checked (ROM strictness) against the ROM types and the generated `.d.ts`; the
+  Rhino authoring constraints apply. Write new ones in TS, not JS:
+  - `projects/core/src/test/ts/` → `:core:transpileTestTypeScript` → `build/generated/testJs`, on the test classpath as
+    `ts-fixtures/…`. Engine fixtures (`async.ts`, …) and the ROM library tests in `stdio/` (`StdioLibraryTest` mounts
+    `stdio/prelude.js` next to each program as `/test.js`; `stdio/bootstrap.d.ts` declares the test bios's `assert`).
+  - `projects/common/src/testMod/ts/computer/` (`startup.ts`, `tests/<computer label>.ts`) →
+    `:common:transpileTestModTypeScript` → `common/build/generated/testModJs/computer`, which the gametest runs copy
+    onto the test computers (system property `cctest.computer-sources`; the `runGametest*`/`runTestClient` tasks
+    depend on the transpile task). `types/test.d.ts` declares the gametest bios's `test` global.
+  - JS snippets embedded in Java/Kotlin engine tests stay inline.
 
 ## Where things live
 
@@ -90,9 +100,9 @@ part of `assemble`.
 | ROM (TypeScript, transpiled to `/rom`, bios to `bios.js`) | `projects/core/src/ts/` (`bios.ts`, `rom/os`, `rom/bin`, `rom/os/bin`, `rom/lib`, `types/`) |
 | Legacy Lua ROM (reference only, not shipped to the JS machine) | `projects/core/src/main/resources/data/computercraft/lua/` |
 | Core test harness (runs `/test.js` on a real computer) | `projects/core/src/test/java/dan200/computercraft/core/computer/ComputerBootstrap.java` |
-| Interactive harness (real bios/ROM, type keys, read the screen) | `core/computer/TerminalHarness.java` (used by `StdioShellTest`, `StdioTerminalTest`); ROM library tests: `StdioLibraryTest` + `src/test/resources/stdio/*.js` |
+| Interactive harness (real bios/ROM, type keys, read the screen) | `core/computer/TerminalHarness.java` (used by `StdioShellTest`, `StdioTerminalTest`); ROM library tests: `StdioLibraryTest` + `src/test/ts/stdio/*.ts` |
 | Engine unit tests (`JSMachineBuilder` + `Recorder` probe API) | `projects/core/src/test/java/dan200/computercraft/core/engine/` |
-| Gametest mod (JS test programs, structures, Kotlin tests) | `projects/common/src/testMod/` |
+| Gametest mod (TS test programs in `ts/computer/`, structures, Kotlin tests) | `projects/common/src/testMod/` |
 
 ## Runtime model (short)
 

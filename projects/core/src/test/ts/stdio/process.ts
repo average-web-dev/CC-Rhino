@@ -2,8 +2,12 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-var env = require('/rom/lib/env');
-var fs = require('fs');
+import prelude = require('./prelude');
+
+const eq = prelude.eq, throws = prelude.throws;
+const env = require('/rom/lib/env');
+const fs = require('fs');
+const asyncMod = require('async');
 
 eq(require('node:process'), process);
 eq(process.platform, 'computercraft');
@@ -16,8 +20,8 @@ eq(JSON.stringify(process.stdout.getWindowSize()), '[51,19]');
 eq(process.stdout.hasColors(), true);
 eq(process.stdout.getColorDepth(), 4);
 
-// env is a live view of the env module (PATH mirrors require.paths).
-process.env.GREETING = 42;
+// env is a live view of the env module (PATH mirrors require.paths). Values are converted to strings, as in Node.
+(process.env as Record<string, unknown>).GREETING = 42;
 eq(env.get('GREETING'), '42');
 eq(process.env.GREETING, '42');
 eq('GREETING' in process.env, true);
@@ -40,15 +44,15 @@ throws(function () { process.chdir('file'); }, 'ENOTDIR');
 process.chdir('/');
 
 // nextTick runs as a microtask, with arguments.
-var ticked = [];
-process.nextTick(function (a, b) { ticked.push(a + b); }, 1, 2);
+const ticked: number[] = [];
+process.nextTick(function (a: number, b: number) { ticked.push(a + b); }, 1, 2);
 eq(ticked.length, 0);
 asyncMod.unwrap(Promise.resolve());
 eq(ticked.join(), '3');
 
-var start = process.hrtime();
+const start = process.hrtime();
 eq(start.length, 2);
-var diff = process.hrtime(start);
+const diff = process.hrtime(start);
 assert(diff[0] >= 0 && diff[1] >= 0 && diff[1] < 1e9, 'hrtime diff');
 eq(typeof process.hrtime.bigint(), 'bigint');
 eq(typeof process.uptime(), 'number');

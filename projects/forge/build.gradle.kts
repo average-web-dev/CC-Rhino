@@ -84,6 +84,11 @@ neoForge {
                 "cctest.sources",
                 project.project(":common").file("src/testMod/resources/data/cctest").absolutePath,
             )
+            // The test computers' programs, compiled from TypeScript (see :common:transpileTestModTypeScript).
+            systemProperty(
+                "cctest.computer-sources",
+                project.project(":common").layout.buildDirectory.dir("generated/testModJs/computer").getAbsolutePath(),
+            )
 
             programArgument("--mixin.config=computercraft-gametest.mixins.json")
             loadedMods.add(testMod)
@@ -238,6 +243,11 @@ tasks.test {
 
 val runGametest = tasks.named<JavaExec>("runGametest") {
     usesService(MinecraftRunnerService.get(gradle))
+}
+
+// Every game test run copies the compiled test computer programs into its world.
+tasks.matching { it.name.startsWith("runGametest") || it.name == "runTestClient" }.configureEach {
+    dependsOn(":common:transpileTestModTypeScript")
 }
 cct.jacoco(runGametest)
 tasks.check { dependsOn(runGametest) }

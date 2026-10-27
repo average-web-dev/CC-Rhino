@@ -186,6 +186,11 @@ loom {
 
             val testSources = project(":common").file("src/testMod/resources/data/cctest").absolutePath
             property("cctest.sources", testSources)
+            // The test computers' programs, compiled from TypeScript (see :common:transpileTestModTypeScript).
+            property(
+                "cctest.computer-sources",
+                project(":common").layout.buildDirectory.dir("generated/testModJs/computer").getAbsolutePath(),
+            )
 
             // Load cctest last, so it can override resources. This bypasses Fabric's shuffling of mods
             property("fabric.debug.loadLate", "cctest")
@@ -258,6 +263,11 @@ tasks.test { dependsOn(tasks.generateDLIConfig) }
 
 val runGametest = tasks.named<JavaExec>("runGametest") {
     usesService(MinecraftRunnerService.get(gradle))
+}
+
+// Every game test run copies the compiled test computer programs into its world.
+tasks.matching { it.name.startsWith("runGametest") || it.name == "runTestClient" }.configureEach {
+    dependsOn(":common:transpileTestModTypeScript")
 }
 cct.jacoco(runGametest)
 tasks.check { dependsOn(runGametest) }

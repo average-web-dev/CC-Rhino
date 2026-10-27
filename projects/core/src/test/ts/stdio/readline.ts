@@ -2,25 +2,38 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-var readline = require('readline');
+import prelude = require('./prelude');
+
+const eq = prelude.eq, throws = prelude.throws, sink = prelude.sink, source = prelude.source;
+const readline = require('readline');
+const events = require('events');
+const asyncMod = require('async');
 
 eq(require('node:readline'), readline);
 eq(readline.promises, require('readline/promises'));
 
+interface OpenOptions {
+    /** Width of the fake output stream (default 80). */
+    columns?: number;
+    historySize?: number;
+    completer?: Completer;
+}
+
 /** A terminal-mode interface on a fake stream; returns it with the lines it emitted. */
-function open(options) {
-    var input = source();
-    var output = sink(options && options.columns !== undefined ? options.columns : 80);
-    var opts = { input: input, output: output, terminal: true, prompt: '> ' };
-    if (options) for (var key in options) if (key !== 'columns') opts[key] = options[key];
-    var rl = readline.createInterface(opts);
-    var lines = [];
+function open(options?: OpenOptions) {
+    let input = source();
+    let output = sink(options && options.columns !== undefined ? options.columns : 80);
+    let opts: InterfaceOptions = { input: input, output: output, terminal: true, prompt: '> ' };
+    if (options && options.historySize !== undefined) opts.historySize = options.historySize;
+    if (options && options.completer !== undefined) opts.completer = options.completer;
+    let rl = readline.createInterface(opts);
+    let lines: string[] = [];
     rl.on('line', function (line) { lines.push(line); });
-    return { rl: rl, input: input, output: output, lines: lines, feed: function (data) { input.emit('data', data); } };
+    return { rl: rl, input: input, output: output, lines: lines, feed: function (data: string) { input.emit('data', data); } };
 }
 
 // Terminal mode puts the input in raw mode and closing restores it.
-var t = open();
+let t = open();
 eq(t.input.isRaw, true);
 t.feed('abc\r');
 eq(t.lines.join('|'), 'abc');
@@ -44,7 +57,7 @@ t.rl.write('abc');
 eq(JSON.stringify(t.rl.getCursorPos()), '{"cols":5,"rows":0}');
 t.rl.write(null, { ctrl: true, name: 'u' });
 eq(t.rl.line, '');
-var small = open({ columns: 4 });
+const small = open({ columns: 4 });
 small.rl.write('abc');
 eq(JSON.stringify(small.rl.getCursorPos()), '{"cols":1,"rows":1}');
 
@@ -62,15 +75,15 @@ t.feed('x\x1b[A\x1b[B\r');
 eq(t.lines[t.lines.length - 1], 'x', 'Down past the newest entry restores the typed text');
 t.feed('a\rb\rc\r');
 eq(t.rl.history.length, 3);
-var historyEvents = 0;
+let historyEvents = 0;
 t.rl.on('history', function () { historyEvents++; });
 t.feed('d\r');
 eq(historyEvents, 1);
 
 // Tab completion
-var completions = ['apple', 'apricot', 'banana'];
+const completions = ['apple', 'apricot', 'banana'];
 t = open({
-    completer: function (line) {
+    completer: function (line: string): CompleterResult {
         return [completions.filter(function (c) { return c.indexOf(line) === 0; }), line];
     },
 });
@@ -83,13 +96,17 @@ t.feed('\t');
 assert(t.output.out.indexOf('apple    apricot') !== -1, 'the second Tab lists: ' + JSON.stringify(t.output.out));
 t.feed('r\t\r');
 eq(t.lines[1], 'apricot');
-t = open({ completer: function (line, callback) { callback(null, [['callback'], line]); } });
+t = open({
+    completer: function (line: string, callback: (err: Error | null, result?: CompleterResult) => void) {
+        callback(null, [['callback'], line]);
+    },
+});
 t.feed('c\t\r');
 eq(t.lines[0], 'callback');
 
 // question with a callback: answered by the next line, which is not emitted as 'line'
 t = open();
-var answers = [];
+const answers: string[] = [];
 t.rl.question('Name? ', function (answer) { answers.push(answer); });
 eq(t.rl.getPrompt(), 'Name? ');
 t.feed('Bob\r');
@@ -102,17 +119,17 @@ events.setImmediate(function () { t.feed('Ann\r'); });
 eq(t.rl.question('Who? '), 'Ann');
 
 // Async iteration
-var iterator = t.rl[Symbol.asyncIterator]();
+const iterator = t.rl[Symbol.asyncIterator]();
 t.feed('it\r');
 eq(JSON.stringify(asyncMod.unwrap(iterator.next())), '{"value":"it","done":false}');
 
 // Ctrl+C: SIGINT if anyone listens, otherwise close
-var sigints = 0;
+let sigints = 0;
 t.rl.on('SIGINT', function () { sigints++; });
 t.feed('\x03');
 eq(sigints, 1);
 eq(t.rl.closed, false);
-var closed = 0;
+let closed = 0;
 t = open();
 t.rl.on('close', function () { closed++; });
 t.feed('\x03');
@@ -153,9 +170,9 @@ t.feed('\r');
 eq(t.output.out, '\r\n');
 
 // Non-terminal mode splits 'data' into lines (\n, \r\n, \r); 'end' flushes the rest and closes.
-var input = source();
-var rl = readline.createInterface({ input: input, terminal: false });
-var plain = [];
+let input = source();
+const rl = readline.createInterface({ input: input, terminal: false });
+const plain: string[] = [];
 rl.on('line', function (line) { plain.push(line); });
 input.emit('data', 'a\nb\r\nc\rd');
 input.emit('data', 'e\n');
@@ -165,19 +182,19 @@ eq(plain.join('|'), 'a|b|c|de|tail');
 eq(rl.closed, true);
 
 // readline/promises: question returns a promise; closing rejects a pending one.
-var readlinePromises = require('readline/promises');
+const readlinePromises = require('readline/promises');
 input = source();
-var rlp = readlinePromises.createInterface({ input: input, output: sink(80), terminal: true });
+const rlp = readlinePromises.createInterface({ input: input, output: sink(80), terminal: true });
 events.setImmediate(function () { input.emit('data', 'yes\r'); });
 eq(asyncMod.unwrap(rlp.question('Sure? ')), 'yes');
-var pending = rlp.question('Again? ');
+const pending = rlp.question('Again? ');
 rlp.close();
-var aborted = throws(function () { asyncMod.unwrap(pending); }, 'ABORT_ERR');
+const aborted = throws(function () { asyncMod.unwrap(pending); }, 'ABORT_ERR');
 eq(aborted.name, 'AbortError');
 assert(rlp instanceof readline.Interface, 'promises interfaces are readline interfaces');
 
 // The module-level cursor functions write VT sequences.
-var cursor = sink(80);
+const cursor = sink(80);
 readline.cursorTo(cursor, 2, 3);
 readline.moveCursor(cursor, -1, 1);
 readline.clearLine(cursor, 0);
@@ -185,10 +202,10 @@ readline.clearScreenDown(cursor);
 eq(cursor.out, '\x1b[4;3H\x1b[1D\x1b[1B\x1b[2K\x1b[0J');
 
 // emitKeypressEvents decodes VT input into keys.
-var keyInput = source();
+const keyInput = source();
 readline.emitKeypressEvents(keyInput);
-var keys = [];
-keyInput.on('keypress', function (s, key) {
+const keys: string[] = [];
+keyInput.on('keypress', function (s: string | undefined, key: Key) {
     keys.push((key.ctrl ? 'C-' : '') + (key.meta ? 'M-' : '') + (key.shift ? 'S-' : '') + key.name);
 });
 keyInput.emit('data', 'aB\r\x1b[A\x1b[1;5C\x03\x1bx\x1b[3~\t\x1b[Z');

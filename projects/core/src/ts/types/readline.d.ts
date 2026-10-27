@@ -91,10 +91,13 @@ interface Interface extends InterfaceBase {
     /**
      * Show `query` and read one line. Without a callback this **blocks** the calling thread and returns the answer
      * (throws an AbortError if the interface is closed meanwhile); with one it returns at once, as in Node.
+     *
+     * The callback overloads come first: a function is also an `object`, so `question(query, callback)` would
+     * otherwise resolve to the blocking overload (returning `string`, with an untyped callback parameter).
      */
-    question(query: string, options?: object): string;
     question(query: string, callback: (answer: string) => void): void;
     question(query: string, options: object, callback: (answer: string) => void): void;
+    question(query: string, options?: object): string;
 }
 
 interface InterfaceConstructor {

@@ -4,6 +4,7 @@
 
 package dan200.computercraft.core.computer;
 
+import dan200.computercraft.core.filesystem.MemoryMount;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -13,14 +14,17 @@ import java.util.Objects;
 
 /**
  * The Node-style ROM modules {@code util}, {@code console}, {@code process}, {@code readline} and
- * {@code readline/promises} (#34), exercised by the JS programs under {@code src/test/resources/stdio/} on a real
+ * {@code readline/promises} (#34), exercised by the TypeScript programs under {@code src/test/ts/stdio/} on a real
  * computer with the ROM mounted. Readline runs against fake streams, so line editing can be driven with VT input.
+ * <p>
+ * The programs are compiled by {@code :core:transpileTestTypeScript} into the {@code ts-fixtures/stdio/} test
+ * resources. Each one runs as {@code /test.js}, next to the shared helpers in {@code /prelude.js}.
  */
 class StdioLibraryTest {
     private static final int MAX_SECONDS = 20;
 
     private static String resource(String name) {
-        try (var stream = StdioLibraryTest.class.getClassLoader().getResourceAsStream("stdio/" + name)) {
+        try (var stream = StdioLibraryTest.class.getClassLoader().getResourceAsStream("ts-fixtures/stdio/" + name)) {
             return new String(Objects.requireNonNull(stream, name).readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -28,7 +32,11 @@ class StdioLibraryTest {
     }
 
     private static void run(String name) {
-        ComputerBootstrap.run(resource("prelude.js") + "\n" + resource(name), MAX_SECONDS);
+        var mount = new MemoryMount()
+            .addFile("prelude.js", resource("prelude.js"))
+            .addFile("test.js", resource(name));
+        ComputerBootstrap.run(mount, x -> {
+        }, MAX_SECONDS);
     }
 
     @Test

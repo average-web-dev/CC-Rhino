@@ -92,6 +92,30 @@ val generateTsTypes by tasks.registering(Javadoc::class) {
     javadocTool = javaToolchains.javadocToolFor { languageVersion = CCTweakedPlugin.JDK_VERSION }
 }
 
+// The programs run by the gametest computers (src/testMod/ts/computer/: startup.js and tests/<label>.js), type-checked
+// against the ROM and API types and compiled with the ROM's compiler settings. The gametest runs copy the output into
+// the test world (see the `cctest.computer-sources` property in the Forge/Fabric builds and CCTestCommand).
+val transpileTestModTypeScript by tasks.registering(NpxExecToDir::class) {
+    group = LifecycleBasePlugin.VERIFICATION_GROUP
+    description = "Transpile the gametest computer programs under src/testMod/ts/ to JavaScript"
+
+    inputs.files(fileTree("src/testMod/ts") { include("**/*.ts") }).withPropertyName("sources")
+    inputs.file("src/testMod/ts/tsconfig.json").withPropertyName("tsconfig")
+    val core = project(":core")
+    inputs.file(core.file("src/ts/tsconfig.json")).withPropertyName("baseTsconfig")
+    inputs.files(core.fileTree("src/ts/types") { include("**/*.ts") }).withPropertyName("romTypes")
+    inputs.dir(layout.buildDirectory.dir("tsTypes")).withPropertyName("apiTypes")
+
+    // Node modules are installed once for the whole repository, by :core (whose node project root is the root
+    // project), so depend on that instead of this project's (non-existent) npmInstall.
+    setDependsOn(listOf(":core:npmInstall", generateTsTypes))
+
+    output = layout.buildDirectory.dir("generated/testModJs")
+
+    inputs.file(core.file("src/build/compile-ts.mjs")).withPropertyName("compiler")
+    args = listOf("tsx", "../core/src/build/compile-ts.mjs", "--project", "src/testMod/ts/tsconfig.json")
+}
+
 val lintLua by tasks.registering(IlluaminateExec::class) {
     group = JavaBasePlugin.VERIFICATION_GROUP
     description = "Lint Lua (and Lua docs) with illuaminate"

@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
 // A turtle command whose execute() throws surfaces as a catchable JS error, rather than hanging the program.
-var turtle = require('turtle');
+const turtle = require('turtle');
 
-var error = null;
+let error: unknown = null;
 try {
     test.runFaultyTurtleCommand('Command exploded');
 } catch (e) {
@@ -17,3 +17,5 @@ test.eq('Command exploded', error.message);
 
 // The command queue keeps working afterwards.
 test.eq(true, turtle.turnLeft().success, 'Turtle still runs commands');
+
+export {};
