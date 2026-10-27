@@ -38,6 +38,33 @@
 
 ---
 
+## Node-style stdio (`process`, `console`, `util`, `readline`) — implemented (#34)
+
+**Summary**: Replaces CC's `print`/`write`/`read()` and the stream half of `io`: the bios installs the Node globals
+`process` and `console`; `util`, `readline` and `readline/promises` are ROM core modules (`/rom/lib`, resolvable
+before `require.paths` and as `node:<name>`). Full API: JS_API_REDESIGN.md, "Node-style stdio".
+
+**Feature contract**:
+- `process.stdout` / `process.stderr`: wrapped, scrolling terminal output with `\n \r \t \b` and ANSI sequences (SGR
+  colours → CC colours, cursor movement, erasing); stderr in red. Replaces `write`/`print`/`printError`.
+- `process.stdin`: cooked (echo + line editing basics) or raw (VT sequences) input from `char`/`key`/`paste`,
+  `'keypress'` events, pause/resume. Listeners belong to the program that adds them.
+- `console`: Node's Console (log/info/debug/warn/error/dir/table/time*/count*/group*/assert/trace/clear).
+- `util`: format, formatWithOptions, inspect, inherits, promisify, stripVTControlCharacters, styleText,
+  isDeepStrictEqual. Replaces `textutils.serialize`-style debugging output and `cc.pretty`'s role for printing.
+- `readline`: line editing, history (prefix search), tab completion, `question` (blocking without callback;
+  promise in `readline/promises`). Replaces CC's `read(replaceChar, history, completeFn)`; `replaceChar` (password
+  masking) is not supported yet.
+- bash runs programs as jobs: fresh stdin, `process.argv`, cwd restored, programs stay alive while reading stdin,
+  `process.exit(code)`.
+
+**CC-specific behaviour**: colour escape codes are ignored on monochrome terminals; the computer's terminal never
+resizes, so stdout `'resize'` only fires when ROM code emits `term_resize`.
+
+**Priority**: essential
+
+---
+
 ## APIs (`src/ts/rom/apis/`)
 
 ### colors / colours
@@ -264,6 +291,9 @@ interface HttpOptions {
 ### io
 
 **Summary**: Lua-style file I/O with `FILE*`-compatible handle objects, standard streams, and an `io.lines` iterator.
+
+> **CC: Rhino**: the standard streams are `process.stdin` / `process.stdout` / `process.stderr` (#34, see "Node-style
+> stdio" above); file I/O is `fs`. An `io` compatibility module is not planned for the core runtime.
 
 **Feature contract**:
 ```
