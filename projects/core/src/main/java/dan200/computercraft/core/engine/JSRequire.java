@@ -16,6 +16,7 @@ import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Module-loader infrastructure for the JS machine, exposed as {@code __cc_loader__} on the global scope.
@@ -56,7 +57,27 @@ final class JSRequire extends ScriptableObject {
 
     // --- path helpers -------------------------------------------------------
 
+    /**
+     * Node-style core modules implemented in the ROM (TypeScript under {@code /rom/lib}). Like Node's core modules they
+     * resolve before {@code require.paths}, so they cannot be shadowed and do not depend on {@code PATH}; they can also
+     * be required with a {@code node:} prefix ({@code require('node:util')}).
+     */
+    static final Set<String> ROM_CORE_MODULES = Set.of(
+        "console", "process", "util", "readline", "readline/promises"
+    );
+
+    private static final String NODE_PREFIX = "node:";
+
+    /** The absolute path of a ROM core module, or {@code null} if {@code id} does not name one. */
+    static @Nullable String romCoreModule(String id) {
+        var name = id.startsWith(NODE_PREFIX) ? id.substring(NODE_PREFIX.length()) : id;
+        return ROM_CORE_MODULES.contains(name) ? "/rom/lib/" + name : null;
+    }
+
     private String resolvePath(String id, String currentDir, @Nullable Object jsPaths) {
+        var core = romCoreModule(id);
+        if (core != null) return addJsExtension(normalize(core));
+
         if (id.startsWith("./") || id.startsWith("../")) {
             var base = currentDir.isEmpty() ? id : currentDir + "/" + id;
             return addJsExtension(normalize(base));

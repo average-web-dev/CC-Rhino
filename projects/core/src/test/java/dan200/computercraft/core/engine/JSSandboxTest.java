@@ -19,12 +19,12 @@ import static org.junit.jupiter.api.Assertions.*;
  * Sandbox hardening: the global object only holds an explicit set of names (no LiveConnect), and exceptions from
  * native methods reach scripts as plain JS {@code Error}s without Java class names.
  */
-class JSSandboxTest {
+public class JSSandboxTest {
     /**
-     * Every own property of the global object. A new entry here (e.g. after a Rhino upgrade) must be reviewed:
-     * anything that reaches Java must not be exposed.
+     * Every own property of the global object the engine creates. A new entry here (e.g. after a Rhino upgrade) must be
+     * reviewed: anything that reaches Java must not be exposed.
      */
-    private static final List<String> ALLOWED_GLOBALS = List.of(
+    public static final List<String> ALLOWED_GLOBALS = List.of(
         // ECMAScript value properties and functions
         "NaN", "Infinity", "undefined", "globalThis",
         "eval", "isFinite", "isNaN", "parseFloat", "parseInt",
@@ -42,6 +42,13 @@ class JSSandboxTest {
         // Installed by the CC runtime
         "require"
     );
+
+    /**
+     * The globals the bios adds, like Node's: {@code process} and {@code console} (ROM modules, see
+     * {@code /rom/lib/internal/globals}). The real boot is checked against {@link #ALLOWED_GLOBALS} plus these by
+     * {@code StdioShellTest}.
+     */
+    public static final List<String> BIOS_GLOBALS = List.of("console", "process");
 
     private static final String INTERNAL = JSMethodBridge.INTERNAL_ERROR_MESSAGE;
 

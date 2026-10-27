@@ -38,10 +38,12 @@ public class ComputerBootstrap {
     private static final int BOOT_TICKS = TPS * 10;
 
     /**
-     * A minimal bios which runs {@code /test.js} instead of booting the ROM. Any error thrown by the test (including
-     * timeouts) is reported through {@link AssertApi}, and the computer shuts down once the test finishes.
+     * A minimal bios which runs {@code /test.js} instead of booting the ROM. Like the real bios it first installs the
+     * {@code process} and {@code console} globals. Any error thrown by the test (including timeouts) is reported
+     * through {@link AssertApi}, and the computer shuts down once the test finishes.
      */
     private static final String TEST_BIOS = """
+        require('/rom/lib/internal/globals');
         var assertion = require('assertion');
         globalThis.assert = function (value, message) { return assertion.assert(value, message); };
         try {

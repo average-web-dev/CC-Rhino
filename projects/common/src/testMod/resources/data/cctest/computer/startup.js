@@ -22,6 +22,6 @@
         return test.fail(e != null && e.message !== undefined ? e.message : String(e));
     }
 
-    print('Run ' + label);
+    console.log('Run ' + label);
     test.ok();
 })();

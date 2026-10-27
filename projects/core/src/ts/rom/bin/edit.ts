@@ -42,7 +42,7 @@ function resolve(p: string, cwd: string): string {
 }
 
 function main(args: string[], cwd: string): void {
-    if (!args[0]) { print('Usage: edit <path>'); return; }
+    if (!args[0]) { console.error('Usage: edit <path>'); return; }
     const path = resolve(args[0], cwd ?? '/');
     const canColor = term.isColor();
 
