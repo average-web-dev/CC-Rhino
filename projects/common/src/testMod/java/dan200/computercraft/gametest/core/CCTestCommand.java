@@ -135,8 +135,14 @@ class CCTestCommand {
         return server.getWorldPath(LOCATION).resolve("computer").resolve("0");
     }
 
+    /**
+     * The test computers' files: the programs compiled from {@code src/testMod/ts/computer/}. Exporting writes into
+     * this build output, so changes made in-game must be carried over to the TypeScript sources by hand.
+     *
+     * @return The directory holding the compiled test programs.
+     */
     private static Path getSourceComputerPath() {
-        return TestHooks.getSourceDir().resolve("computer");
+        return TestHooks.getComputerSourceDir();
     }
 
     private static int error(CommandSourceStack source, String message) {

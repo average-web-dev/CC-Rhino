@@ -65,14 +65,16 @@ CC: Rhino has several test suites, each designed to test something different:
 
  - The builtin APIs are tested by running a JavaScript program (`/test.js`) on a real computer through
    `ComputerBootstrap` (`projects/core/src/test/java/dan200/computercraft/core/computer/`). These don't rely on any
-   Minecraft code.
+   Minecraft code. Longer test programs, such as the ROM library tests run by `StdioLibraryTest`, are written in
+   TypeScript under `projects/core/src/test/ts/` and compiled as part of the build.
 
    Both can be run with `./gradlew :core:test`.
 
  - In-game functionality, such as the behaviour of blocks, turtles and peripherals, is tested using [Minecraft's
    gametest system][mc-test] (`projects/common/src/testMod`). These tests spin up a server, spawn a structure for each
-   test, and then run some code on the blocks defined in that structure, often a JavaScript program from
-   `projects/common/src/testMod/resources/data/cctest/computer/tests/`.
+   test, and then run some code on the blocks defined in that structure, often a program from
+   `projects/common/src/testMod/ts/computer/tests/` (TypeScript, named after the computer's label and compiled by
+   `./gradlew :common:transpileTestModTypeScript`, which the gametest runs depend on).
 
    These tests can be run with `./gradlew runGametest` (or `./gradlew :forge:runGametest`/
    `./gradlew :fabric:runGametest` for a single loader).

@@ -50,8 +50,8 @@ val transpileTypeScript by tasks.registering(cc.tweaked.gradle.NpxExecToDir::cla
     onlyIf { hasTypeScriptSources }
 }
 
-// TypeScript fixtures for the engine tests (e.g. `async` functions), compiled with the ROM's compiler settings, so the
-// tests run real tsc output on Rhino.
+// TypeScript fixtures for the engine tests (e.g. `async` functions) and the ROM library test programs (`stdio/`, run by
+// StdioLibraryTest), compiled with the ROM's compiler settings, so the tests run real tsc output on Rhino.
 val transpileTestTypeScript by tasks.registering(cc.tweaked.gradle.NpxExecToDir::class) {
     group = LifecycleBasePlugin.VERIFICATION_GROUP
     description = "Transpile the TypeScript test fixtures under src/test/ts/ to JavaScript"

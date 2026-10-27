@@ -44,6 +44,13 @@ object TestHooks {
     @JvmStatic
     val sourceDir: Path = Paths.get(System.getProperty("cctest.sources")).normalize().toAbsolutePath()
 
+    /**
+     * The files copied onto the test computers: the programs compiled from `src/testMod/ts/computer/` by
+     * `:common:transpileTestModTypeScript`.
+     */
+    @JvmStatic
+    val computerSourceDir: Path = Paths.get(System.getProperty("cctest.computer-sources")).normalize().toAbsolutePath()
+
     @JvmStatic
     var structureManager: StructureTemplateManager? = null
 

@@ -1,0 +1,8 @@
+{
+    "extends": "../../../../core/src/ts/tsconfig.json",
+    "compilerOptions": {
+        "outDir": "../../../build/generated/testModJs",
+        "rootDir": "."
+    },
+    "include": [".", "../../../../core/src/ts/types", "../../../build/tsTypes"]
+}

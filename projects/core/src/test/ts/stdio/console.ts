@@ -2,24 +2,30 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
+import prelude = require('./prelude');
+
+const eq = prelude.eq, matches = prelude.matches, throws = prelude.throws, sink = prelude.sink;
+
 // The globals and modules are the same objects.
 eq(require('console'), console);
 eq(require('node:console'), console);
 eq(require('process'), process);
 eq(typeof console.Console, 'function');
-eq(Object.getOwnPropertyDescriptor(globalThis, 'console').enumerable, false);
-eq(typeof print, 'undefined', 'print is gone');
-eq(typeof write, 'undefined', 'write is gone');
+eq(Object.getOwnPropertyDescriptor(globalThis, 'console')!.enumerable, false);
+// Not declared as globals, so look them up through the global object.
+const globals = globalThis as unknown as Record<string, unknown>;
+eq(typeof globals.print, 'undefined', 'print is gone');
+eq(typeof globals.write, 'undefined', 'write is gone');
 
-function fresh(options) {
-    var out = sink(80), err = sink(80);
-    var opts = { stdout: out, stderr: err };
-    if (options) for (var key in options) opts[key] = options[key];
+function fresh(groupIndentation?: number) {
+    let out = sink(80), err = sink(80);
+    let opts: ConsoleOptions = { stdout: out, stderr: err };
+    if (groupIndentation !== undefined) opts.groupIndentation = groupIndentation;
     return { c: new console.Console(opts), out: out, err: err };
 }
 
 // log / error / warn and formatting
-var t = fresh();
+let t = fresh();
 t.c.log('a', 1, { b: 2 });
 t.c.info('%s=%d', 'x', 3);
 t.c.error('e');
@@ -28,12 +34,12 @@ eq(t.out.out, 'a 1 { b: 2 }\nx=3\n');
 eq(t.err.out, 'e\nw\n');
 
 // Methods are bound, as in Node.
-var log = t.c.log;
+const log = t.c.log;
 log('bound');
 matches(t.out.out, /bound\n$/);
 
 // The (stdout, stderr) signature
-var out2 = sink(80);
+const out2 = sink(80);
 new console.Console(out2).error('to stdout');
 eq(out2.out, 'to stdout\n');
 
@@ -47,7 +53,7 @@ t.c.groupEnd();
 t.c.groupEnd();
 t.c.log('z');
 eq(t.out.out, 'G\n  x\n  y\n    deep\nz\n');
-t = fresh({ groupIndentation: 4 });
+t = fresh(4);
 t.c.group();
 t.c.log('four');
 eq(t.out.out, '    four\n');
@@ -113,13 +119,14 @@ t.c.table('plain');
 eq(t.out.out, 'plain\n');
 
 // Inspected values break at the stream's width.
-var narrow = sink(20);
+const narrow = sink(20);
 new console.Console(narrow).log({ alpha: 1, beta: 2, gamma: 3 });
 eq(narrow.out, '{\n  alpha: 1,\n  beta: 2,\n  gamma: 3\n}\n');
 
 // Write errors are ignored unless asked otherwise.
-var broken = { write: function () { throw new Error('broken'); } };
+const broken: Writable = { write: function () { throw new Error('broken'); } };
 new console.Console(broken).log('ignored');
 throws(function () { new console.Console({ stdout: broken, ignoreErrors: false }).log('thrown'); });
 
-throws(function () { new console.Console({}); }, 'ERR_CONSOLE_WRITABLE_STREAM');
+// Deliberately invalid options: there is no stdout.
+throws(function () { new console.Console({} as ConsoleOptions); }, 'ERR_CONSOLE_WRITABLE_STREAM');

@@ -88,7 +88,8 @@ object ManagedComputers : IMachine.Factory {
      * Like the real bios it installs the `process` and `console` globals (from the ROM), exposes the `test` API as a
      * global (extended with the assertion helpers which were previously declared in `rom/autorun/cctest.lua`), and
      * then runs `/startup.js` if present. The startup script
-     * (see `data/cctest/computer/startup.js`) runs `/tests/<label>.js` and reports back through [TestAPI].
+     * (compiled from `src/testMod/ts/computer/startup.ts`) runs `/tests/<label>.js` and reports back through
+     * [TestAPI]. The `test` global is declared for the TypeScript test programs in `src/testMod/ts/types/test.d.ts`.
      */
     private val TEST_BIOS = """
         // Like the real bios: install the `process` and `console` globals (and the terminal driver) first.

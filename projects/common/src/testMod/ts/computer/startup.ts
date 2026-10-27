@@ -6,22 +6,24 @@
 // Run by the gametest bios (see ManagedComputers.TEST_BIOS) on every JS computer in the test world. Runs the test
 // program for this computer's label, and reports the result through the global `test` API.
 (function () {
-    var system = require('system');
-    var fs = require('fs');
+    let system = require('system');
+    let fs = require('fs');
 
-    var label = system.getComputerLabel();
+    let label = system.getComputerLabel();
     if (label == null) return test.fail('Label a computer to use it.');
 
-    var path = '/tests/' + label + '.js';
+    let path = '/tests/' + label + '.js';
     // Not every computer in a test structure runs a test program: those without one just stay idle.
     if (!fs.existsSync(path)) return;
 
     try {
         require(path);
     } catch (e) {
-        return test.fail(e != null && e.message !== undefined ? e.message : String(e));
+        return test.fail(e != null && (e as Error).message !== undefined ? (e as Error).message : String(e));
     }
 
     console.log('Run ' + label);
     test.ok();
 })();
+
+export {};

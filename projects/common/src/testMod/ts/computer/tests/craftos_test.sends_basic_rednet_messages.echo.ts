@@ -6,10 +6,13 @@
 // Requires the rednet library (average-web-dev/CC-Rhino#5); the corresponding gametest is disabled until it exists.
 // Both computers in this test have ID 0. The Lua version overrode os.getComputerID to pretend to be computer 1, so
 // the rednet port will need an equivalent way to give the echo computer that ID.
-var rednet = require('rednet');
+const rednet = require('rednet');
 
 rednet.open('top');
 while (true) {
-    var received = rednet.receive();
+    // Without a timeout, receive() waits until a message arrives.
+    let received = rednet.receive()!;
     rednet.send(received[0], received[1], received[2]);
 }
+
+export {};
