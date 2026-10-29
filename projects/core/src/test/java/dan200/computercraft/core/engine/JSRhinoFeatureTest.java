@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -231,12 +232,38 @@ class JSRhinoFeatureTest {
             return Reflect.get(p, "x", { v: 1 });
             """),
 
-        // Broken, and deliberately not transformed: transform-for-of would wrap every for-of in try/finally.
-        new Feature("leaving a for-of early closes the iterator", BROKEN, "fin", """
+        // Broken: babel-preset-rhino's for-of plugin (for-of.mjs) closes the iterator (#41).
+        new Feature("break out of a for-of closes the iterator", BROKEN, "fin", """
             var log = "";
             function* g() { try { yield 1; yield 2; } finally { log = "fin"; } }
             for (var v of g()) break;
             return log;
+            """),
+        new Feature("return out of a for-of closes the iterator", BROKEN, "fin", """
+            var log = "";
+            function* g() { try { yield 1; yield 2; } finally { log = "fin"; } }
+            (function () { for (var v of g()) return v; })();
+            return log;
+            """),
+        new Feature("throw out of a for-of closes the iterator", BROKEN, "fin", """
+            var log = "";
+            function* g() { try { yield 1; yield 2; } finally { log = "fin"; } }
+            try { for (var v of g()) throw new Error(); } catch (e) {}
+            return log;
+            """),
+        new Feature("labelled break out of nested for-of closes both iterators", BROKEN, "i,o", """
+            var log = [];
+            function* g(n) { try { yield 1; yield 2; } finally { log.push(n); } }
+            outer: for (var a of g("o")) for (var b of g("i")) break outer;
+            return log.join();
+            """),
+        new Feature("break out of a for-of closes a plain iterator object", BROKEN, "1", """
+            var closes = 0, i = 0;
+            var it = { next: function () { return { value: i++, done: false }; },
+                       "return": function () { closes++; return {}; } };
+            it[Symbol.iterator] = function () { return this; };
+            for (var v of it) if (v === 1) break;
+            return closes;
             """),
 
         // Broken: lowered by tsc (target es2015) to generators driven by the native tslib.
@@ -306,10 +333,15 @@ class JSRhinoFeatureTest {
         })(require("probe"));
         """;
 
+    /** Checks that fixtures make in promise callbacks, which must have run by the end of the first event. */
+    private static final Map<String, String> ASYNC_CHECKS = Map.of(
+        "iterator-closing", "for await closes the iterator"
+    );
+
     @ParameterizedTest
     @ValueSource(strings = {
         "classes", "block-scoping", "spread", "parameters", "destructuring", "new-target", "operators",
-        "literals", "iteration", "generators",
+        "literals", "iteration", "generators", "iterator-closing",
     })
     void compiled(String name) throws IOException {
         var rec = new JSMachineBuilder.Recorder();
@@ -322,6 +354,12 @@ class JSRhinoFeatureTest {
             assertFalse(result.isError(), () -> "machine failed: " + result.getMessage() + "\n" + rec.values);
         } finally {
             machine.close();
+        }
+
+        var asyncCheck = ASYNC_CHECKS.get(name);
+        if (asyncCheck != null) {
+            assertTrue(rec.values.stream().anyMatch(v -> Objects.toString(v).matches("(ok|FAIL) " + Pattern.quote(asyncCheck) + "(:.*)?")),
+                () -> "the asynchronous check '" + asyncCheck + "' did not run: " + rec.values);
         }
 
         var failures = new ArrayList<String>();
