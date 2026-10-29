@@ -178,8 +178,8 @@ class StdioShellTest {
             h.key(KEY_END);
             h.type("!");
             h.key(KEY_ENTER);
-            h.waitForText("world!");
-            assertEquals(1, count(h, "world!"), h.dump());
+            // Wait for the output line itself: the echoed command line "/ $ echo world!" also contains "world!".
+            h.waitFor("the edited command's output", x -> count(x, "world!") == 1);
             waitForPrompt(h, "/");
 
             // History: Up recalls the last command.
