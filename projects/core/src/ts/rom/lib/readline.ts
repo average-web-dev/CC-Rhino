@@ -18,6 +18,7 @@
 import EventEmitter = require('/rom/lib/internal/emitter');
 import tty = require('/rom/lib/internal/tty');
 import util = require('/rom/lib/util');
+import callable = require('/rom/lib/internal/callable');
 
 const asyncMod = require('async');
 
@@ -167,134 +168,14 @@ function emitKeypressEvents(stream: ReadableInput, _iface?: unknown): void {
 
 // ── Interface ────────────────────────────────────────────────────────────────────
 
-interface InterfaceState {
-    input: ReadableInput;
-    output: Writable | null | undefined;
-    completer: Completer | undefined;
-    _prompt: string;
-    _oldPrompt: string;
-    _questionCallback: ((answer: string) => void) | null;
-    _questionCancel: ((reason: Error) => void) | null;
-    _substringSearch: string | null;
-    _previousKey: Key | null;
-    _sawReturnAt: number;
-    _lineBuffer: string;
-    _listeners: { event: string; fn: (...args: any[]) => void; target: 'input' | 'output' }[];
-    prevRows: number;
-}
-
-type InterfaceImpl = Interface & InterfaceState;
+/** The class below (`Interface` is also the global type of readline interfaces). */
+type InterfaceImpl = Interface;
 
 function useAfterClose(): Error {
     let err = new Error('readline was closed');
     (err as any).code = 'ERR_USE_AFTER_CLOSE';
     return err;
 }
-
-const Interface = function (this: InterfaceImpl, input: ReadableInput | InterfaceOptions, output?: Writable | null,
-                            completer?: Completer, terminal?: boolean): InterfaceImpl | void {
-    if (!(this instanceof Interface)) return new Interface(input as any, output, completer, terminal) as InterfaceImpl;
-    EventEmitter.call(this);
-
-    let history: string[] | undefined;
-    let historySize: number | undefined;
-    let removeHistoryDuplicates = false;
-    let prompt = '> ';
-    let crlfDelay: number | undefined;
-    let tabSize = 8;
-
-    if (input !== null && typeof input === 'object' && (input as InterfaceOptions).input !== undefined) {
-        let options = input as InterfaceOptions;
-        output = options.output;
-        completer = options.completer;
-        terminal = options.terminal;
-        history = options.history;
-        historySize = options.historySize;
-        removeHistoryDuplicates = !!options.removeHistoryDuplicates;
-        if (options.prompt !== undefined) prompt = options.prompt;
-        crlfDelay = options.crlfDelay;
-        if (options.tabSize !== undefined) tabSize = options.tabSize;
-        input = options.input;
-    }
-    let inputStream = input as ReadableInput;
-    if (inputStream === null || inputStream === undefined || typeof inputStream.on !== 'function') {
-        let err = new TypeError('The "input" argument must be a readable stream');
-        (err as any).code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
-    }
-    if (completer !== undefined && typeof completer !== 'function') throw invalidArgValue('completer', completer);
-    if (history === undefined) history = [];
-    if (historySize === undefined) historySize = kHistorySize;
-    if (typeof historySize !== 'number' || Number.isNaN(historySize) || historySize < 0) {
-        let err = new RangeError('The value of "historySize" is out of range. It must be a non-negative number');
-        (err as any).code = 'ERR_INVALID_ARG_VALUE';
-        throw err;
-    }
-    if (terminal === undefined && output !== null && output !== undefined) terminal = !!output.isTTY;
-
-    this.input = inputStream;
-    this.output = output;
-    this.completer = completer;
-    this.history = history;
-    this.historySize = historySize;
-    this.removeHistoryDuplicates = removeHistoryDuplicates;
-    this.crlfDelay = crlfDelay ? Math.max(100, crlfDelay) : 100;
-    this.tabSize = tabSize;
-    this.terminal = !!terminal;
-    this.line = '';
-    this.cursor = 0;
-    this.historyIndex = -1;
-    this.closed = false;
-    this.paused = false;
-    this.isCompletionEnabled = true;
-    this._prompt = prompt;
-    this._oldPrompt = '';
-    this._questionCallback = null;
-    this._questionCancel = null;
-    this._substringSearch = null;
-    this._previousKey = null;
-    this._sawReturnAt = 0;
-    this._lineBuffer = '';
-    this._listeners = [];
-    this.prevRows = 0;
-
-    let self = this;
-    let listen = (target: 'input' | 'output', event: string, fn: (...args: any[]) => void) => {
-        self._listeners.push({ event, fn, target });
-        if (target === 'input') inputStream.on(event, fn); else (output as Writable).on!(event, fn);
-    };
-
-    if (!this.terminal) {
-        listen('input', 'data', (data: string | Uint8Array) => {
-            if (self.paused) return;
-            normalWrite(self, typeof data === 'string' ? data : String.fromCharCode.apply(null, Array.prototype.slice.call(data)));
-        });
-        listen('input', 'end', () => {
-            if (self._lineBuffer.length > 0) {
-                let line = self._lineBuffer;
-                self._lineBuffer = '';
-                onLine(self, line);
-            }
-            self.close();
-        });
-    } else {
-        emitKeypressEvents(inputStream, this);
-        listen('input', 'keypress', (s: string | undefined, key: Key) => {
-            // process.stdin is shared with the shell: an interface that is paused does not take part.
-            if (self.paused || self.closed) return;
-            ttyWrite(self, s, key);
-        });
-        listen('input', 'end', () => { self.close(); });
-        setRawMode(this, true);
-        if (output !== null && output !== undefined && typeof output.on === 'function') {
-            listen('output', 'resize', () => { refreshLine(self); });
-        }
-    }
-
-    if (typeof inputStream.resume === 'function') inputStream.resume();
-} as unknown as InterfaceConstructor;
-
-Object.setPrototypeOf(Interface.prototype, EventEmitter.prototype);
 
 function setRawMode(self: InterfaceImpl, mode: boolean): boolean | undefined {
     let wasRaw = self.input.isRaw;
@@ -727,11 +608,151 @@ function ttyWrite(self: InterfaceImpl, s: string | undefined, key: Key | undefin
     }
 }
 
-const methods: Record<string, Function> = {
-    setPrompt(this: InterfaceImpl, prompt: string): void { this._prompt = prompt; },
-    getPrompt(this: InterfaceImpl): string { return this._prompt; },
+function askQuestion(self: InterfaceImpl, query: string, callback: (answer: string) => void,
+                     cancel: ((reason: Error) => void) | null): void {
+    if (self._questionCallback !== null) {
+        self.prompt();
+        return;
+    }
+    self._oldPrompt = self._prompt;
+    self.setPrompt(query);
+    self._questionCallback = callback;
+    self._questionCancel = cancel;
+    self.prompt();
+}
 
-    prompt(this: InterfaceImpl, preserveCursor?: boolean): void {
+class Interface extends EventEmitter {
+    declare input: ReadableInput;
+    declare output: Writable | null | undefined;
+    declare completer: Completer | undefined;
+    declare history: string[];
+    declare historySize: number;
+    declare removeHistoryDuplicates: boolean;
+    declare crlfDelay: number;
+    declare tabSize: number;
+    declare terminal: boolean;
+    declare line: string;
+    declare cursor: number;
+    declare historyIndex: number;
+    declare closed: boolean;
+    declare paused: boolean;
+    declare isCompletionEnabled: boolean;
+    declare _prompt: string;
+    declare _oldPrompt: string;
+    declare _questionCallback: ((answer: string) => void) | null;
+    declare _questionCancel: ((reason: Error) => void) | null;
+    declare _substringSearch: string | null;
+    declare _previousKey: Key | null;
+    declare _sawReturnAt: number;
+    declare _lineBuffer: string;
+    declare _listeners: { event: string; fn: (...args: any[]) => void; target: 'input' | 'output' }[];
+    declare prevRows: number;
+
+    constructor(input: ReadableInput | InterfaceOptions, output?: Writable | null, completer?: Completer, terminal?: boolean) {
+        super();
+
+        let history: string[] | undefined;
+        let historySize: number | undefined;
+        let removeHistoryDuplicates = false;
+        let prompt = '> ';
+        let crlfDelay: number | undefined;
+        let tabSize = 8;
+
+        if (input !== null && typeof input === 'object' && (input as InterfaceOptions).input !== undefined) {
+            let options = input as InterfaceOptions;
+            output = options.output;
+            completer = options.completer;
+            terminal = options.terminal;
+            history = options.history;
+            historySize = options.historySize;
+            removeHistoryDuplicates = !!options.removeHistoryDuplicates;
+            if (options.prompt !== undefined) prompt = options.prompt;
+            crlfDelay = options.crlfDelay;
+            if (options.tabSize !== undefined) tabSize = options.tabSize;
+            input = options.input;
+        }
+        let inputStream = input as ReadableInput;
+        if (inputStream === null || inputStream === undefined || typeof inputStream.on !== 'function') {
+            let err = new TypeError('The "input" argument must be a readable stream');
+            (err as any).code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+        if (completer !== undefined && typeof completer !== 'function') throw invalidArgValue('completer', completer);
+        if (history === undefined) history = [];
+        if (historySize === undefined) historySize = kHistorySize;
+        if (typeof historySize !== 'number' || Number.isNaN(historySize) || historySize < 0) {
+            let err = new RangeError('The value of "historySize" is out of range. It must be a non-negative number');
+            (err as any).code = 'ERR_INVALID_ARG_VALUE';
+            throw err;
+        }
+        if (terminal === undefined && output !== null && output !== undefined) terminal = !!output.isTTY;
+
+        this.input = inputStream;
+        this.output = output;
+        this.completer = completer;
+        this.history = history;
+        this.historySize = historySize;
+        this.removeHistoryDuplicates = removeHistoryDuplicates;
+        this.crlfDelay = crlfDelay ? Math.max(100, crlfDelay) : 100;
+        this.tabSize = tabSize;
+        this.terminal = !!terminal;
+        this.line = '';
+        this.cursor = 0;
+        this.historyIndex = -1;
+        this.closed = false;
+        this.paused = false;
+        this.isCompletionEnabled = true;
+        this._prompt = prompt;
+        this._oldPrompt = '';
+        this._questionCallback = null;
+        this._questionCancel = null;
+        this._substringSearch = null;
+        this._previousKey = null;
+        this._sawReturnAt = 0;
+        this._lineBuffer = '';
+        this._listeners = [];
+        this.prevRows = 0;
+
+        let self = this;
+        let listen = (target: 'input' | 'output', event: string, fn: (...args: any[]) => void) => {
+            self._listeners.push({ event, fn, target });
+            if (target === 'input') inputStream.on(event, fn); else (output as Writable).on!(event, fn);
+        };
+
+        if (!this.terminal) {
+            listen('input', 'data', (data: string | Uint8Array) => {
+                if (self.paused) return;
+                normalWrite(self, typeof data === 'string' ? data : String.fromCharCode.apply(null, Array.prototype.slice.call(data)));
+            });
+            listen('input', 'end', () => {
+                if (self._lineBuffer.length > 0) {
+                    let line = self._lineBuffer;
+                    self._lineBuffer = '';
+                    onLine(self, line);
+                }
+                self.close();
+            });
+        } else {
+            emitKeypressEvents(inputStream, this);
+            listen('input', 'keypress', (s: string | undefined, key: Key) => {
+                // process.stdin is shared with the shell: an interface that is paused does not take part.
+                if (self.paused || self.closed) return;
+                ttyWrite(self, s, key);
+            });
+            listen('input', 'end', () => { self.close(); });
+            setRawMode(this, true);
+            if (output !== null && output !== undefined && typeof output.on === 'function') {
+                listen('output', 'resize', () => { refreshLine(self); });
+            }
+        }
+
+        if (typeof inputStream.resume === 'function') inputStream.resume();
+    }
+
+    setPrompt(prompt: string): void { this._prompt = prompt; }
+    getPrompt(): string { return this._prompt; }
+
+    prompt(preserveCursor?: boolean): void {
         if (this.closed) throw useAfterClose();
         if (this.paused) this.resume();
         if (this.terminal) {
@@ -740,9 +761,12 @@ const methods: Record<string, Function> = {
         } else {
             writeToOutput(this, this._prompt);
         }
-    },
+    }
 
-    question(this: InterfaceImpl, query: string, options?: unknown, callback?: (answer: string) => void): string | void {
+    question(query: string, callback: (answer: string) => void): void;
+    question(query: string, options: object, callback: (answer: string) => void): void;
+    question(query: string, options?: object): string;
+    question(query: string, options?: unknown, callback?: (answer: string) => void): string | void {
         if (typeof options === 'function') { callback = options as (answer: string) => void; options = undefined; }
         if (this.closed) throw useAfterClose();
         if (typeof callback === 'function') {
@@ -753,42 +777,42 @@ const methods: Record<string, Function> = {
         let self = this;
         let answer = new Promise<string>((resolve, reject) => askQuestion(self, query, resolve, reject));
         return asyncMod.unwrap(answer);
-    },
+    }
 
-    pause(this: InterfaceImpl): InterfaceImpl {
+    pause(): this {
         if (this.paused) return this;
         if (typeof this.input.pause === 'function') this.input.pause();
         this.paused = true;
         this.emit('pause');
         return this;
-    },
+    }
 
-    resume(this: InterfaceImpl): InterfaceImpl {
+    resume(): this {
         if (!this.paused) return this;
         if (typeof this.input.resume === 'function') this.input.resume();
         this.paused = false;
         this.emit('resume');
         return this;
-    },
+    }
 
-    write(this: InterfaceImpl, data: string | null | undefined, key?: Key): void {
+    write(data: string | null | undefined, key?: Partial<Key>): void {
         if (this.closed) throw useAfterClose();
         if (this.paused) this.resume();
-        if (this.terminal) ttyWrite(this, data === null ? undefined : data, key);
+        if (this.terminal) ttyWrite(this, data === null ? undefined : data, key as Key | undefined);
         else if (typeof data === 'string') normalWrite(this, data);
-    },
+    }
 
-    clearLine(this: InterfaceImpl): void {
+    clearLine(): void {
         moveCursorBy(this, Infinity);
         writeToOutput(this, '\r\n');
         this.line = '';
         this.cursor = 0;
         this.prevRows = 0;
-    },
+    }
 
-    getCursorPos(this: InterfaceImpl): CursorPos { return cursorPos(this); },
+    getCursorPos(): CursorPos { return cursorPos(this); }
 
-    close(this: InterfaceImpl): void {
+    close(): void {
         if (this.closed) return;
         this.pause();
         if (this.terminal) setRawMode(this, false);
@@ -808,34 +832,14 @@ const methods: Record<string, Function> = {
             cancel(err);
         }
         this.emit('close');
-    },
-};
-
-function askQuestion(self: InterfaceImpl, query: string, callback: (answer: string) => void,
-                     cancel: ((reason: Error) => void) | null): void {
-    if (self._questionCallback !== null) {
-        self.prompt();
-        return;
     }
-    self._oldPrompt = self._prompt;
-    self.setPrompt(query);
-    self._questionCallback = callback;
-    self._questionCancel = cancel;
-    self.prompt();
-}
 
-for (let name of Object.keys(methods)) {
-    Object.defineProperty(Interface.prototype, name, { value: methods[name], writable: true, configurable: true });
-}
+    get columns(): number {
+        return columns(this);
+    }
 
-Object.defineProperty(Interface.prototype, 'columns', {
-    get(this: InterfaceImpl) { return columns(this); },
-    configurable: true,
-});
-
-/** `for await (const line of rl)`: the lines, ending when the interface closes. */
-Object.defineProperty(Interface.prototype, Symbol.asyncIterator, {
-    value: function (this: InterfaceImpl): AsyncIterableIterator<string> {
+    /** `for await (const line of rl)`: the lines, ending when the interface closes. */
+    [Symbol.asyncIterator](): AsyncIterableIterator<string> {
         let self = this;
         let queue: string[] = [];
         let waiting: ((result: IteratorResult<string>) => void)[] = [];
@@ -865,10 +869,11 @@ Object.defineProperty(Interface.prototype, Symbol.asyncIterator, {
             [Symbol.asyncIterator]() { return iterator; },
         };
         return iterator;
-    },
-    writable: true,
-    configurable: true,
-});
+    }
+}
+
+// Like Node's readline.Interface, it also works without `new`.
+const PublicInterface = callable(Interface) as unknown as InterfaceConstructor;
 
 function createInterface(input: ReadableInput | InterfaceOptions, output?: Writable | null, completer?: Completer,
                          terminal?: boolean): Interface {
@@ -876,14 +881,14 @@ function createInterface(input: ReadableInput | InterfaceOptions, output?: Writa
 }
 
 const readline: ReadlineModule = {
-    Interface,
+    Interface: PublicInterface,
     createInterface,
     clearLine,
     clearScreenDown,
     cursorTo,
     moveCursor,
     emitKeypressEvents,
-} as ReadlineModule;
+} as unknown as ReadlineModule;
 
 // readline.promises, loaded lazily: readline/promises itself builds on this module.
 Object.defineProperty(readline, 'promises', {

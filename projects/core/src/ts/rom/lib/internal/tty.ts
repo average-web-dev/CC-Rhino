@@ -349,8 +349,7 @@ function makeWriteStream(fd: number, defaultFg: number): TtyWriteStream {
         addListener(event: string, listener: Listener) { return stream.on(event, listener); },
         once(event: string, listener: Listener) {
             if (event === 'resize') { events.once('term_resize', listener); return stream; }
-            let wrapper = function (this: unknown) {
-                let args: unknown[] = Array.prototype.slice.call(arguments);
+            let wrapper = function (this: unknown, ...args: unknown[]) {
                 removeLocal(local, event, wrapper);
                 listener.apply(this, args);
             };
@@ -366,9 +365,7 @@ function makeWriteStream(fd: number, defaultFg: number): TtyWriteStream {
             if (event === undefined) { for (let key of Object.keys(local)) delete local[key]; } else delete local[event];
             return stream;
         },
-        emit(event: string) {
-            // `arguments` rather than a rest parameter: Rhino mixes up `event, ...args` when emit is applied.
-            let args: unknown[] = Array.prototype.slice.call(arguments, 1);
+        emit(event: string, ...args: unknown[]) {
             if (event === 'resize') return events.emit('term_resize');
             return emitLocal(stream, local, event, args);
         },
@@ -729,8 +726,7 @@ const stdin: TtyReadStream = {
     addListener(event: string, listener: Listener) { return stdin.on(event, listener); },
     once(event: string, listener: Listener) {
         if (STREAM_EVENTS[event]) { subscribe(event, listener, true); return stdin; }
-        let wrapper = function (this: unknown) {
-            let args: unknown[] = Array.prototype.slice.call(arguments);
+        let wrapper = function (this: unknown, ...args: unknown[]) {
             removeLocal(stdinLocal, event, wrapper);
             listener.apply(this, args);
         };
@@ -755,8 +751,7 @@ const stdin: TtyReadStream = {
         else delete stdinLocal[event];
         return stdin;
     },
-    emit(event: string) {
-        let args: unknown[] = Array.prototype.slice.call(arguments, 1);
+    emit(event: string, ...args: unknown[]) {
         if (!STREAM_EVENTS[event]) return emitLocal(stdin, stdinLocal, event, args);
         // Deliver directly to the listeners (from the calling thread, so they cannot block here).
         prune();

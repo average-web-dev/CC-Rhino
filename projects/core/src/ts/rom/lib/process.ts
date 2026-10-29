@@ -122,10 +122,8 @@ const proc: Process = {
         throw tty.requestExit(exitCode);
     },
 
-    // `arguments` rather than a rest parameter: Rhino mixes up `callback, ...args` when nextTick is applied.
-    nextTick: function (callback: (...args: any[]) => void): void {
-        let args: any[] = Array.prototype.slice.call(arguments, 1);
-        events.queueMicrotask(() => callback.apply(undefined, args));
+    nextTick: function (callback: (...args: any[]) => void, ...args: any[]): void {
+        events.queueMicrotask(() => callback(...args));
     } as Process['nextTick'],
 
     hrtime,

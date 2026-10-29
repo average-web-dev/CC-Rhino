@@ -56,6 +56,10 @@ Have a read of the following documents first:
 
 The ROM (bios, os, bash, programs and libraries) is written in TypeScript in `projects/core/src/ts/`. Type
 definitions for the native modules are generated from the Java javadoc with `./gradlew :common:generateTsTypes`.
+It is compiled by `projects/core/src/build/compile-ts.mjs`: tsc type-checks and emits ES2015, then Babel with
+`babel-preset-rhino` (`projects/core/src/build/babel-preset-rhino/`) rewrites what Rhino lacks (classes, spread in
+calls, block scoping in loops, …), so modern TypeScript works as is. Node and the npm dev dependencies (`npm ci`) are
+only needed at build time.
 
 ### Testing
 CC: Rhino has several test suites, each designed to test something different:

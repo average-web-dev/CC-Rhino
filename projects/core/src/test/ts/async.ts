@@ -4,7 +4,7 @@
 
 // End-to-end fixture for the async pipeline (#35): tsc compiles these `async` functions to generators driven by
 // require("tslib").__awaiter (importHelpers), which must run on Rhino. Run by JSTypeScriptAsyncTest, which provides
-// the `w` and `probe` modules. Follows the ROM's Rhino authoring constraints (no `const` in loops, no spread).
+// the `w` and `probe` modules.
 
 interface WaitPromises {
     await(id: number): Promise<string>;

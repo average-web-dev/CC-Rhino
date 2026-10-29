@@ -12,19 +12,7 @@
 
 import util = require('/rom/lib/util');
 import proc = require('/rom/lib/process');
-
-interface ConsoleState {
-    _stdout: ConsoleStream;
-    _stderr: ConsoleStream;
-    _ignoreErrors: boolean;
-    _inspectOptions: InspectOptions | undefined;
-    _groupIndentation: number;
-    _groupIndent: string;
-    _counts: Map<string, number>;
-    _timers: Map<string, number>;
-}
-
-type ConsoleImpl = Console & ConsoleState;
+import callable = require('/rom/lib/internal/callable');
 
 const kSecond = 1000;
 const kMinute = 60 * kSecond;
@@ -107,59 +95,19 @@ function renderTable(head: string[], columns: string[][]): string {
 
 // ── Console ──────────────────────────────────────────────────────────────────────
 
-const Console = function (this: ConsoleImpl, options?: ConsoleOptions | ConsoleStream, stderr?: ConsoleStream,
-                          ignoreErrors?: boolean): ConsoleImpl | void {
-    if (!(this instanceof Console)) return new Console(options as any, stderr, ignoreErrors) as ConsoleImpl;
-
-    let opts: ConsoleOptions;
-    if (options === undefined || isWritable(options)) {
-        opts = { stdout: options as ConsoleStream, stderr, ignoreErrors };
-    } else {
-        opts = options;
-    }
-    let stdout = opts.stdout;
-    let errStream = opts.stderr === undefined ? stdout : opts.stderr;
-    if (!isWritable(stdout)) throw invalidArg('stdout', 'a writable stream');
-    if (!isWritable(errStream)) throw invalidArg('stderr', 'a writable stream');
-    let groupIndentation = opts.groupIndentation === undefined ? 2 : opts.groupIndentation;
-    if (typeof groupIndentation !== 'number' || groupIndentation < 0 || groupIndentation > 1000) {
-        let err = new RangeError('The value of "groupIndentation" is out of range. It must be >= 0 && <= 1000');
-        (err as any).code = 'ERR_OUT_OF_RANGE';
-        throw err;
-    }
-
-    let hidden = (name: string, value: unknown) =>
-        Object.defineProperty(this, name, { value, writable: true, configurable: true, enumerable: false });
-    hidden('_stdout', stdout);
-    hidden('_stderr', errStream);
-    hidden('_ignoreErrors', opts.ignoreErrors !== false);
-    hidden('_inspectOptions', opts.inspectOptions);
-    hidden('_groupIndentation', groupIndentation);
-    hidden('_groupIndent', '');
-    hidden('_counts', new Map());
-    hidden('_timers', new Map());
-
-    // Like Node, the methods are bound to the instance, so `const { log } = console` works.
-    let proto = Console.prototype as unknown as Record<string, unknown>;
-    for (let key of Object.keys(proto)) {
-        let method = proto[key];
-        if (typeof method === 'function') (this as unknown as Record<string, unknown>)[key] = method.bind(this);
-    }
-} as unknown as ConsoleConstructor;
-
-function inspectOptionsFor(self: ConsoleImpl, stream: ConsoleStream): InspectOptions | undefined {
+function inspectOptionsFor(self: Console, stream: ConsoleStream): InspectOptions | undefined {
     if (self._inspectOptions !== undefined) return self._inspectOptions;
     // Break lines at the terminal width rather than at 80 columns.
     if (stream.isTTY && typeof stream.columns === 'number' && stream.columns > 0) return { breakLength: stream.columns };
     return undefined;
 }
 
-function formatFor(self: ConsoleImpl, stream: ConsoleStream, args: unknown[]): string {
+function formatFor(self: Console, stream: ConsoleStream, args: unknown[]): string {
     let options = inspectOptionsFor(self, stream);
-    return options === undefined ? util.format.apply(null, args) : util.formatWithOptions.apply(null, ([options] as unknown[]).concat(args) as [InspectOptions]);
+    return options === undefined ? util.format(...args) : util.formatWithOptions(options, ...args);
 }
 
-function writeTo(self: ConsoleImpl, useStdout: boolean, text: string): void {
+function writeTo(self: Console, useStdout: boolean, text: string): void {
     let stream = useStdout ? self._stdout : self._stderr;
     let indent = self._groupIndent;
     if (indent.length !== 0) {
@@ -175,38 +123,72 @@ function writeTo(self: ConsoleImpl, useStdout: boolean, text: string): void {
     }
 }
 
-// The methods read `arguments` instead of rest parameters: Rhino (1.9.1) passes wrong rest arguments to functions
-// called through Function.prototype.apply / bind, which console methods often are.
+/** console.log / console.error: format `data` and write it to stdout or stderr. */
+function print(self: Console, useStdout: boolean, data: unknown[]): void {
+    writeTo(self, useStdout, formatFor(self, useStdout ? self._stdout : self._stderr, data));
+}
 
-const log = function (this: ConsoleImpl): void {
-    let args: unknown[] = Array.prototype.slice.call(arguments);
-    writeTo(this, true, formatFor(this, this._stdout, args));
-} as (this: ConsoleImpl, ...data: unknown[]) => void;
+class Console {
+    declare _stdout: ConsoleStream;
+    declare _stderr: ConsoleStream;
+    declare _ignoreErrors: boolean;
+    declare _inspectOptions: InspectOptions | undefined;
+    declare _groupIndentation: number;
+    declare _groupIndent: string;
+    declare _counts: Map<string, number>;
+    declare _timers: Map<string, number>;
 
-const warn = function (this: ConsoleImpl): void {
-    let args: unknown[] = Array.prototype.slice.call(arguments);
-    writeTo(this, false, formatFor(this, this._stderr, args));
-} as (this: ConsoleImpl, ...data: unknown[]) => void;
+    constructor(options?: ConsoleOptions | ConsoleStream, stderr?: ConsoleStream, ignoreErrors?: boolean) {
+        let opts: ConsoleOptions;
+        if (options === undefined || isWritable(options)) {
+            opts = { stdout: options as ConsoleStream, stderr, ignoreErrors };
+        } else {
+            opts = options;
+        }
+        let stdout = opts.stdout;
+        let errStream = opts.stderr === undefined ? stdout : opts.stderr;
+        if (!isWritable(stdout)) throw invalidArg('stdout', 'a writable stream');
+        if (!isWritable(errStream)) throw invalidArg('stderr', 'a writable stream');
+        let groupIndentation = opts.groupIndentation === undefined ? 2 : opts.groupIndentation;
+        if (typeof groupIndentation !== 'number' || groupIndentation < 0 || groupIndentation > 1000) {
+            let err = new RangeError('The value of "groupIndentation" is out of range. It must be >= 0 && <= 1000');
+            (err as any).code = 'ERR_OUT_OF_RANGE';
+            throw err;
+        }
 
-const methods: Record<string, Function> = {
-    log,
-    info: log,
-    debug: log,
-    dirxml: log,
-    warn,
-    error: warn,
+        let hidden = (name: string, value: unknown) =>
+            Object.defineProperty(this, name, { value, writable: true, configurable: true, enumerable: false });
+        hidden('_stdout', stdout);
+        hidden('_stderr', errStream);
+        hidden('_ignoreErrors', opts.ignoreErrors !== false);
+        hidden('_inspectOptions', opts.inspectOptions);
+        hidden('_groupIndentation', groupIndentation);
+        hidden('_groupIndent', '');
+        hidden('_counts', new Map());
+        hidden('_timers', new Map());
 
-    dir(this: ConsoleImpl, object: unknown, options?: InspectOptions): void {
-        let merged: Record<string, unknown> = { customInspect: false };
-        let base = inspectOptionsFor(this, this._stdout);
-        if (base !== undefined) for (let key of Object.keys(base)) merged[key] = (base as Record<string, unknown>)[key];
-        if (options !== undefined) for (let key of Object.keys(options)) merged[key] = (options as Record<string, unknown>)[key];
-        writeTo(this, true, util.inspect(object, merged as InspectOptions));
-    },
+        // Like Node, the methods are bound to the instance, so `const { log } = console` works.
+        let proto = Console.prototype as unknown as Record<string, unknown>;
+        for (const key of Object.keys(proto)) {
+            let method = proto[key];
+            if (typeof method === 'function') (this as unknown as Record<string, unknown>)[key] = method.bind(this);
+        }
+    }
 
-    trace(this: ConsoleImpl): void {
-        let args: unknown[] = Array.prototype.slice.call(arguments);
-        let message = formatFor(this, this._stderr, args);
+    log(...data: unknown[]): void {
+        print(this, true, data);
+    }
+
+    warn(...data: unknown[]): void {
+        print(this, false, data);
+    }
+
+    dir(object: unknown, options?: InspectOptions): void {
+        writeTo(this, true, util.inspect(object, { customInspect: false, ...inspectOptionsFor(this, this._stdout), ...options }));
+    }
+
+    trace(...data: unknown[]): void {
+        let message = formatFor(this, this._stderr, data);
         let frames = String(new Error().stack ?? '').split('\n');
         let lines: string[] = [];
         for (let frame of frames) {
@@ -215,63 +197,59 @@ const methods: Record<string, Function> = {
             if (frame !== '' && frame.indexOf('/rom/lib/console.js') === -1) lines.push('    ' + frame);
         }
         writeTo(this, false, 'Trace' + (message === '' ? '' : ': ' + message) + (lines.length > 0 ? '\n' + lines.join('\n') : ''));
-    },
+    }
 
-    // (`arguments` rather than a rest parameter: see the note in util.formatWithOptions.)
-    assert(this: ConsoleImpl, expression: unknown): void {
+    assert(expression: unknown, ...data: unknown[]): void {
         if (expression) return;
-        let args: unknown[] = Array.prototype.slice.call(arguments, 1);
         // As in Node, the first argument is stringified into the message, the rest are formatted by warn().
-        args[0] = `Assertion failed${args.length === 0 ? '' : `: ${args[0]}`}`;
-        warn.apply(this, args);
-    },
+        data[0] = `Assertion failed${data.length === 0 ? '' : `: ${data[0]}`}`;
+        print(this, false, data);
+    }
 
-    clear(this: ConsoleImpl): void {
+    clear(): void {
         let stream = this._stdout;
         if (stream.isTTY) stream.write('\x1b[1;1H\x1b[0J');
-    },
+    }
 
-    count(this: ConsoleImpl, label: unknown = 'default'): void {
+    count(label: unknown = 'default'): void {
         let key = `${label}`;
         let count = (this._counts.get(key) ?? 0) + 1;
         this._counts.set(key, count);
-        log.call(this, `${key}: ${count}`);
-    },
+        print(this, true, [`${key}: ${count}`]);
+    }
 
-    countReset(this: ConsoleImpl, label: unknown = 'default'): void {
+    countReset(label: unknown = 'default'): void {
         let key = `${label}`;
         if (!this._counts.has(key)) {
             proc.emitWarning(`Count for '${key}' does not exist`);
             return;
         }
         this._counts.delete(key);
-    },
+    }
 
-    group(this: ConsoleImpl): void {
-        let data: unknown[] = Array.prototype.slice.call(arguments);
-        if (data.length > 0) log.apply(this, data);
+    group(...data: unknown[]): void {
+        if (data.length > 0) print(this, true, data);
         this._groupIndent += ' '.repeat(this._groupIndentation);
-    },
+    }
 
-    groupCollapsed(this: ConsoleImpl): void {
-        let data: unknown[] = Array.prototype.slice.call(arguments);
-        methods.group.apply(this, data);
-    },
+    groupCollapsed(...data: unknown[]): void {
+        Console.prototype.group.apply(this, data);
+    }
 
-    groupEnd(this: ConsoleImpl): void {
+    groupEnd(): void {
         this._groupIndent = this._groupIndent.slice(0, Math.max(0, this._groupIndent.length - this._groupIndentation));
-    },
+    }
 
-    time(this: ConsoleImpl, label: unknown = 'default'): void {
+    time(label: unknown = 'default'): void {
         let key = `${label}`;
         if (this._timers.has(key)) {
             proc.emitWarning(`Label '${key}' already exists for console.time()`);
             return;
         }
         this._timers.set(key, Date.now());
-    },
+    }
 
-    timeEnd(this: ConsoleImpl, label: unknown = 'default'): void {
+    timeEnd(label: unknown = 'default'): void {
         let key = `${label}`;
         let start = this._timers.get(key);
         if (start === undefined) {
@@ -279,44 +257,43 @@ const methods: Record<string, Function> = {
             return;
         }
         this._timers.delete(key);
-        log.call(this, '%s: %s', key, formatTime(Date.now() - start));
-    },
+        print(this, true, ['%s: %s', key, formatTime(Date.now() - start)]);
+    }
 
-    timeLog(this: ConsoleImpl, label: unknown): void {
-        let data: unknown[] = Array.prototype.slice.call(arguments, 1);
+    timeLog(label?: unknown, ...data: unknown[]): void {
         let key = `${label === undefined ? 'default' : label}`;
         let start = this._timers.get(key);
         if (start === undefined) {
             proc.emitWarning(`No such label '${key}' for console.timeLog()`);
             return;
         }
-        log.apply(this, (['%s: %s', key, formatTime(Date.now() - start)] as unknown[]).concat(data));
-    },
+        print(this, true, ['%s: %s', key, formatTime(Date.now() - start), ...data]);
+    }
 
-    table(this: ConsoleImpl, tabularData: unknown, properties?: string[]): void {
+    table(tabularData: unknown, properties?: string[]): void {
         if (properties !== undefined && !Array.isArray(properties)) {
             let err = new TypeError('The "properties" argument must be an instance of Array');
             (err as any).code = 'ERR_INVALID_ARG_TYPE';
             throw err;
         }
         if (tabularData === null || typeof tabularData !== 'object') {
-            log.call(this, tabularData);
+            print(this, true, [tabularData]);
             return;
         }
 
         let base = inspectOptionsFor(this, this._stdout);
         let show = (v: unknown): string => {
             let depth = v !== null && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length > 2 ? -1 : 0;
-            let options: Record<string, unknown> = { depth, maxArrayLength: 3, breakLength: Infinity };
-            if (base !== undefined) for (let key of Object.keys(base)) if (key !== 'breakLength') options[key] = (base as Record<string, unknown>)[key];
-            return util.inspect(v, options as InspectOptions);
+            let options: InspectOptions = { depth, maxArrayLength: 3, ...base };
+            options.breakLength = Infinity;
+            return util.inspect(v, options);
         };
         let indexArray = (length: number): string[] => {
             let out: string[] = [];
             for (let i = 0; i < length; i++) out.push(show(i));
             return out;
         };
-        let output = (head: string[], columns: string[][]) => log.call(this, renderTable(head, columns));
+        let output = (head: string[], columns: string[][]) => print(this, true, [renderTable(head, columns)]);
 
         if (tabularData instanceof Map) {
             let keys: string[] = [];
@@ -352,21 +329,31 @@ const methods: Record<string, Function> = {
                 }
             }
         }
-        let head = ['(index)'].concat(order);
-        let columns: string[][] = [indexKeys];
-        for (let key of order) columns.push(map[key]);
+        let head = ['(index)', ...order];
+        let columns: string[][] = [indexKeys, ...order.map((key) => map[key])];
         if (hasPrimitives) { head.push('Values'); columns.push(valuesColumn); }
         output(head, columns);
-    },
-};
-
-for (let name of Object.keys(methods)) {
-    Object.defineProperty(Console.prototype, name, {
-        value: methods[name], writable: true, configurable: true, enumerable: true,
-    });
+    }
 }
 
-const globalConsole = new Console({ stdout: proc.stdout, stderr: proc.stderr }) as Console & { Console: ConsoleConstructor };
-Object.defineProperty(globalConsole, 'Console', { value: Console, writable: true, configurable: true, enumerable: false });
+// As in Node, the methods are enumerable (the constructor binds every enumerable one), and info/debug/dirxml and
+// error are the same functions as log and warn.
+{
+    let proto = Console.prototype as unknown as Record<string, unknown>;
+    let aliases: Record<string, string> = { info: 'log', debug: 'log', dirxml: 'log', error: 'warn' };
+    let names = ['log', 'info', 'debug', 'dirxml', 'warn', 'error', 'dir', 'trace', 'assert', 'clear', 'count',
+        'countReset', 'group', 'groupCollapsed', 'groupEnd', 'time', 'timeEnd', 'timeLog', 'table'];
+    for (const name of names) {
+        let value = proto[aliases[name] ?? name];
+        delete proto[name];
+        Object.defineProperty(proto, name, { value, writable: true, configurable: true, enumerable: true });
+    }
+}
+
+const globalConsole = new Console({ stdout: proc.stdout, stderr: proc.stderr }) as unknown as GlobalConsole;
+// Like Node's Console, `console.Console` also works without `new`.
+Object.defineProperty(globalConsole, 'Console', {
+    value: callable(Console), writable: true, configurable: true, enumerable: false,
+});
 
 export = globalConsole;

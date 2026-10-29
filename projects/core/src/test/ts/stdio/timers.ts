@@ -36,6 +36,17 @@ throws(function () { setTimeout(null as any, 1); }, 'ERR_INVALID_ARG_TYPE');
 throws(function () { setInterval('code' as any, 1); }, 'ERR_INVALID_ARG_TYPE');
 throws(function () { setImmediate(undefined as any); }, 'ERR_INVALID_ARG_TYPE');
 
+// Timeout and Immediate are classes, as in Node: methods on the prototype, state on the instance.
+const probeTimeout = setTimeout(function () { /* cleared below */ }, 1000);
+const probeImmediate = setImmediate(function () { /* cleared below */ });
+eq(probeTimeout.constructor.name, 'Timeout');
+eq(probeImmediate.constructor.name, 'Immediate');
+eq(Object.keys(Object.getPrototypeOf(probeTimeout)).length, 0, 'prototype methods are not enumerable');
+eq(Object.prototype.hasOwnProperty.call(probeTimeout, '_onTimeout'), true);
+eq(+probeTimeout > 0, true, 'Number(timeout) is its id');
+clearTimeout(probeTimeout);
+clearImmediate(probeImmediate);
+
 // Order: by due tick (ms rounded up to whole ticks, at least one), then by creation.
 let log: string[] = [];
 setTimeout(function () { log.push('b100'); }, 100);

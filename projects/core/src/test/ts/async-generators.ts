@@ -4,7 +4,7 @@
 
 // End-to-end fixture for async generators and `for await` (#35): tsc compiles them to generators driven by the
 // tslib helpers __asyncGenerator / __await / __asyncDelegator / __asyncValues, which must run on Rhino. Run by
-// JSTypeScriptAsyncTest. Follows the ROM's Rhino authoring constraints (no `const` in loops, no spread).
+// JSTypeScriptAsyncTest.
 
 interface WaitPromises {
     await(id: number): Promise<string>;

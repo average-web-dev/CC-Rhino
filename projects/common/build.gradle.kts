@@ -112,7 +112,10 @@ val transpileTestModTypeScript by tasks.registering(NpxExecToDir::class) {
 
     output = layout.buildDirectory.dir("generated/testModJs")
 
-    inputs.file(core.file("src/build/compile-ts.mjs")).withPropertyName("compiler")
+    inputs.files(
+        core.file("src/build/compile-ts.mjs"), core.fileTree("src/build/babel-preset-rhino"),
+        rootProject.file("package-lock.json"),
+    ).withPropertyName("compiler")
     args = listOf("tsx", "../core/src/build/compile-ts.mjs", "--project", "src/testMod/ts/tsconfig.json")
 }
 

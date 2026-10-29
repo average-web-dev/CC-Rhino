@@ -7,22 +7,15 @@
 // only exist for native (Java) modules.
 
 import readline = require('/rom/lib/readline');
+import callable = require('/rom/lib/internal/callable');
 
 const Base = readline.Interface;
 
-const Interface = function (this: Interface, input: ReadableInput | InterfaceOptions, output?: Writable | null,
-                            completer?: Completer, terminal?: boolean): Interface | void {
-    if (!(this instanceof Interface)) return new Interface(input as any, output, completer, terminal) as any;
-    (Base as unknown as Function).call(this, input, output, completer, terminal);
-} as unknown as PromisesInterfaceConstructor;
-
-Object.setPrototypeOf(Interface.prototype, Base.prototype);
-
-Object.defineProperty(Interface.prototype, 'question', {
-    value: function (this: Interface, query: string, _options?: unknown): Promise<string> {
-        let self = this;
+class Interface extends Base {
+    // @ts-expect-error: returns a promise instead of blocking (or taking a callback).
+    override question(query: string, _options?: object): Promise<string> {
         return new Promise<string>((resolve, reject) => {
-            if (self.closed) {
+            if (this.closed) {
                 let err = new Error('readline was closed');
                 (err as any).code = 'ERR_USE_AFTER_CLOSE';
                 reject(err);
@@ -34,22 +27,23 @@ Object.defineProperty(Interface.prototype, 'question', {
                 (err as any).code = 'ABORT_ERR';
                 reject(err);
             };
-            self.once('close', onClose);
-            (Base.prototype.question as (q: string, cb: (answer: string) => void) => void).call(self, query, (answer: string) => {
-                self.off('close', onClose);
+            this.once('close', onClose);
+            super.question(query, (answer: string) => {
+                this.off('close', onClose);
                 resolve(answer);
             });
         });
-    },
-    writable: true,
-    configurable: true,
-});
+    }
+}
+
+// Like the readline Interface, it also works without `new`.
+const PublicInterface = callable(Interface) as unknown as PromisesInterfaceConstructor;
 
 function createInterface(input: ReadableInput | InterfaceOptions, output?: Writable | null, completer?: Completer,
                          terminal?: boolean): PromisesInterface {
-    return new Interface(input as any, output, completer, terminal) as PromisesInterface;
+    return new Interface(input as any, output, completer, terminal) as unknown as PromisesInterface;
 }
 
-const promises: ReadlinePromisesModule = { Interface, createInterface };
+const promises: ReadlinePromisesModule = { Interface: PublicInterface, createInterface };
 
 export = promises;

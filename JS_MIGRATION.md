@@ -24,10 +24,15 @@ Users write JavaScript (ES6 subset) instead of Lua inside the mod.
 - `ILuaMachine` / `MachineEnvironment` interface surface stays unchanged
 - All Java API implementations (turtle, fs, peripheral, …) kept as-is
 
-**Rhino authoring constraints (for all ROM/bios TS):** this Rhino build mis-scopes block declarations and lacks some ES syntax, so:
-
-- Use **`let`, never `const`, for anything declared inside a loop or `if`/`else` block** — Rhino hoists block `const` to function scope, so a loop redeclares it (`redeclaration of const`) and you cannot shadow it. `const` is only safe at module top level. (`bash.ts` already follows this.)
-- **No spread in calls or array literals** (`f(...xs)`, `[...xs]`) — use `.concat()` / `.apply()` instead.
+**Modern syntax on Rhino (#47):** Rhino 1.9.1 lacks or breaks part of ES2015+ (no `class` syntax, `const` in loops
+keeps its first value, no spread in calls, rest parameters wrong through `apply`, array destructuring ignores
+iterators, no `new.target`, unparenthesized `yield` rejected, …). TypeScript is therefore compiled in two steps by
+`projects/core/src/build/compile-ts.mjs`: tsc (type-check, ES2015 + CommonJS, async lowered to the native `tslib`),
+then Babel with `babel-preset-rhino` (`src/build/babel-preset-rhino/`), which transforms exactly the features Rhino
+gets wrong; its runtime helpers come from the engine's native `babel-helpers` module. ROM, test and user code can use
+classes, spread, `const` in loops, rest/default parameters and destructuring freely. `JSRhinoFeatureTest` pins the
+feature matrix (what is native, what is transformed). Remaining gap: leaving a `for-of` early does not call the
+iterator's `return()` (not transformed, for performance).
 
 **Event loop model (how `events.on` survives a blocking `turtle.dig()`):**
 
@@ -825,7 +830,7 @@ Work done after this plan was written, mostly from the code review in October 20
 - **Async model (#35):** Rhino promise jobs drained in the microtask phase; engine-generated
   `require('<module>/promises')` modules (with `.d.ts` from tsdoclet); `require('async')` (`run`, `unwrap`) and a
   native `tslib`, so TS `async` functions, async generators and `for await` work (ROM `target: es2015` +
-  `importHelpers`, compiled by `src/build/compile-ts.mjs`, which parenthesizes `yield` for Rhino's parser); blocking
+  `importHelpers`, compiled by `src/build/compile-ts.mjs`; since #47 its Babel step parenthesizes `yield`); blocking
   calls inside async code and native callbacks throw a clear error before running; promise reactions owned by the
   registering thread (`JSPromises`, `Waiter`); unhandled rejections fail the owning program (Node ≥ 15) or reach the
   `unhandled_rejection` event; promise-flavour types for every script object.

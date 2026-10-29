@@ -43,6 +43,30 @@ const out2 = sink(80);
 new console.Console(out2).error('to stdout');
 eq(out2.out, 'to stdout\n');
 
+// Console is a class (#47), but like Node's it also works without `new`, and can be extended.
+const ConsoleCtor = console.Console;
+eq(console instanceof ConsoleCtor, true, 'the global console is a Console');
+eq(console.constructor, ConsoleCtor);
+eq(ConsoleCtor.name, 'Console');
+const out3 = sink(80);
+const called = ConsoleCtor({ stdout: out3 });
+eq(called instanceof ConsoleCtor, true, 'Console() without new');
+called.log('called');
+eq(out3.out, 'called\n');
+eq(Object.keys(ConsoleCtor.prototype).slice(0, 6).join(), 'log,info,debug,dirxml,warn,error', 'methods are enumerable');
+eq(ConsoleCtor.prototype.info, ConsoleCtor.prototype.log, 'info is log');
+eq(ConsoleCtor.prototype.error, ConsoleCtor.prototype.warn, 'error is warn');
+class TaggedConsole extends ConsoleCtor {
+    tagged(...data: unknown[]): void {
+        this.log('[tag]', ...data);
+    }
+}
+const out4 = sink(80);
+const tagged = new TaggedConsole({ stdout: out4 });
+eq(tagged instanceof TaggedConsole && tagged instanceof ConsoleCtor, true, 'subclass instances');
+tagged.tagged('x', 1);
+eq(out4.out, '[tag] x 1\n');
+
 // group indentation
 t = fresh();
 t.c.group('G');
