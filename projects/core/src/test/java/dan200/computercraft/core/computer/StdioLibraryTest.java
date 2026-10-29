@@ -13,9 +13,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 /**
- * The Node-style ROM modules {@code util}, {@code console}, {@code process}, {@code readline} and
- * {@code readline/promises} (#34), exercised by the TypeScript programs under {@code src/test/ts/stdio/} on a real
- * computer with the ROM mounted. Readline runs against fake streams, so line editing can be driven with VT input.
+ * The Node-style ROM modules {@code util}, {@code console}, {@code process}, {@code readline},
+ * {@code readline/promises} (#34), {@code timers} and {@code timers/promises} (#45), exercised by the TypeScript
+ * programs under {@code src/test/ts/stdio/} on a real computer with the ROM mounted. Readline runs against fake streams, so line editing can be driven with VT input.
  * <p>
  * The programs are compiled by {@code :core:transpileTestTypeScript} into the {@code ts-fixtures/stdio/} test
  * resources. Each one runs as {@code /test.js}, next to the shared helpers in {@code /prelude.js}.
@@ -57,5 +57,10 @@ class StdioLibraryTest {
     @Test
     void readline() {
         run("readline.js");
+    }
+
+    @Test
+    void timers() {
+        run("timers.js");
     }
 }

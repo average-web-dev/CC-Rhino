@@ -28,6 +28,7 @@ import org.jspecify.annotations.Nullable;
  * @param scheduleTick Called by the machine when it has internal pending work (microtasks, setImmediate) that must
  *                     run even if no CC event arrives. The implementation should enqueue a synthetic tick event so
  *                     the machine's {@code handleEvent} is called again soon. No-op for non-JS runtimes.
+ * @param timers       The computer's game-tick timers, used by the JS timers ({@code setTimeout} &amp; co.).
  * @see IMachine.Factory
  */
 public record MachineEnvironment(
@@ -38,6 +39,7 @@ public record MachineEnvironment(
     MethodSupplier<ApiMethod> luaMethods,
     String hostString,
     @Nullable FileSystem fileSystem,
-    Runnable scheduleTick
+    Runnable scheduleTick,
+    MachineTimers timers
 ) {
 }

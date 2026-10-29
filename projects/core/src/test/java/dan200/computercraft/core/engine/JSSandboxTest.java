@@ -44,11 +44,14 @@ public class JSSandboxTest {
     );
 
     /**
-     * The globals the bios adds, like Node's: {@code process} and {@code console} (ROM modules, see
-     * {@code /rom/lib/internal/globals}). The real boot is checked against {@link #ALLOWED_GLOBALS} plus these by
-     * {@code StdioShellTest}.
+     * The globals the bios adds, like Node's: {@code process}, {@code console}, the timer functions and
+     * {@code queueMicrotask} (ROM modules, see {@code /rom/lib/internal/globals}). The real boot is checked against
+     * {@link #ALLOWED_GLOBALS} plus these by {@code StdioShellTest}.
      */
-    public static final List<String> BIOS_GLOBALS = List.of("console", "process");
+    public static final List<String> BIOS_GLOBALS = List.of(
+        "console", "process",
+        "setTimeout", "clearTimeout", "setInterval", "clearInterval", "setImmediate", "clearImmediate", "queueMicrotask"
+    );
 
     private static final String INTERNAL = JSMethodBridge.INTERNAL_ERROR_MESSAGE;
 

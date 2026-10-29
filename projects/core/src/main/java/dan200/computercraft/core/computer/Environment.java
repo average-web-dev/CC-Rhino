@@ -9,6 +9,7 @@ import dan200.computercraft.api.peripheral.WorkMonitor;
 import dan200.computercraft.api.scripting.IComputerAPI;
 import dan200.computercraft.core.apis.IAPIEnvironment;
 import dan200.computercraft.core.apis.events.CoreEvents;
+import dan200.computercraft.core.engine.MachineTimers;
 import dan200.computercraft.core.filesystem.FileSystem;
 import dan200.computercraft.core.metrics.MetricsObserver;
 import dan200.computercraft.core.terminal.Terminal;
@@ -27,7 +28,7 @@ import java.util.Iterator;
  * <h1>Peripheral</h1>
  * We also keep track of peripherals. These are read on both threads, and only written on the main thread.
  */
-public final class Environment implements IAPIEnvironment {
+public final class Environment implements IAPIEnvironment, MachineTimers {
     private final Computer computer;
     private final ComputerEnvironment environment;
     private final MetricsObserver metrics;
@@ -37,6 +38,8 @@ public final class Environment implements IAPIEnvironment {
 
     private final Int2ObjectMap<Timer> timers = new Int2ObjectOpenHashMap<>();
     private int nextTimerToken = 0;
+    // The tick clock of MachineTimers: advanced by every tick(), together with the timers' countdown.
+    private long tickCount = 0;
 
     Environment(Computer computer, ComputerEnvironment environment) {
         this.computer = computer;
@@ -106,6 +109,7 @@ public final class Environment implements IAPIEnvironment {
      */
     void tick() {
         synchronized (timers) {
+            tickCount++;
             // Countdown all of our active timers
             Iterator<Int2ObjectMap.Entry<Timer>> it = timers.int2ObjectEntrySet().iterator();
             while (it.hasNext()) {
@@ -171,6 +175,23 @@ public final class Environment implements IAPIEnvironment {
         synchronized (timers) {
             timers.remove(id);
         }
+    }
+
+    /**
+     * Start a timer for the JS timers. A timer started for {@code ticks} ticks fires in the {@code ticks}-th call to
+     * {@link #tick()} from now, which advances the clock to {@code tickCount + ticks}.
+     */
+    @Override
+    public Started start(long ticks) {
+        synchronized (timers) {
+            var id = startTimer(ticks);
+            return new Started(id, tickCount + ticks);
+        }
+    }
+
+    @Override
+    public void cancel(int id) {
+        cancelTimer(id);
     }
 
     @Override

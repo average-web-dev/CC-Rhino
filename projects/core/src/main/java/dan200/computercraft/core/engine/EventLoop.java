@@ -17,7 +17,8 @@ import java.util.*;
  * Node.js-inspired event loop for the JS runtime, with green threads.
  *
  * <ul>
- *   <li>Phase 1 — Timers: resumes {@code os.sleep()} continuations whose CC timer fires.</li>
+ *   <li>Phase 1 — Timers: resumes {@code system.sleep()} continuations whose CC timer fires, and runs due
+ *   {@code setTimeout}/{@code setInterval} callbacks ({@link JSTimers}).</li>
  *   <li>Phase 2 — I/O: resumes continuations waiting for a specific CC event (turtle ops, modem, etc.).</li>
  *   <li>Phase 3 — Run queue + microtasks: starts green threads, resumes {@code parallel.waitFor*} and
  *   {@code async.unwrap} callers and drains {@code queueMicrotask()} callbacks and Rhino {@code Promise} jobs (one
@@ -79,6 +80,19 @@ public final class EventLoop {
     /** Reject the promise of an operation that was discarded because the thread that started it was stopped. */
     private record Cancel(Waiter.Promised waiter) implements Ready {}
 
+    /** The application state of a {@code waitIdle} call (see {@link #isIdle}). */
+    record IdleRequest() {}
+
+    /** A keep-alive handle (see {@link #createHandle}). */
+    private static final class Handle {
+        final JSThread owner;
+        boolean ref = true;
+
+        Handle(JSThread owner) {
+            this.owner = owner;
+        }
+    }
+
     @FunctionalInterface
     private interface Body {
         void run();
@@ -112,6 +126,16 @@ public final class EventLoop {
     // async.unwrap callers waiting for a promise to settle
     private final List<Parked> awaiting = new ArrayList<>();
 
+    // waitIdle callers waiting for their thread to become idle (see isIdle)
+    private final List<Parked> idleWaiters = new ArrayList<>();
+
+    // setTimeout/setInterval (#45)
+    private final JSTimers timers;
+
+    // Keep-alive handles held by ROM code, e.g. for a program reading stdin
+    private final Map<Integer, Handle> handles = new HashMap<>();
+    private int nextHandleId = 1;
+
     // parallel/promises groups, so their promise can be rejected if the calling thread is stopped
     private final List<JSTaskGroup> promiseGroups = new ArrayList<>();
 
@@ -135,9 +159,14 @@ public final class EventLoop {
     // it may never propagate to us; every piece of JS checks this afterwards instead.
     private @Nullable JSAbort abort;
 
-    EventLoop(JSCallShim shim) {
+    EventLoop(JSCallShim shim, MachineTimers machineTimers) {
         this.shim = shim;
         emitter = new JSEventEmitter(this);
+        timers = new JSTimers(machineTimers);
+    }
+
+    JSTimers timers() {
+        return timers;
     }
 
     JSEventEmitter emitter() {
@@ -186,6 +215,7 @@ public final class EventLoop {
         }
         pendingYields.removeIf(p -> takeTerminable(p.strand(), p.waiter(), targets));
         awaiting.removeIf(p -> takeTerminable(p.strand(), p.waiter(), targets));
+        idleWaiters.removeIf(p -> takeTerminable(p.strand(), p.waiter(), targets));
 
         for (var target : targets) {
             ready.add(new Resume(target.strand(), target.waiter(), newError(cx, scope, "Error", TERMINATED), true));
@@ -266,6 +296,9 @@ public final class EventLoop {
         }
         pendingYields.removeIf(p -> discard(p.strand(), p.waiter(), cancelled));
         awaiting.removeIf(p -> p.strand().thread().isDead());
+        idleWaiters.removeIf(p -> p.strand().thread().isDead());
+        timers.purge();
+        handles.values().removeIf(h -> h.owner.isDead());
         promiseGroups.removeIf(g -> g.settled || discard(g.waiter, g.wake, cancelled));
         microtaskQueue.removeIf(m -> m instanceof Task t && t.owner().isDead());
         checkMap.values().removeIf(t -> t.owner().isDead());
@@ -304,6 +337,9 @@ public final class EventLoop {
             startGroup(strand, waiter, request);
         } else if (state instanceof JSPromises.Await await) {
             awaitPromise(cx, scope, new Parked(strand, waiter), await.thenable());
+        } else if (state instanceof IdleRequest) {
+            // Checked once the run queue and microtasks are drained (see checkIdle).
+            idleWaiters.add(new Parked(strand, waiter));
         } else if (state instanceof MethodResult mr) {
             parkOperation(strand, waiter, mr);
         }
@@ -406,6 +442,87 @@ public final class EventLoop {
     }
 
     public void cancelImmediate(int id) { checkMap.remove(id); }
+
+    // ------------------------------------------------------------------ keep-alive
+
+    /**
+     * Create a keep-alive handle owned by the current thread: while it is ref'd, the thread is not idle (see
+     * {@link #isIdle}). Used by ROM code for work the engine cannot see, such as a program reading stdin. A handle of a
+     * stopped thread is discarded.
+     *
+     * @return The handle's id, or {@code -1} if the current thread has been stopped.
+     */
+    int createHandle() {
+        var owner = currentThread();
+        if (owner.isDead()) return -1;
+        var id = nextHandleId++;
+        handles.put(id, new Handle(owner));
+        return id;
+    }
+
+    void setHandleRef(int id, boolean ref) {
+        var handle = handles.get(id);
+        if (handle != null) handle.ref = ref;
+    }
+
+    void closeHandle(int id) {
+        handles.remove(id);
+    }
+
+    /** Wake every {@code waitIdle} caller, which then returns {@code false} (e.g. after {@code process.exit}). */
+    void wakeIdle() {
+        for (var parked : idleWaiters) ready.add(new Resume(parked.strand(), parked.waiter(), false, false));
+        idleWaiters.clear();
+    }
+
+    /**
+     * Whether {@code thread} is idle, like a Node process that has nothing left to do and exits: it has no child
+     * threads and none of its strands has <em>ref'd</em> pending work. Ref'd work is
+     * <ul>
+     *   <li>a blocked call (sleep, I/O wait, yield, {@code async.unwrap}, …) and a pending {@code /promises}
+     *   operation,</li>
+     *   <li>queued microtasks, {@code setImmediate} callbacks and resumptions,</li>
+     *   <li>a ref'd {@code setTimeout}/{@code setInterval} timer, and a ref'd keep-alive handle (see
+     *   {@link #createHandle}).</li>
+     * </ul>
+     * Plain pending promises and {@code events.on} listeners do not keep a thread busy, and neither do
+     * {@code waitIdle} callers. Work of threads that returned counts for the thread that inherited it.
+     */
+    boolean isIdle(JSThread thread) {
+        if (!thread.children.isEmpty()) return false;
+        for (var parked : timerMap.values()) if (owns(thread, parked.strand())) return false;
+        for (var list : ioMap.values()) {
+            for (var entry : list) if (owns(thread, entry.strand())) return false;
+        }
+        for (var parked : pendingYields) if (owns(thread, parked.strand())) return false;
+        for (var parked : awaiting) if (owns(thread, parked.strand())) return false;
+        for (var group : promiseGroups) if (!group.settled && owns(thread, group.waiter)) return false;
+        for (var task : checkMap.values()) if (task.owner().effective() == thread) return false;
+        for (var micro : microtaskQueue) {
+            if (micro instanceof Task task && task.owner().effective() == thread) return false;
+        }
+        for (var item : ready) {
+            if (item instanceof Resume resume && owns(thread, resume.strand())) return false;
+        }
+        if (timers.hasRef(thread)) return false;
+        for (var handle : handles.values()) if (handle.ref && handle.owner.effective() == thread) return false;
+        return true;
+    }
+
+    private static boolean owns(JSThread thread, Strand strand) {
+        return strand.thread().effective() == thread;
+    }
+
+    /** Resume the {@code waitIdle} callers whose thread has become idle, with {@code true}. */
+    private void checkIdle() {
+        if (idleWaiters.isEmpty()) return;
+        for (var it = idleWaiters.iterator(); it.hasNext(); ) {
+            var parked = it.next();
+            if (!isIdle(parked.strand().thread().effective())) continue;
+            it.remove();
+            ready.add(new Resume(parked.strand(), parked.waiter(), true, false));
+        }
+    }
 
     // ------------------------------------------------------------------ async code
 
@@ -690,6 +807,27 @@ public final class EventLoop {
     }
 
     /**
+     * Phase 1: run the {@code setTimeout}/{@code setInterval} callbacks that are due now that the CC timer
+     * {@code ccId} fired: every timer due by the same tick, in due-time order (see {@link JSTimers}). Each callback
+     * runs as a strand of the thread that created the timer, followed by the microtasks it queued, as in Node.
+     */
+    MachineResult drainJsTimers(Context cx, Scriptable scope, int ccId) {
+        var limit = timers.dueBy(ccId);
+        if (limit < 0) return MachineResult.OK;
+        JSTimers.Timer timer;
+        while ((timer = timers.next(limit)) != null) {
+            if (timer.owner.isDead()) continue;
+            var fn = timer.fn;
+            var r = run(cx, scope, new Strand(timer.owner, false),
+                () -> cx.callFunctionWithContinuations(fn, scope, NO_ARGS));
+            if (r.isError()) return r;
+            r = drainMicrotasks(cx, scope);
+            if (r.isError()) return r;
+        }
+        return MachineResult.OK;
+    }
+
+    /**
      * Phase 2: resume all I/O continuations whose event-filter matches {@code eventName}.
      * {@code fullArgs} must be {@code [eventName, ...originalArgs]}.
      * Automatically drains the run queue and microtasks afterward (Phase 3).
@@ -772,6 +910,7 @@ public final class EventLoop {
                 // running listeners, watching new promises).
                 var r = checkRejections(cx, scope);
                 if (r.isError()) return r;
+                if (ready.isEmpty() && microtaskQueue.isEmpty()) checkIdle();
                 if (ready.isEmpty() && microtaskQueue.isEmpty()) return MachineResult.OK;
                 continue;
             }
@@ -958,6 +1097,9 @@ public final class EventLoop {
         microtaskQueue.clear();
         checkMap.clear();
         awaiting.clear();
+        idleWaiters.clear();
+        timers.clear();
+        handles.clear();
         promiseGroups.clear();
         freshPromises.clear();
         rejections.clear();

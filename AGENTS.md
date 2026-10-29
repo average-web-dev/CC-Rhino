@@ -82,6 +82,8 @@ part of `assemble`.
 |---|---|
 | JS machine (Rhino context, safepoint, sandbox) | `projects/core/src/main/java/dan200/computercraft/core/engine/JSMachine.java` |
 | Event loop (timers / IO / microtasks / yields / setImmediate) | `core/engine/EventLoop.java` |
+| Node timers (`setTimeout` & co., #45): native queue + `internal/loop` module, ROM `timers` / `timers/promises` | `core/engine/JSTimers.java`, `JSLoopModule.java`, `MachineTimers.java` (tick clock, `computer/Environment`), `src/ts/rom/lib/timers.ts`, `timers/promises.ts`; types `src/ts/types/timers.d.ts` |
+| Job lifetime / keep-alive (#46): `EventLoop.isIdle`, `waitIdle`, keep-alive handles; bash job wait | `core/engine/EventLoop.java`, `JSLoopModule.java`, `src/ts/rom/lib/internal/tty.ts` (`waitForJob`), `rom/bin/bash.ts` |
 | Green threads (`parallel` module), thread ownership/cancellation, Ctrl+T | `core/engine/JSParallel.java`, `JSThread.java`, `JSTaskGroup.java`, `EventLoop.java` |
 | `require()` resolver + module cache (`require.uncached`, `require.resolve`) | `core/engine/JSRequire.java` (+ `REQUIRE_SETUP_JS` in `JSMachine`) |
 | Java ⇄ JS value conversion (records, cycle-safe tables, `ArrayTable`) | `core/engine/JSValues.java`, `JSArguments.java` |
@@ -106,9 +108,11 @@ part of `assemble`.
 
 ## Runtime model (short)
 
-- Globals, like Node: the engine injects only `require`; the bios adds `process` and `console`
-  (`/rom/lib/internal/globals`, also `require('process')` / `require('console')`, same objects). There is no
-  `print`/`write`: use `console.log` / `process.stdout.write`. Every computer API is a native module:
+- Globals, like Node: the engine injects only `require`; the bios adds `process`, `console`, the timer functions
+  (`setTimeout`/`clearTimeout`/`setInterval`/`clearInterval`/`setImmediate`/`clearImmediate`) and `queueMicrotask`
+  (`/rom/lib/internal/globals`, also `require('process')` / `require('console')` / `require('timers')`, same
+  objects; the list is pinned by `JSSandboxTest.BIOS_GLOBALS`). There is no `print`/`write`: use `console.log` /
+  `process.stdout.write`. There is no global `sleep`: `require('system').sleep(ticks)`. Every computer API is a native module:
   `require('fs')`, `require('system')`, `require('events')`, `require('turtle')` … Native modules only exist when
   the hardware is present (e.g. `turtle` only on turtles).
 - Node-style stdio (#34) is ROM TypeScript in `/rom/lib`: `process`, `console`, `util`, `readline`,
@@ -118,10 +122,24 @@ part of `assemble`.
   `char`/`key`/`paste` into a Node TTY stream (cooked line discipline or raw VT sequences, `'keypress'` events). Its
   input listeners are registered by the bios (root thread) first; `process.stdin.on(...)` registers native listeners
   in the *calling* thread, so a program's stdin handlers may block and die with the program. bash runs each program
-  as a job (`tty.beginJob/waitForJob/endJob`): fresh stdin, `process.argv`, cwd restored afterwards, and the program
-  keeps running while it reads stdin (like a Node process) until it closes its interface or calls `process.exit()`.
-  `readline.Interface#question` without a callback **blocks**; `readline/promises` returns a promise (hand-written —
+  as a job (`tty.beginJob/waitForJob/endJob`): fresh stdin, `process.argv`, cwd restored afterwards; see job
+  lifetime below. `readline.Interface#question` without a callback **blocks**; `readline/promises` returns a promise (hand-written —
   the engine's generated `/promises` modules exist only for native modules).
+- Timers (#45): `setTimeout` & co. are ROM TypeScript (`/rom/lib/timers`, `timers/promises`) over a native queue
+  (`JSTimers`, via the engine-internal `internal/loop` module). Delays are rounded up to whole ticks (≥ 1 tick, so
+  `setTimeout(cb, 0)` waits for the next tick); one CC timer per pending timer; timers due in the same tick run in
+  due-time/creation order (`MachineTimers.start` reports the due tick, as CC queues same-tick `timer` events in
+  hash order). Callbacks run in the creating thread (may block, discarded when it stops); they return a Node-like
+  `Timeout` (`ref`/`unref`/`hasRef`/`refresh`/`close`, `Number(t)` = id).
+- Job lifetime (#46): after a program's `main()` / top-level code returns, `tty.waitForJob` blocks in
+  `internal/loop.waitIdle()` until the job's thread is idle (`EventLoop.isIdle`): no child threads and no *ref'd*
+  pending work — blocked calls, pending `/promises` operations, queued immediates/microtasks, ref'd timers, ref'd
+  keep-alive handles (`handle()`/`handleRef`/`handleClose`; tty holds one per `process.stdin` listener while stdin
+  flows). Plain pending promises and `events.on` listeners don't count (Node semantics). If `main()` returned a
+  thenable (`async main`, #44), its rejection is the program's error (exit code 1). `process.exit()` wakes the wait
+  (`wakeIdle`). Then `waitForJob` throws the job-end signal (`tty.exitCodeOf` → `null` for a normal end), which
+  *stops* the job's thread: everything it left behind (listeners, unref'd timers, reactions, spawned threads) is
+  discarded and nothing runs after the prompt. Daemons that outlive their program are not supported yet.
 - Blocking calls look synchronous. A Java method returns a `MethodResult` with a destination
   (`TIMER` / `IO` / `YIELD`); `JSMethodBridge` captures a Rhino continuation, `EventLoop` parks it in the matching
   bucket, and `JSMachine.handleEvent` resumes it when the event arrives. Other `events.on` listeners keep running
@@ -189,7 +207,8 @@ part of `assemble`.
   (`constructor`, `toString`, …): in `util.ts` a `let constructor` resolved to `Object`. In plain JS generators (`async.run`), parenthesize `yield` inside expressions
   (`f((yield p))`, `x = (yield p), y`).
 - Programs in `rom/bin` / `rom/os/bin` export `main(args, cwd)` (same as `process.argv.slice(2)` /
-  `process.cwd()`); bash calls it, or just runs the module's top-level code (Node style). Line-oriented programs use
+  `process.cwd()`); bash calls it, or just runs the module's top-level code (Node style). `main` may be `async`
+  (return a promise); the exit code is `process.exitCode`, not `main`'s return value. Line-oriented programs use
   `readline` / `process.stdin`; full-screen programs (`edit`) may still listen to raw `char`/`key` events — bash
   pauses its own interface while a program runs. ROM code cannot use `class` syntax (Rhino): Node-style classes
   (`Console`, `readline.Interface`, the internal `EventEmitter`) are constructor functions with prototypes.

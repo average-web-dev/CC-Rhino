@@ -372,7 +372,8 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
                 scriptMethods,
                 computer.getGlobalEnvironment().getHostString(),
                 computer.getFileSystem(),
-                () -> queueEvent("cc:js-tick", null)
+                () -> queueEvent("cc:js-tick", null),
+                computer.getEnvironment()
             ), bios);
         } catch (IOException e) {
             LOG.error("Failed to read bios.js", e);

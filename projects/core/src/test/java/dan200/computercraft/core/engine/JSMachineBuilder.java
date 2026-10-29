@@ -50,6 +50,7 @@ final class JSMachineBuilder {
     private @Nullable FileSystem fileSystem;
     private Runnable scheduleTick = () -> {
     };
+    private MachineTimers timers = MachineTimers.NONE;
     private final List<IComputerAPI> apis = new ArrayList<>();
     private final Map<Object, Map<String, ApiMethod>> methods = new HashMap<>();
 
@@ -71,6 +72,12 @@ final class JSMachineBuilder {
     /** Called whenever the machine asks for a {@code cc:js-tick} (see {@link MachineEnvironment#scheduleTick()}). */
     JSMachineBuilder scheduleTick(Runnable scheduleTick) {
         this.scheduleTick = scheduleTick;
+        return this;
+    }
+
+    /** The game-tick timers behind {@code setTimeout} &amp; co. (see {@link MachineEnvironment#timers()}). */
+    JSMachineBuilder timers(MachineTimers timers) {
+        this.timers = timers;
         return this;
     }
 
@@ -126,7 +133,7 @@ final class JSMachineBuilder {
         };
 
         var env = new MachineEnvironment(
-            context, MetricsObserver.discard(), timeout, apis, supplier, "test", fileSystem, scheduleTick);
+            context, MetricsObserver.discard(), timeout, apis, supplier, "test", fileSystem, scheduleTick, timers);
         var stream = new ByteArrayInputStream(bios.getBytes(StandardCharsets.UTF_8));
         return new JSMachine(env, stream);
     }

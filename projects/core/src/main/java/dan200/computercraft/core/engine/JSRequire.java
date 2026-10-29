@@ -63,7 +63,7 @@ final class JSRequire extends ScriptableObject {
      * be required with a {@code node:} prefix ({@code require('node:util')}).
      */
     static final Set<String> ROM_CORE_MODULES = Set.of(
-        "console", "process", "util", "readline", "readline/promises"
+        "console", "process", "util", "readline", "readline/promises", "timers", "timers/promises"
     );
 
     private static final String NODE_PREFIX = "node:";

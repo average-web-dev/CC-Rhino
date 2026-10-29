@@ -131,7 +131,7 @@ public class JSMachine implements IMachine {
             biosScript = cx.compileString(biosSource, "bios.js", 1, null);
 
             var shim = new JSCallShim(cx, scope);
-            eventLoop = new EventLoop(shim);
+            eventLoop = new EventLoop(shim, environment.timers());
             emitter = eventLoop.emitter();
             // Lets Java code running inside the machine deliver events synchronously (JSEventEmitter.fireNow).
             emitter.install(cx, scope);
@@ -172,6 +172,8 @@ public class JSMachine implements IMachine {
             // promises already, so they have no /promises flavour.
             loader.registerNative("async", promises.asyncModule());
             loader.registerNative("tslib", promises.tslibModule());
+            // Engine-internal primitives of the ROM's timers module and the shell's job control (keep-alive).
+            loader.registerNative("internal/loop", JSLoopModule.build(cx, scope, shim, eventLoop));
 
             // Expose loader, run the JS require() setup, then remove the loader from global scope.
             // The setup script captures a reference via closure so require() still works after deletion.
@@ -254,6 +256,8 @@ public class JSMachine implements IMachine {
             // Phase 1 — Timers: wake up os.sleep() continuations whose CC timer just fired.
             if ("timer".equals(eventName) && rawArgs.length >= 1 && rawArgs[0] instanceof Number n) {
                 var r = eventLoop.drainTimers(cx, scope, n.intValue());
+                if (r.isError()) { close(); return r; }
+                r = eventLoop.drainJsTimers(cx, scope, n.intValue());
                 if (r.isError()) { close(); return r; }
             }
 
