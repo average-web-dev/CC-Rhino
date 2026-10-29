@@ -31,8 +31,7 @@ let range = {
 check("custom iterable", Array.from(range), [1, 2, 3]);
 check("spread of a custom iterable", [...range], [1, 2, 3]);
 
-// Not checked: leaving a for-of early does not call the iterator's return() on Rhino (so a generator's `finally`
-// does not run). babel-preset-rhino does not transform for-of for that; see JSRhinoFeatureTest.
+// Leaving a for-of early (closing the iterator) is checked in iterator-closing.ts.
 
 let symbol = Symbol("description");
 check("Symbol", [typeof symbol, symbol.toString()], ["symbol", "Symbol(description)"]);

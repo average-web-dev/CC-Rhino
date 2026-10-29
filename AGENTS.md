@@ -67,8 +67,10 @@ part of `assemble`.
   generators + the native `tslib`, class fields/`#private`/static blocks, `?.`, `??`, object rest, and handles
   `export =` / `import x = require()`), then Babel runs **`babel-preset-rhino`** (`src/build/babel-preset-rhino/`)
   on tsc's output in memory: exactly the transforms Rhino 1.9.1 needs (classes, block scoping in
-  loops, spread in calls/`new`, rest/default parameters, destructuring, `new.target`, plus its own plugin that
-  parenthesizes every `yield`). Generators stay native (no regenerator). Babel's runtime helpers are not inlined: files
+  loops, spread in calls/`new`, rest/default parameters, destructuring, `new.target`, plus its own plugins that
+  parenthesize every `yield` and make leaving a `for-of` early close the iterator (`for-of.mjs`: the loop stays
+  native over an iterator obtained by the `rhinoForOf` helper, wrapped in `try`/`finally` — never `catch`, which
+  halves the interpreter's speed for the whole function — with arrays iterated as is). Generators stay native (no regenerator). Babel's runtime helpers are not inlined: files
   get `var _babelHelpers = require("babel-helpers")`, a native engine module (`JSBabelHelpers`) generated at build time
   from `@babel/helpers` by `:core:generateBabelHelpers` (`babel-preset-rhino/helpers.mjs`: the shipped helper list +
   Rhino fixes); a helper outside that list fails the build. Non-module files (the bios) use `require("babel-helpers").x`
@@ -214,10 +216,10 @@ part of `assemble`.
 - **Writing ROM/test TS:** modern syntax works (#47): `class` (fields, `#private`, static blocks, `extends Error`/`Map`),
   `const`/`let` anywhere, spread, rest/default parameters (also in functions called through `apply`), destructuring,
   `new.target` — Babel (`babel-preset-rhino`) rewrites what Rhino 1.9.1 gets wrong. TS targets ES2015 (`async` →
-  generators + native `tslib`), CommonJS (`export = {...}`). What is left: leaving a `for-of` early does not call the
-  iterator's `return()` (a generator's `finally` does not run); decorators and `using` are unsupported (a missing
+  generators + native `tslib`), CommonJS (`export = {...}`). Leaving a `for-of` early closes the iterator (a generator's
+  `finally` runs). What is left: decorators and `using` are unsupported (a missing
   helper fails the build). Hand-written JS that bypasses the pipeline (Java text blocks, engine-test snippets) still
-  has to respect Rhino: no `class`, no spread in calls, no `const` in loops, `function*` lacks `Function.prototype`,
+  has to respect Rhino: no `class`, no spread in calls, no `const` in loops, `for-of` never closes its iterator, `function*` lacks `Function.prototype`,
   rest parameters break through `apply`, parenthesize `yield` inside expressions (`f((yield p))`).
 - Programs in `rom/bin` / `rom/os/bin` export `main(args, cwd)` (same as `process.argv.slice(2)` /
   `process.cwd()`); bash calls it, or just runs the module's top-level code (Node style). `main` may be `async`

@@ -44,8 +44,14 @@ function withDependencies(names) {
     return all;
 }
 
+/** Helpers of babel-preset-rhino's own plugins, defined in RHINO_HELPERS below. */
+const RHINO_HELPER_NAMES = ["rhinoForOf", "rhinoForOfClose", "rhinoForOfAbort"];
+
+/** The Babel helpers the `babel-helpers` module provides. */
+const BABEL_HELPERS = withDependencies(USED_HELPERS);
+
 /** Every helper the `babel-helpers` module provides. */
-export const HELPERS = withDependencies(USED_HELPERS);
+export const HELPERS = new Set([...BABEL_HELPERS, ...RHINO_HELPER_NAMES]);
 
 /**
  * Fixes for Rhino, applied after Babel's own definitions. `babelHelpers` is the module object; helpers call each other
@@ -74,14 +80,57 @@ babelHelpers.get = function (target, property, receiver) {
 `;
 
 /**
+ * The helpers of babel-preset-rhino's own plugins (see RHINO_HELPER_NAMES).
+ */
+const RHINO_HELPERS = `
+// for-of that closes its iterator when the loop is left early (./for-of.mjs). rhinoForOf returns what the native loop
+// iterates: a plain array as it is (its iterator has nothing to close), otherwise the iterator itself.
+var arrayValues = [][Symbol.iterator];
+function IteratorWrapper(iterator) {
+  var next = iterator.next;
+  this.iterator = iterator;
+  this.next = function () { return next.call(iterator); };
+}
+IteratorWrapper.prototype[Symbol.iterator] = function () { return this; };
+babelHelpers.rhinoForOf = function (o) {
+  if (Array.isArray(o) && o[Symbol.iterator] === arrayValues) return o;
+  var method = o == null ? undefined : o[Symbol.iterator];
+  if (typeof method !== "function") {
+    throw new TypeError((typeof o === "symbol" ? o.toString() : String(o)) + " is not iterable");
+  }
+  var iterator = method.call(o);
+  if (Object(iterator) !== iterator) throw new TypeError("Result of the Symbol.iterator method is not an object");
+  // Rhino's for-of asks the iterator for its iterator again: wrap one that is not iterable itself.
+  return typeof iterator[Symbol.iterator] === "function" ? iterator : new IteratorWrapper(iterator);
+};
+// The loop was left by break, continue or return: errors of return() propagate.
+babelHelpers.rhinoForOfClose = function (iterator) {
+  if (Array.isArray(iterator)) return;
+  if (iterator instanceof IteratorWrapper) iterator = iterator.iterator;
+  var method = iterator["return"];
+  if (method == null) return;
+  var result = method.call(iterator);
+  if (Object(result) !== result) throw new TypeError("Iterator result " + result + " is not an object");
+};
+// The loop was left by an exception: that exception wins over errors of return().
+babelHelpers.rhinoForOfAbort = function (iterator) {
+  try {
+    babelHelpers.rhinoForOfClose(iterator);
+  } catch (e) {
+    // Ignored, as the spec says.
+  }
+};
+`;
+
+/**
  * The source of the `babel-helpers` module: a script whose completion value is the helpers object. It declares no
  * globals.
  */
 export function buildHelpersModule() {
-    const helpers = buildExternalHelpers([...HELPERS].sort(), "var").replace(/\nbabelHelpers;\s*$/, "\n");
+    const helpers = buildExternalHelpers([...BABEL_HELPERS].sort(), "var").replace(/\nbabelHelpers;\s*$/, "\n");
     if (helpers.includes("\nbabelHelpers;")) throw new Error("Unexpected buildExternalHelpers output");
 
-    const source = `(function () {\n"use strict";\n${helpers}\n${RHINO_OVERRIDES}\nreturn babelHelpers;\n})();\n`;
+    const source = `(function () {\n"use strict";\n${helpers}\n${RHINO_OVERRIDES}\n${RHINO_HELPERS}\nreturn babelHelpers;\n})();\n`;
 
     // The helpers are written in (mostly) ES5, but run them through the preset's transforms anyway, without helper
     // imports: requesting a helper here fails the build.

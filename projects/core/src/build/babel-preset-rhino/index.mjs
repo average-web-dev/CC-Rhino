@@ -9,7 +9,7 @@
 //
 // Natively supported (not transformed): arrow functions, template literals (also tagged), let/const outside loops,
 // default parameters, simple destructuring, object spread, array spread, optional chaining, `??`, `**`, logical
-// assignment, numeric separators, computed/shorthand properties and methods, for-of over iterables, Symbol,
+// assignment, numeric separators, computed/shorthand properties and methods, Symbol,
 // generators, optional catch binding, BigInt.
 //
 // Transformed, because Rhino lacks or breaks them:
@@ -21,13 +21,13 @@
 // - array destructuring (ignores the iterator protocol, rest elements are a syntax error), object rest
 // - `new.target` (syntax error)
 // - unparenthesized `yield` in argument lists, and its operand being parsed as a comma expression (own plugin)
+// - for-of: leaving a loop early (break, return, labelled jumps, throw) does not call the iterator's return(), so a
+//   generator's `finally` does not run (own plugin, ./for-of.mjs, with an index-loop fast path for arrays)
 //
 // Worked around in the helpers module instead (see RHINO_OVERRIDES in ./helpers.mjs): Reflect.get ignores its receiver
 // (`super.getter`), and reading `stack` of an Error whose prototype was changed throws a Java ClassCastException
 // (`class E extends Error`).
 //
-// Known gap, deliberately not transformed: leaving a for-of early (break, return, throw) does not call the iterator's
-// return(), so a generator's `finally` does not run. transform-for-of would wrap every for-of in try/finally.
 //
 // Not handled here: async functions and async generators. Rhino lacks them, but the CC: Rhino pipeline lets tsc lower
 // them (target es2015 + importHelpers → `__awaiter` & co. from the engine's native `tslib`), which keeps generators
@@ -49,6 +49,7 @@ import blockScoping from "@babel/plugin-transform-block-scoping";
 import newTarget from "@babel/plugin-transform-new-target";
 
 import externalHelpers from "./external-helpers.mjs";
+import forOf from "./for-of.mjs";
 import parenthesizeYield from "./parenthesize-yield.mjs";
 import { HELPERS_MODULE } from "./helpers.mjs";
 
@@ -72,6 +73,9 @@ export default function babelPresetRhino(api, options = {}) {
             parameters,
             classes,
             spread,
+            // Before destructuring and block scoping: the loop variable becomes a declaration in the loop body, which
+            // they then transform.
+            forOf,
             destructuring,
             blockScoping,
             newTarget,
