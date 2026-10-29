@@ -226,7 +226,7 @@ The CC scheduler remains free to process other events while the main-thread task
 - [x] **6.6** `JSMachine` constructor registers every CC API as a **native module** in `JSRequire` (not as a global):
   - `jsRequire.registerNative(api.getModuleName(), JSAPIBuilder.build(api))` for each API in `env.apis()`
   - Split the CC `os` API: the EventEmitter `on/once/off` + `emit`/timers/alarms become the `events` module; the rest (shutdown, reboot, label, clock, in-game time) become the `process` module
-  - The only global set on `scope` is `require` itself (plus the global timer functions `setTimeout`/`setInterval`/`clearTimeout`/`clearInterval` and `sleep`)
+  - The only global set on `scope` is `require` itself; the bios adds `process`, `console` and the Node timer functions (`setTimeout`/`setInterval`/`setImmediate` + clear functions, `queueMicrotask`; #45). There is no global `sleep` (`system.sleep(ticks)`)
 - [x] **6.7** `bios.ts` updated — loads `term` via `require`; `print` is a plain TS helper defined in `bios.ts`. Terminal coordinates are **0-based** and `getCursorPos()` returns an object:
 
   ```ts
@@ -302,7 +302,7 @@ The build pipeline is already running from Phase 1.5. This phase adds typed modu
 so the TypeScript compiler can check all ROM/bios sources against the actual CC API surface.
 Defer until the API surface has stabilised (after Phase 9).
 
-- [x] **10.1** Typed module declarations for all CC native modules live in `projects/core/src/ts/types/` — one `.d.ts` per module (`fs`, `path`, `process`, `events`, `http`, `term`, `redstone`, `peripheral`, `turtle`, `commands`, `pocket`), plus `globals.d.ts` (`require` overloads, timers, `sleep`) and `modules.d.ts` (ambient `declare module` for `import` syntax). The `bundleTypeDeclarations` Gradle task collects all `.d.ts` into `build/generated/types/` for publishing as an npm types package. See [JS_API_REDESIGN.md](JS_API_REDESIGN.md).
+- [x] **10.1** Typed module declarations for all CC native modules live in `projects/core/src/ts/types/` — one `.d.ts` per module (`fs`, `path`, `process`, `events`, `http`, `term`, `redstone`, `peripheral`, `turtle`, `commands`, `pocket`), plus `globals.d.ts` (`require` overloads), `timers.d.ts` (timer globals, `timers`, `timers/promises`) and `modules.d.ts` (ambient `declare module` for `import` syntax). The `bundleTypeDeclarations` Gradle task collects all `.d.ts` into `build/generated/types/` for publishing as an npm types package. See [JS_API_REDESIGN.md](JS_API_REDESIGN.md).
 - [x] **10.2** Model blocking calls as plain synchronous return types — "can-fail" actions return `Result` `{ success: boolean, reason?: string }` (not a tuple, not a Promise; the generated `<module>/promises` flavour wraps the same types in `Promise<T>`, #35)
 - [x] **10.3** Keep `.d.ts` in sync as Phase 11 / Phase 9 reshape the API surface — `transpileTypeScript` (part of `assemble`) type-checks the ROM against freshly generated types, and the tsdoclet fails on undocumented `unknown`s
 - [x] **10.4** Audit every `@LuaFunction` method across all API classes (`TurtleMethods`, `FsMethods`, `RedstoneMethods`, `PeripheralAPI`, `HttpMethods`, `PocketAPI`, `CommandsMethods`, etc.) and migrate:
@@ -559,7 +559,7 @@ Each continuation is bucketed by its phase rather than kept in a single flat lis
 | Modules | `require(id)`: checks native registry first, then CC filesystem; `require.paths = ["/rom/lib", "/rom/bin"]` |
 | Native modules | Java APIs registered by name in `JSRequire.nativeModules`; CC `os` split into `process` + `events` modules; engine internals (emitter, scheduler) exposed via `require('events')` through `EventsAPI` |
 | Continuation routing | `MethodResult.Bucket` enum encodes the event-loop phase: `TIMER` → Phase 1 timer map; `IO` → Phase 2 I/O map; `YIELD` → Phase 4 yield queue; `null` → return immediately (no continuation captured) |
-| Event loop — Phase 1 Timers | `EventLoop.drainTimers()` — resumes `os.sleep()` continuations keyed by CC timer ID; O(1) lookup via `timerMap` |
+| Event loop — Phase 1 Timers | `EventLoop.drainTimers()` — resumes `os.sleep()` continuations keyed by CC timer ID; O(1) lookup via `timerMap`. `EventLoop.drainJsTimers()` — runs due `setTimeout`/`setInterval` callbacks (`JSTimers`) in due-time order |
 | Event loop — Phase 2 I/O | `EventLoop.drainIO()` — resumes continuations matched by event-filter string (or null wildcard); callback chain re-bucketed if not yet complete |
 | Event loop — Phase 3 Microtasks | `EventLoop.drainMicrotasks()` — drains `queueMicrotask()` callbacks after every other phase; new microtasks enqueued during draining also run this cycle |
 | Event loop — Phase 4 Yields | `EventLoop.drainYields()` — resumes `os.yield()` continuations with `undefined`; snapshot-clear so re-yields land in the next tick |

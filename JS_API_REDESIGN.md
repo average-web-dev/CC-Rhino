@@ -129,7 +129,7 @@ In Node these do **not** belong in `fs`. Proposal: a dedicated `path` module.
 ---
 
 The old `os` is split up: **`system`** (computer control/info), **`events`** (event bus),
-and global **timer functions** (Node style). Node's `process` exists as well, but for the terminal streams, argv,
+and global **timer functions** (Node style, `setTimeout` & co.). Node's `process` exists as well, but for the terminal streams, argv,
 env, cwd and exit codes (see [Node-style stdio](#node-style-stdio-process-console-util-readline-34)).
 
 ## `system` — computer control & info
@@ -205,12 +205,53 @@ unchanged, and `emit` returns whether there were any. Details:
 | `setAlarm` | `time` | `number` (id) | fires `alarm` event (in-game time) |
 | `cancelAlarm` | `id` | `void` | |
 
-## Global timer functions (Node style)
+## Timers: `setTimeout` & co. (Node style, #45)
 
-In Node these are **globals**, not a module — layered on top of the CC timer mechanism.
+Like in Node these are **globals** (installed by the bios, `/rom/lib/internal/globals`), and also
+`require('timers')` / `require('node:timers')` (the same functions). ROM TypeScript in `/rom/lib/timers` on top of a
+native timer queue (`JSTimers` in the event loop, reached through the engine-internal `internal/loop` module).
 
-| Function | Parameters | Return | Kind |
+| Function | Parameters | Return | Note |
 |---|---|---|---|
+| `setTimeout` | `cb, ms?, ...args` | `Timeout` | `cb.apply(timeout, args)` once after `ms` |
+| `setInterval` | `cb, ms?, ...args` | `Timeout` | every `ms` until cleared |
+| `clearTimeout` / `clearInterval` | `Timeout \| id` | `void` | also takes the numeric id (`Number(timeout)`) or it as a string; anything else is ignored |
+| `setImmediate` | `cb, ...args` | `Immediate` | next tick, check phase (before timers) |
+| `clearImmediate` | `Immediate` | `void` | |
+| `queueMicrotask` | `cb` | `void` | global only, as in Node |
+
+- **Ticks**: `ms` is rounded up to whole game ticks (1 tick = 50 ms), minimum one tick — `setTimeout(cb, 0)` runs on
+  the next tick at the earliest, never synchronously. Invalid delays (NaN, negative, > 2³¹−1) become 1 ms, as in Node.
+- **Order**: timers run in due-time order, timers due in the same tick in creation (re-arm) order; each callback is
+  followed by its microtasks. Every pending timer has one CC timer; an interval re-arms after each run.
+- **Threads**: like `events.on` listeners, a callback runs in the thread that created the timer, may block, and is
+  discarded when that thread is stopped (Ctrl+T, `parallel` stop, the end of a shell job).
+- **`Timeout`**: `ref()`/`unref()`/`hasRef()` (a ref'd pending timer keeps a shell job alive, see
+  [job lifetime](#job-lifetime-46)), `refresh()` (restarts the countdown; re-arms a fired timeout), `close()`,
+  `[Symbol.toPrimitive]()` → numeric id. `Immediate`: `ref`/`unref`/`hasRef` (a pending immediate always runs).
+- **`require('timers/promises')`** (also `timers.promises`): `setTimeout(ms?, value?, { ref? })` and
+  `setImmediate(value?, { ref? })` return promises; `setInterval(ms?, value?, { ref? })` is an async iterator for
+  `for await` (leaving the loop clears the interval; values that fire while nobody waits are queued);
+  `scheduler.wait(ms)` / `scheduler.yield()`. There is no `AbortController`, so `options.signal` is not supported.
+- **No global `sleep`**: the CC way to block is `require('system').sleep(ticks)` (in ticks); without blocking,
+  `await require('timers/promises').setTimeout(ms)` or `require('system/promises').sleep(ticks)`.
+- `system.startTimer`/`cancelTimer` + the `timer` event stay as the low-level CC mechanism. The CC timers behind
+  `setTimeout` fire `timer` events too (like `system.sleep`'s); listeners filter by their own ids.
+
+### Job lifetime (#46)
+
+bash runs each program as a job in its own thread. Like a Node process, the job stays alive after `main()` (or the
+module's top-level code) returns while its thread tree has **ref'd pending work** (`EventLoop.isIdle`): a ref'd timer,
+a blocked call or pending `/promises` operation, a queued immediate/microtask, a live child thread, or stdin it reads
+(each `process.stdin` listener holds a keep-alive handle while stdin flows and is ref'd; `stdin.unref()` releases
+it). Plain pending promises and `events.on` listeners do not keep it alive. If `main()` returns a promise
+(`async main`, #44), a rejection is the program's error (exit code 1); a fulfilment value is not an exit code (use
+`process.exitCode`). When nothing is left — or on `process.exit()` (from anywhere) — the job's thread is
+**stopped**: leftover listeners, unref'd timers, promise reactions and background threads are discarded, so nothing
+of the program runs or prints after the prompt. Ctrl+T reaches the wait like any blocking call. A program that
+should outlive its job (a daemon) is not supported yet.
+
+---|---|---|---|
 | `setTimeout` | `cb, ms` | `number` (id) | preferred over `startTimer` |
 | `setInterval` | `cb, ms` | `number` (id) | |
 | `clearTimeout` | `id` | `void` | |

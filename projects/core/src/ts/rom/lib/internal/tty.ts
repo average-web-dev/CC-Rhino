@@ -17,13 +17,14 @@
 // block (they are entered from the event loop) and are discarded when it is stopped (Ctrl+T).
 //
 // Job control: the shell runs each program as a job. beginJob() gives the program a fresh stdin (not flowing, cooked);
-// waitForJob() keeps the program running while it reads stdin (like Node keeps a process alive while stdin is
-// flowing); endJob() closes the job's stdin listeners and restores the shell's terminal state.
+// waitForJob() keeps the program running while it has ref'd pending work, like a Node process (#46): a pending timer,
+// a blocked call or /promises operation, a child thread, or stdin it reads (each stdin listener holds a keep-alive
+// handle while stdin flows); then it ends the job's thread so nothing the program left behind runs after it.
+// endJob() closes the job's stdin listeners and restores the shell's terminal state.
 
 const term = require('term');
 const events = require('events');
-const system = require('system');
-const asyncMod = require('async');
+const loop = require('internal/loop');
 
 // ── Colours ──────────────────────────────────────────────────────────────────────
 
@@ -612,11 +613,21 @@ interface Subscription {
     probe: string;
     noop: Listener;
     wrapper: Listener;
+    /** A keep-alive handle owned by the subscribing thread: ref'd while stdin flows, so the program stays alive. */
+    handle: number;
 }
 
 let subscriptions: Subscription[] = [];
 let nextSubscription = 1;
 let currentJob = 0;
+/** stdin.ref()/unref(): whether reading stdin keeps a program alive. */
+let stdinRefd = true;
+
+/** A program reading stdin stays alive while stdin flows (is not paused) and is ref'd. */
+function syncHandles(): void {
+    let keep = stdinState.flowing !== false && stdinRefd;
+    for (let sub of subscriptions) loop.handleRef(sub.handle, keep);
+}
 
 function isAlive(sub: Subscription): boolean {
     return sub.active && events.listenerCount(sub.probe) > 0;
@@ -627,15 +638,19 @@ function unsubscribe(sub: Subscription): void {
     sub.active = false;
     for (let event of INPUT_EVENTS) events.off(event, sub.wrapper);
     events.off(sub.probe, sub.noop);
+    loop.handleClose(sub.handle);
     let index = subscriptions.indexOf(sub);
     if (index >= 0) subscriptions.splice(index, 1);
-    wakeJob();
 }
 
 /** Forget subscriptions whose thread has been stopped. */
 function prune(): void {
     let alive: Subscription[] = [];
-    for (let sub of subscriptions) if (isAlive(sub)) alive.push(sub); else sub.active = false;
+    for (let sub of subscriptions) {
+        if (isAlive(sub)) { alive.push(sub); continue; }
+        sub.active = false;
+        loop.handleClose(sub.handle);
+    }
     subscriptions = alive;
 }
 
@@ -656,12 +671,14 @@ function subscribe(event: string, fn: Listener, once: boolean): void {
                 sub.fn.apply(stdin, outputs[i].args);
             }
         },
+        handle: loop.handle(),
     };
     for (let input of INPUT_EVENTS) events.on(input, sub.wrapper);
     events.on(sub.probe, sub.noop);
     subscriptions.push(sub);
     // Like Node: adding a 'data' listener starts the flow, unless the stream was paused explicitly.
     if (event === 'data' && stdinState.flowing === null) stdin.resume();
+    syncHandles();
 }
 
 const stdinLocal: LocalListeners = {};
@@ -686,7 +703,7 @@ const stdin: TtyReadStream = {
             stdinState.flowing = false;
             term.setCursorBlink(false);
             emitLocal(stdin, stdinLocal, 'pause', []);
-            wakeJob();
+            syncHandles();
         }
         return stdin;
     },
@@ -696,13 +713,14 @@ const stdin: TtyReadStream = {
             // The cursor blinks while someone reads the terminal.
             term.setCursorBlink(true);
             emitLocal(stdin, stdinLocal, 'resume', []);
+            syncHandles();
         }
         return stdin;
     },
     isPaused() { return stdinState.flowing === false; },
     setEncoding(_encoding?: string) { return stdin; },
-    ref() { return stdin; },
-    unref() { return stdin; },
+    ref() { stdinRefd = true; syncHandles(); return stdin; },
+    unref() { stdinRefd = false; syncHandles(); return stdin; },
 
     on(event: string, listener: Listener) {
         if (STREAM_EVENTS[event]) subscribe(event, listener, false); else addLocal(stdinLocal, event, listener);
@@ -768,10 +786,12 @@ interface Job {
     id: number;
     parent: number;
     saved: StdinState;
+    savedRefd: boolean;
     blink: boolean;
     exiting: boolean;
     exitCode: number;
-    wake: (() => void) | null;
+    /** Set when the promise returned by main() rejected. */
+    failure: { error: unknown } | null;
 }
 
 let nextJob = 1;
@@ -782,11 +802,6 @@ function findJob(id: number): Job | undefined {
     return undefined;
 }
 
-function wakeJob(): void {
-    let job = findJob(currentJob);
-    if (job !== undefined && job.wake !== null) job.wake();
-}
-
 /**
  * Start a job (a program run by the shell): it gets a fresh stdin — cooked, and not flowing until it reads — and the
  * cursor is hidden until it reads input. The shell's terminal state is restored by endJob().
@@ -795,48 +810,49 @@ function beginJob(): Job {
     let job: Job = {
         id: nextJob++, parent: currentJob,
         saved: { raw: stdinState.raw, flowing: stdinState.flowing, line: stdinState.line },
+        savedRefd: stdinRefd,
         blink: term.getCursorBlink(),
-        exiting: false, exitCode: 0, wake: null,
+        exiting: false, exitCode: 0, failure: null,
     };
     jobs.push(job);
     currentJob = job.id;
     stdinState.raw = false;
     stdinState.flowing = null;
     stdinState.line = '';
+    stdinRefd = true;
     term.setCursorBlink(false);
     return job;
 }
 
-/** Whether the job still reads stdin: it has live stdin listeners and has not paused stdin. */
-function jobReading(job: Job): boolean {
-    if (stdinState.flowing === false) return false;
-    prune();
-    for (let sub of subscriptions) if (sub.job === job.id) return true;
-    return false;
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+    return value !== null && (typeof value === 'object' || typeof value === 'function')
+        && typeof (value as { then?: unknown }).then === 'function';
 }
 
 /**
- * Called by the job's thread once its main code has returned: block while the job still reads stdin (Node keeps a
- * process alive while stdin is flowing). Throws the exit signal if the job called process.exit(). Ctrl+T reaches the
- * wait like any blocking call.
+ * Called by the job's thread once its main code has returned (`result` is what main() returned): block while the
+ * thread has ref'd pending work, like a Node process (see the header), then end the job by throwing a signal that
+ * stops the job's thread — its leftover listeners, unref'd timers and promise reactions never run.
+ *
+ * - If main() returned a promise (an `async main`), its rejection is the program's error (exit code 1).
+ * - process.exit() (also from a callback, or caught) ends the wait at once with its exit code.
+ * - Ctrl+T reaches the wait like any blocking call: it throws "Terminated".
+ *
+ * Always throws: the job-end signal (exitCodeOf() gives `null` for a normal end, or the process.exit code), or the
+ * error of a rejected main() promise.
  */
-function waitForJob(job: Job): void {
-    while (!job.exiting && jobReading(job)) {
-        let timer = -1;
-        let onTimer = (id: number) => { if (id === timer && job.wake !== null) job.wake(); };
-        let promise = new Promise<void>((resolve) => { job.wake = () => resolve(); });
-        // Re-check now and then: a listener of a stopped thread disappears without telling us.
-        timer = system.startTimer(1);
-        events.on('timer', onTimer);
-        try {
-            asyncMod.unwrap(promise);
-        } finally {
-            job.wake = null;
-            events.off('timer', onTimer);
-            system.cancelTimer(timer);
-        }
+function waitForJob(job: Job, result?: unknown): never {
+    if (isThenable(result)) {
+        result.then(undefined, (error: unknown) => {
+            if (job.failure === null) job.failure = { error };
+            loop.wakeIdle();
+        });
     }
-    if (job.exiting) throw exitSignal(job.exitCode);
+    while (!job.exiting && job.failure === null) {
+        if (loop.waitIdle()) break;
+    }
+    if (!job.exiting && job.failure !== null) throw job.failure.error;
+    throw exitSignal(job.exiting ? job.exitCode : null);
 }
 
 /** End a job: close the stdin listeners it left behind and restore the terminal state saved by beginJob(). */
@@ -848,36 +864,42 @@ function endJob(job: Job): void {
     stdinState.raw = job.saved.raw;
     stdinState.flowing = job.saved.flowing;
     stdinState.line = job.saved.line;
+    stdinRefd = job.savedRefd;
+    syncHandles();
     term.setCursorBlink(job.blink);
 }
 
 /** The id of the running job, or 0 outside of jobs. */
 function jobId(): number { return currentJob; }
 
-function exitSignal(code: number): Error {
-    let err = new Error('process.exit(' + code + ')');
+/** The signal that ends a job: `code` null for a normal end (the job's code returned), else a process.exit code. */
+function exitSignal(code: number | null): Error {
+    let err = new Error(code === null ? 'job ended' : 'process.exit(' + code + ')');
     Object.defineProperty(err, EXIT_SIGNAL, { value: code });
     return err;
 }
 
-/** The exit code if `e` is the signal thrown by process.exit(), otherwise undefined. */
-function exitCodeOf(e: unknown): number | undefined {
+/**
+ * If `e` is the signal that ends a job: the process.exit() code, or `null` for a normal end (use process.exitCode).
+ * Otherwise undefined.
+ */
+function exitCodeOf(e: unknown): number | null | undefined {
     if (e !== null && typeof e === 'object' && Object.prototype.hasOwnProperty.call(e, EXIT_SIGNAL)) {
-        return (e as any)[EXIT_SIGNAL] as number;
+        return (e as any)[EXIT_SIGNAL] as number | null;
     }
     return undefined;
 }
 
 /**
  * process.exit(): end the running job with `code`. Returns the signal to throw, which unwinds the job's code; the
- * job also ends if the signal is caught (or thrown in a background thread), as waitForJob() checks the flag.
+ * job also ends if the signal is caught (or thrown in a callback or another thread), as waitForJob() checks the flag.
  */
 function requestExit(code: number): Error {
     let job = findJob(currentJob);
     if (job !== undefined) {
         job.exiting = true;
         job.exitCode = code;
-        if (job.wake !== null) job.wake();
+        loop.wakeIdle();
     }
     return exitSignal(code);
 }

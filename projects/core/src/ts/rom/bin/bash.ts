@@ -74,12 +74,13 @@ let lastExitCode = 0;
  *
  * The program runs as a foreground job, like a child process: its own green thread (waited for with
  * parallel.waitForAll), its own stdin state (see internal/tty), `process.argv` = ['bash', path, ...args], and the
- * working directory is restored afterwards. After main() returns the job keeps running while it reads stdin (a
- * readline interface or stdin listener left open, as a Node process would), until it closes them or calls
- * process.exit(). Ctrl+T makes the call it is blocked in throw `Error("Terminated")`; if the program does not catch
- * it, the thread ends, every events.on listener / callback / thread it started is discarded, and we print
- * "Terminated". Other listeners a program leaves behind when it returns normally stay registered (they then belong
- * to the shell); its stdin listeners are closed.
+ * working directory is restored afterwards. After main() (or the module's top-level code) returns, the job keeps
+ * running while it has ref'd pending work, as a Node process would (#46): a pending (ref'd) timer, a blocked callback
+ * or pending /promises operation, a child thread, or stdin it reads (a readline interface or stdin listener left
+ * open). If main() returns a promise (`async main`, #44), its rejection is the program's error. When nothing is left,
+ * or on process.exit(), the job's thread is stopped: every events.on listener, unref'd timer, promise reaction or
+ * thread it left behind is discarded, so nothing it started runs (or prints) after the prompt. Ctrl+T makes the call
+ * it is blocked in — usually that wait — throw `Error("Terminated")`; we then print "Terminated".
  */
 function run(path: string): boolean {
     // `arguments` rather than a rest parameter: Rhino mixes up `path, ...args` when run is applied.
@@ -106,13 +107,14 @@ function runProgram(path: string, args: string[]): boolean {
     try {
         parallel.waitForAll(() => {
             let mod = require.uncached(resolved) as any;
-            if (typeof mod?.main === 'function') mod.main(args, cwd);
-            tty.waitForJob(job);
+            let result: unknown = typeof mod?.main === 'function' ? mod.main(args, cwd) : undefined;
+            tty.waitForJob(job, result);
         });
-        lastExitCode = typeof process.exitCode === 'number' ? process.exitCode : 0;
     } catch (e: any) {
         let exitCode = tty.exitCodeOf(e);
-        if (exitCode !== undefined) {
+        if (exitCode === null) {
+            lastExitCode = typeof process.exitCode === 'number' ? process.exitCode : 0;
+        } else if (exitCode !== undefined) {
             lastExitCode = exitCode;
         } else {
             lastExitCode = 1;

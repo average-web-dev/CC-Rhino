@@ -38,7 +38,7 @@
 
 ---
 
-## Node-style stdio (`process`, `console`, `util`, `readline`) — implemented (#34)
+## Node-style stdio (`process`, `console`, `util`, `readline`, `timers`) — implemented (#34, #45)
 
 **Summary**: Replaces CC's `print`/`write`/`read()` and the stream half of `io`: the bios installs the Node globals
 `process` and `console`; `util`, `readline` and `readline/promises` are ROM core modules (`/rom/lib`, resolvable
@@ -55,8 +55,15 @@ before `require.paths` and as `node:<name>`). Full API: JS_API_REDESIGN.md, "Nod
 - `readline`: line editing, history (prefix search), tab completion, `question` (blocking without callback;
   promise in `readline/promises`). Replaces CC's `read(replaceChar, history, completeFn)`; `replaceChar` (password
   masking) is not supported yet.
-- bash runs programs as jobs: fresh stdin, `process.argv`, cwd restored, programs stay alive while reading stdin,
-  `process.exit(code)`.
+- bash runs programs as jobs: fresh stdin, `process.argv`, cwd restored, `process.exit(code)`. A program stays alive
+  after `main()` returns while it has ref'd pending work, like a Node process (#46): ref'd timers, blocked calls and
+  pending `/promises` operations, child threads, stdin it reads. An `async main()` is awaited and its rejection is the
+  program's error (#44). Then the job's thread is stopped, so nothing it left behind (listeners, unref'd timers,
+  promise reactions) runs after the prompt.
+- `timers` (#45): global `setTimeout`/`setInterval`/`setImmediate` + clear functions and `queueMicrotask`, also
+  `require('timers')`; `timers/promises` (`setTimeout`, `setImmediate`, `setInterval` async iterator, `scheduler`).
+  Delays are rounded up to whole ticks (≥ 1). Replaces `os.startTimer` + `os.pullEvent('timer')` loops and `sleep`
+  without blocking.
 
 **CC-specific behaviour**: colour escape codes are ignored on monochrome terminals; the computer's terminal never
 resizes, so stdout `'resize'` only fires when ROM code emits `term_resize`.
@@ -2050,5 +2057,5 @@ CC: Rhino has no Lua coroutines. The mapping is:
 | `parallel.waitForAny/All` | Multiple Rhino continuation contexts, resumed by event dispatcher |
 | `rednet.run()` background daemon | `events.on("modem_message", ...)` persistent listener |
 | Timer (`os.startTimer`) | `setTimeout`; fires a `timer` event into the event queue |
-| `sleep(n)` | Continuation that resumes after `setTimeout(n * 1000)` |
+| `sleep(n)` | `system.sleep(ticks)` (blocking continuation) or `await require('timers/promises').setTimeout(ms)` |
 | Coroutine filter (yield value) | Continuation stores a filter string; dispatcher skips non-matching events |

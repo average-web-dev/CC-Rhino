@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 // Runtime globals. `require` is installed by the engine; the bios adds the Node-style `process` and `console`
-// (declared in process.d.ts / console.d.ts).
+// (declared in process.d.ts / console.d.ts) and the timer functions (timers.d.ts).
 
 // --- CommonJS ---
 
@@ -36,12 +36,6 @@ declare namespace require {
 declare const module: { exports: unknown };
 declare const exports: unknown;
 
-// --- Global timer functions (Node-style, layered on the CC timer mechanism) ---
-
-declare function setTimeout(cb: () => void, ms: number): number;
-declare function setInterval(cb: () => void, ms: number): number;
-declare function clearTimeout(id: number): void;
-declare function clearInterval(id: number): void;
-
-/** Block the current script for `seconds` (CC extension; deliberately absent in Node). */
-declare function sleep(seconds: number): void;
+// Timers (`setTimeout`, `setInterval`, `setImmediate`, their clear* functions and `queueMicrotask`) are globals too,
+// declared in timers.d.ts. There is no global `sleep`: use `require("system").sleep(ticks)` (blocking, in game ticks)
+// or `require("timers/promises").setTimeout(ms)`.

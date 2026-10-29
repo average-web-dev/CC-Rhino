@@ -66,6 +66,70 @@ class StdioShellTest {
                     console.log(JSON.stringify(process.argv.slice(2)) + ' ' + process.cwd() + ' ' + JSON.stringify(args));
                     process.chdir('/rom');
                 };
+                """)
+            // Job lifetime (#46): pending async work keeps a program alive, then the job's thread is stopped.
+            .addFile("pending.js", """
+                var sp = require('system/promises');
+                function aMain() {
+                    return sp.sleep(20).then(function () { console.log('Test complete.'); });
+                }
+                exports.main = function () {
+                    aMain().catch(function (e) { console.error(e); });
+                };
+                """)
+            .addFile("asyncmain.js", """
+                var sp = require('system/promises');
+                // What tsc makes of `async main() { await sleep(5); console.log('awaited'); }`.
+                exports.main = function () {
+                    return require('async').run(function* () {
+                        yield sp.sleep(5);
+                        console.log('awaited');
+                    });
+                };
+                """)
+            .addFile("asyncfail.js", """
+                exports.main = function () {
+                    return require('system/promises').sleep(2).then(function () { throw new Error('async boom'); });
+                };
+                """)
+            .addFile("exitcode.js", """
+                var bash = require('/rom/bin/bash');
+                exports.main = function (args) {
+                    bash.run(args[0]);
+                    require('probe').record(args[0] + ' ' + bash.getExitCode());
+                };
+                """)
+            .addFile("timer.js", """
+                exports.main = function () {
+                    setTimeout(function () { console.log('timer fired'); }, 500);
+                };
+                """)
+            .addFile("unref.js", """
+                setTimeout(function () { console.log('unref fired'); }, 500).unref();
+                setInterval(function () { console.log('interval fired'); }, 100).unref();
+                console.log('unref started');
+                """)
+            .addFile("listener.js", """
+                require('events').on('char', function () { console.log('leftover listener'); });
+                require('events').on('timer', function () { console.log('leftover listener'); });
+                console.log('listening');
+                """)
+            .addFile("ticker.js", """
+                setInterval(function () { console.log('tick'); }, 100);
+                require('system/promises').sleep(40).then(function () { console.log('late'); });
+                """)
+            .addFile("exitpending.js", """
+                setTimeout(function () { console.log('nope'); }, 1000);
+                setTimeout(function () { process.exit(4); }, 100);
+                """)
+            .addFile("children.js", """
+                var parallel = require('parallel');
+                parallel.spawn(function () {
+                    parallel.spawn(function () { require('system').sleep(10); console.log('grandchild done'); });
+                    require('system').sleep(5);
+                    console.log('child done');
+                });
+                console.log('main done');
                 """);
     }
 
@@ -155,6 +219,101 @@ class StdioShellTest {
             h.enter("/args.js a b");
             h.waitForText("[\"a\",\"b\"] /dir [\"a\",\"b\"]");
             waitForPrompt(h, "/dir");
+        }
+    }
+
+    /** Assert that the prompt (where the cursor is) is on the row right after {@code text}. */
+    private static void assertBeforePrompt(TerminalHarness h, String text) {
+        var row = h.rowOf(text);
+        assertTrue(row >= 0, "'" + text + "' is on screen\n" + h.dump());
+        assertEquals(row + 1, h.cursorY(), "the prompt follows '" + text + "'\n" + h.dump());
+    }
+
+    @Test
+    void pending_work_keeps_a_program_alive() {
+        try (var h = TerminalHarness.boot(programs())) {
+            waitForPrompt(h, "/");
+
+            // main() returns at once; the pending /promises sleep keeps the job alive, so its output comes before
+            // the prompt (and the prompt only after it).
+            h.enter("/pending.js");
+            h.ticks(10);
+            assertNotEquals("/ $", h.line(h.cursorY()), "no prompt while the program has pending work\n" + h.dump());
+            h.waitForText("Test complete.");
+            waitForPrompt(h, "/");
+            assertBeforePrompt(h, "Test complete.");
+
+            // An async main is awaited.
+            h.enter("clear");
+            waitForPrompt(h, "/");
+            h.enter("/asyncmain.js");
+            h.waitForText("awaited");
+            waitForPrompt(h, "/");
+            assertBeforePrompt(h, "awaited");
+
+            // A rejected async main is the program's error, with exit code 1.
+            h.enter("/exitcode.js /asyncfail.js");
+            h.waitForText("async boom");
+            h.waitForProbe(1);
+            assertEquals("/asyncfail.js 1", h.probe().get(0));
+            assertEquals('e', h.colours(h.rowOf("async boom")).charAt(0), "reported on stderr");
+            waitForPrompt(h, "/");
+
+            // A ref'd timer keeps it alive, unref'd ones do not (and never fire afterwards).
+            h.enter("clear");
+            waitForPrompt(h, "/");
+            h.enter("/timer.js");
+            h.waitForText("timer fired");
+            waitForPrompt(h, "/");
+            assertBeforePrompt(h, "timer fired");
+
+            h.enter("/unref.js");
+            h.waitForText("unref started");
+            waitForPrompt(h, "/");
+            h.ticks(20);
+            assertEquals(-1, h.rowOf("unref fired"), h.dump());
+            assertEquals(-1, h.rowOf("interval fired"), h.dump());
+
+            // Listeners do not keep a program alive, and a finished program's listeners are gone.
+            h.enter("clear");
+            waitForPrompt(h, "/");
+            h.enter("/listener.js");
+            h.waitForText("listening");
+            waitForPrompt(h, "/");
+            h.type("x");
+            h.ticks(5);
+            assertEquals(-1, h.rowOf("leftover"), h.dump());
+            h.ctrl('U');
+
+            // Child threads keep it alive.
+            h.enter("/children.js");
+            h.waitForText("grandchild done");
+            waitForPrompt(h, "/");
+            assertBeforePrompt(h, "grandchild done");
+            assertTrue(h.rowOf("main done") < h.rowOf("child done"), h.dump());
+
+            // process.exit ends it at once, discarding its pending work.
+            h.enter("clear");
+            waitForPrompt(h, "/");
+            h.enter("/exitcode.js /exitpending.js");
+            h.waitForProbe(2);
+            assertEquals("/exitpending.js 4", h.probe().get(1));
+            waitForPrompt(h, "/");
+            h.ticks(25);
+            assertEquals(-1, h.rowOf("nope"), h.dump());
+
+            // Ctrl+T while it has pending async work: back to the prompt, and nothing prints afterwards.
+            h.enter("clear");
+            waitForPrompt(h, "/");
+            h.enter("/ticker.js");
+            h.waitForText("tick");
+            h.terminate();
+            h.waitForText("Terminated");
+            waitForPrompt(h, "/");
+            var screen = h.screen();
+            h.ticks(50);
+            assertEquals(screen, h.screen(), "nothing runs after the job was terminated");
+            assertEquals(-1, h.rowOf("late"), h.dump());
         }
     }
 
