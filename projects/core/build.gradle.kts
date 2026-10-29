@@ -30,6 +30,24 @@ tasks.named("npmInstall") {
     onlyIf { hasTypeScriptSources }
 }
 
+// The TypeScript compiler: tsc followed by Babel with babel-preset-rhino (see compile-ts.mjs). package-lock.json pins
+// the tsc and Babel versions, and so their output.
+val tsCompiler = files("src/build/compile-ts.mjs", fileTree("src/build/babel-preset-rhino"), rootProject.file("package-lock.json"))
+
+// Babel's runtime helpers, generated from @babel/helpers, which the engine provides as its native `babel-helpers`
+// module (JSBabelHelpers).
+val generateBabelHelpers by tasks.registering(cc.tweaked.gradle.NpxExecToDir::class) {
+    group = LifecycleBasePlugin.BUILD_GROUP
+    description = "Generate the engine's babel-helpers module from @babel/helpers"
+
+    inputs.files(tsCompiler).withPropertyName("compiler")
+    output = layout.buildDirectory.dir("generated/babelHelpers")
+    args = listOf(
+        "tsx", "src/build/babel-preset-rhino/build-helpers.mjs",
+        output.file("dan200/computercraft/core/engine/babel-helpers.js").get().asFile.absolutePath,
+    )
+}
+
 val transpileTypeScript by tasks.registering(cc.tweaked.gradle.NpxExecToDir::class) {
     group = LifecycleBasePlugin.BUILD_GROUP
     description = "Transpile TypeScript sources under src/ts/ to JavaScript"
@@ -43,8 +61,8 @@ val transpileTypeScript by tasks.registering(cc.tweaked.gradle.NpxExecToDir::cla
 
     output = layout.buildDirectory.dir("generated/js")
 
-    // tsc plus a Rhino fix-up transform (see the script).
-    inputs.file("src/build/compile-ts.mjs").withPropertyName("compiler")
+    // tsc plus Babel (see the script).
+    inputs.files(tsCompiler).withPropertyName("compiler")
     args = listOf("tsx", "src/build/compile-ts.mjs", "--project", "src/ts/tsconfig.json")
 
     onlyIf { hasTypeScriptSources }
@@ -65,7 +83,7 @@ val transpileTestTypeScript by tasks.registering(cc.tweaked.gradle.NpxExecToDir:
 
     output = layout.buildDirectory.dir("generated/testJs")
 
-    inputs.file("src/build/compile-ts.mjs").withPropertyName("compiler")
+    inputs.files(tsCompiler).withPropertyName("compiler")
     args = listOf("tsx", "src/build/compile-ts.mjs", "--project", "src/test/ts/tsconfig.json")
 }
 
@@ -97,6 +115,7 @@ tasks.processResources {
     inputs.property("gitHash", cct.gitHash)
 
     from(transpileTypeScript) { into("data/computercraft/js") }
+    from(generateBabelHelpers)
 
     var props = mapOf("gitContributors" to cct.gitContributors.get().joinToString("\n"))
     filesMatching("data/computercraft/js/rom/help/credits.md") { expand(props) }

@@ -50,6 +50,16 @@ final class JSRequire extends ScriptableObject {
         nativeModules.put(id, exports);
     }
 
+    /** A native module whose exports are created on its first {@code require}. */
+    @FunctionalInterface
+    interface LazyModule {
+        Object create(Context cx, Scriptable scope);
+    }
+
+    void registerLazyNative(String id, LazyModule factory) {
+        nativeModules.put(id, factory);
+    }
+
     @Override
     public String getClassName() {
         return "JSRequire";
@@ -170,6 +180,10 @@ final class JSRequire extends ScriptableObject {
             var id = Context.toString(args[0]);
 
             var nat = nativeModules.get(id);
+            if (nat instanceof LazyModule lazy) {
+                nat = lazy.create(cx, ScriptableObject.getTopLevelScope(JSRequire.this));
+                nativeModules.put(id, nat);
+            }
             if (nat != null) return nat;
 
             var resolved = resolvePath(id, currentDir(args), jsPaths(args));

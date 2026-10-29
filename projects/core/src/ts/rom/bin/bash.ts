@@ -82,9 +82,8 @@ let lastExitCode = 0;
  * thread it left behind is discarded, so nothing it started runs (or prints) after the prompt. Ctrl+T makes the call
  * it is blocked in — usually that wait — throw `Error("Terminated")`; we then print "Terminated".
  */
-function run(path: string): boolean {
-    // `arguments` rather than a rest parameter: Rhino mixes up `path, ...args` when run is applied.
-    return runProgram(path, Array.prototype.slice.call(arguments, 1));
+function run(path: string, ...args: string[]): boolean {
+    return runProgram(path, args);
 }
 
 function runProgram(path: string, args: string[]): boolean {

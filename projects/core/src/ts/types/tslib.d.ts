@@ -8,9 +8,11 @@
 // Async generators (`async function*`, `yield*` in them) and `for await` use `__asyncGenerator`, `__await`,
 // `__asyncDelegator` and `__asyncValues`; the engine polyfills `Symbol.asyncIterator`, which Rhino lacks.
 //
-// Only the helpers the engine implements are declared: code needing any other helper (e.g. decorators, private
-// class fields) fails to compile with "requires an imported helper … which does not exist in 'tslib'" instead of
-// failing at runtime.
+// `#private` class members use `__classPrivateFieldGet`/`Set`/`In` (with WeakMaps/WeakSets); the classes themselves
+// are lowered afterwards by Babel (babel-preset-rhino, helpers from the native `babel-helpers` module).
+//
+// Only the helpers the engine implements are declared: code needing any other helper (e.g. decorators) fails to
+// compile with "requires an imported helper … which does not exist in 'tslib'" instead of failing at runtime.
 
 declare module "tslib" {
     export function __awaiter(thisArg: any, _arguments: any, P: Function | undefined, generator: Function): any;
@@ -20,4 +22,7 @@ declare module "tslib" {
     export function __asyncGenerator(thisArg: any, _arguments: any, generator: Function): any;
     export function __asyncDelegator(o: any): any;
     export function __asyncValues(o: any): any;
+    export function __classPrivateFieldGet(receiver: any, state: any, kind?: string, f?: Function): any;
+    export function __classPrivateFieldSet(receiver: any, state: any, value: any, kind?: string, f?: Function): any;
+    export function __classPrivateFieldIn(state: any, receiver: unknown): boolean;
 }

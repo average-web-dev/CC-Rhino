@@ -20,30 +20,8 @@ const MS_PER_TICK = 50;
 /** Node's maximum delay; longer (and invalid) delays become 1 ms, as in Node. */
 const TIMEOUT_MAX = 2147483647;
 
-interface TimeoutState extends Timeout {
-    _id: number;
-    _idleTimeout: number;
-    _repeat: number | null;
-    _onTimeout: (...args: any[]) => void;
-    _args: unknown[];
-    _ticks: number;
-    _ref: boolean;
-    /** The timer has fired (a one-shot timer) or was cleared. */
-    _destroyed: boolean;
-    _cleared: boolean;
-    _fire: () => void;
-}
-
-interface ImmediateState extends Immediate {
-    _id: number;
-    _onImmediate: (...args: any[]) => void;
-    _args: unknown[];
-    _ref: boolean;
-    _destroyed: boolean;
-}
-
 /** Pending timers by id, so clearTimeout() also takes the numeric id (`Number(timeout)`). */
-const pending = new Map<number, TimeoutState>();
+const pending = new Map<number, Timeout>();
 
 function invalidCallback(value: unknown): TypeError {
     let err = new TypeError('The "callback" argument must be of type function. Received ' +
@@ -62,95 +40,118 @@ function toTicks(ms: number): number {
     return Math.max(1, Math.ceil(ms / MS_PER_TICK));
 }
 
-function arm(t: TimeoutState, reuse: number): void {
+function arm(t: Timeout, reuse: number): void {
     t._id = loop.schedule(t._fire, t._ticks, t._repeat !== null, t._ref, reuse);
     t._destroyed = false;
     pending.set(t._id, t);
 }
 
-const Timeout = function (this: TimeoutState, callback: (...args: any[]) => void, delay: unknown, args: unknown[],
-                          repeat: boolean): void {
-    let self = this;
-    let ms = toDelay(delay);
-    self._idleTimeout = ms;
-    self._repeat = repeat ? ms : null;
-    self._onTimeout = callback;
-    self._args = args;
-    self._ticks = toTicks(ms);
-    self._ref = true;
-    self._cleared = false;
-    // A plain function: the engine enters it with continuations, so the callback may block.
-    self._fire = function () {
-        if (self._repeat === null) {
-            self._destroyed = true;
-            pending.delete(self._id);
-        }
-        self._onTimeout.apply(self, self._args);
-    };
-    arm(self, 0);
-} as unknown as { new(callback: (...args: any[]) => void, delay: unknown, args: unknown[], repeat: boolean): TimeoutState };
+/** A pending `setTimeout`/`setInterval` timer (Node's `Timeout`). */
+class Timeout {
+    declare _id: number;
+    declare _idleTimeout: number;
+    declare _repeat: number | null;
+    declare _onTimeout: (...args: any[]) => void;
+    declare _args: unknown[];
+    declare _ticks: number;
+    declare _ref: boolean;
+    /** The timer has fired (a one-shot timer) or was cleared. */
+    declare _destroyed: boolean;
+    declare _cleared: boolean;
+    declare _fire: () => void;
 
-Timeout.prototype.ref = function (this: TimeoutState) {
-    this._ref = true;
-    if (!this._destroyed) loop.ref(this._id, true);
-    return this;
-};
-Timeout.prototype.unref = function (this: TimeoutState) {
-    this._ref = false;
-    if (!this._destroyed) loop.ref(this._id, false);
-    return this;
-};
-Timeout.prototype.hasRef = function (this: TimeoutState) {
-    return this._ref;
-};
-/** Restart the countdown from now with the same delay; also re-arms a timer that has already fired (not a cleared one). */
-Timeout.prototype.refresh = function (this: TimeoutState) {
-    if (this._cleared) return this;
-    if (!loop.refresh(this._id)) arm(this, this._id);
-    return this;
-};
-Timeout.prototype.close = function (this: TimeoutState) {
-    clearTimeout(this);
-    return this;
-};
-(Timeout.prototype as any)[Symbol.toPrimitive] = function (this: TimeoutState) {
-    return this._id;
-};
+    constructor(callback: (...args: any[]) => void, delay: unknown, args: unknown[], repeat: boolean) {
+        let ms = toDelay(delay);
+        this._idleTimeout = ms;
+        this._repeat = repeat ? ms : null;
+        this._onTimeout = callback;
+        this._args = args;
+        this._ticks = toTicks(ms);
+        this._ref = true;
+        this._cleared = false;
+        // A plain JS function: the engine enters it with continuations, so the callback may block.
+        this._fire = () => {
+            if (this._repeat === null) {
+                this._destroyed = true;
+                pending.delete(this._id);
+            }
+            this._onTimeout.apply(this, this._args);
+        };
+        arm(this, 0);
+    }
 
-const Immediate = function (this: ImmediateState, callback: (...args: any[]) => void, args: unknown[]): void {
-    let self = this;
-    self._onImmediate = callback;
-    self._args = args;
-    self._ref = true;
-    self._destroyed = false;
-    self._id = events.setImmediate(function () {
-        self._destroyed = true;
-        self._onImmediate.apply(self, self._args);
-    });
-} as unknown as { new(callback: (...args: any[]) => void, args: unknown[]): ImmediateState };
+    ref(): this {
+        this._ref = true;
+        if (!this._destroyed) loop.ref(this._id, true);
+        return this;
+    }
 
-// An immediate runs on the next tick anyway: ref()/unref() only change hasRef(), a pending immediate always keeps a
-// job alive until it has run.
-Immediate.prototype.ref = function (this: ImmediateState) { this._ref = true; return this; };
-Immediate.prototype.unref = function (this: ImmediateState) { this._ref = false; return this; };
-Immediate.prototype.hasRef = function (this: ImmediateState) { return this._ref; };
+    unref(): this {
+        this._ref = false;
+        if (!this._destroyed) loop.ref(this._id, false);
+        return this;
+    }
 
-// The public functions read `arguments` rather than using rest parameters: Rhino mixes up rest parameters when a
-// function is called through Function.prototype.apply.
+    hasRef(): boolean {
+        return this._ref;
+    }
 
-function setTimeout(callback: (...args: any[]) => void, delay?: number): Timeout {
-    if (typeof callback !== 'function') throw invalidCallback(callback);
-    return new Timeout(callback, delay, Array.prototype.slice.call(arguments, 2), false);
+    /** Restart the countdown from now with the same delay; also re-arms a timer that has already fired (not a cleared one). */
+    refresh(): this {
+        if (this._cleared) return this;
+        if (!loop.refresh(this._id)) arm(this, this._id);
+        return this;
+    }
+
+    close(): this {
+        clearTimeout(this);
+        return this;
+    }
+
+    [Symbol.toPrimitive](): number {
+        return this._id;
+    }
 }
 
-function setInterval(callback: (...args: any[]) => void, delay?: number): Timeout {
+/** A pending `setImmediate` callback (Node's `Immediate`). */
+class Immediate {
+    declare _id: number;
+    declare _onImmediate: (...args: any[]) => void;
+    declare _args: unknown[];
+    declare _ref: boolean;
+    declare _destroyed: boolean;
+
+    constructor(callback: (...args: any[]) => void, args: unknown[]) {
+        this._onImmediate = callback;
+        this._args = args;
+        this._ref = true;
+        this._destroyed = false;
+        this._id = events.setImmediate(() => {
+            this._destroyed = true;
+            this._onImmediate.apply(this, this._args);
+        });
+    }
+
+    // An immediate runs on the next tick anyway: ref()/unref() only change hasRef(), a pending immediate always keeps
+    // a job alive until it has run.
+    ref(): this { this._ref = true; return this; }
+    unref(): this { this._ref = false; return this; }
+    hasRef(): boolean { return this._ref; }
+}
+
+function setTimeout(callback: (...args: any[]) => void, delay?: number, ...args: unknown[]): Timeout {
     if (typeof callback !== 'function') throw invalidCallback(callback);
-    return new Timeout(callback, delay, Array.prototype.slice.call(arguments, 2), true);
+    return new Timeout(callback, delay, args, false);
+}
+
+function setInterval(callback: (...args: any[]) => void, delay?: number, ...args: unknown[]): Timeout {
+    if (typeof callback !== 'function') throw invalidCallback(callback);
+    return new Timeout(callback, delay, args, true);
 }
 
 /** Cancel a timeout or interval; also takes its numeric id (or that id as a string). Anything else is ignored. */
 function clearTimeout(timeout: Timeout | string | number | undefined | null): void {
-    let t: TimeoutState | undefined;
+    let t: Timeout | undefined;
     if (timeout instanceof Timeout) {
         t = timeout;
     } else if (typeof timeout === 'number' || typeof timeout === 'string') {
@@ -163,9 +164,9 @@ function clearTimeout(timeout: Timeout | string | number | undefined | null): vo
     loop.cancel(t._id);
 }
 
-function setImmediate(callback: (...args: any[]) => void): Immediate {
+function setImmediate(callback: (...args: any[]) => void, ...args: unknown[]): Immediate {
     if (typeof callback !== 'function') throw invalidCallback(callback);
-    return new Immediate(callback, Array.prototype.slice.call(arguments, 1));
+    return new Immediate(callback, args);
 }
 
 function clearImmediate(immediate: Immediate | undefined | null): void {

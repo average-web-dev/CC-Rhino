@@ -192,6 +192,21 @@ rlp.close();
 const aborted = throws(function () { asyncMod.unwrap(pending); }, 'ABORT_ERR');
 eq(aborted.name, 'AbortError');
 assert(rlp instanceof readline.Interface, 'promises interfaces are readline interfaces');
+assert(rlp instanceof readlinePromises.Interface, 'and readline/promises interfaces');
+
+// The Interfaces are classes (#47); like Node's readline.Interface they also work without `new`.
+const ReadlineInterface = readline.Interface as unknown as (options: InterfaceOptions) => Interface;
+const withoutNew = ReadlineInterface({ input: source(), terminal: false });
+assert(withoutNew instanceof readline.Interface, 'Interface() without new');
+eq(withoutNew.constructor, readline.Interface);
+eq(readline.Interface.name, 'Interface');
+withoutNew.close();
+const viaNew = new readlinePromises.Interface({ input: source(), terminal: false });
+assert(viaNew instanceof readline.Interface && viaNew instanceof readlinePromises.Interface, 'new Interface()');
+const asked = viaNew.question('?');
+eq(typeof asked.then, 'function', 'promises question returns a promise');
+asked.catch(function () { /* aborted by close() */ });
+viaNew.close();
 
 // The module-level cursor functions write VT sequences.
 const cursor = sink(80);

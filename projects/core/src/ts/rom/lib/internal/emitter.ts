@@ -7,47 +7,13 @@
 //
 // Listeners run synchronously in the emitting thread, in registration order. emit() uses a plain loop, so listeners
 // may call blocking APIs when emit() itself was called from code that can block (see #38).
-//
-// Rhino has no `class` syntax, so this is a constructor function; "subclasses" chain their prototype to
-// EventEmitter.prototype and call EventEmitter.call(this) from their constructor.
 
 type Listener = (...args: any[]) => void;
-
-interface EventEmitter {
-    on(event: string | symbol, listener: Listener): this;
-    addListener(event: string | symbol, listener: Listener): this;
-    prependListener(event: string | symbol, listener: Listener): this;
-    once(event: string | symbol, listener: Listener): this;
-    prependOnceListener(event: string | symbol, listener: Listener): this;
-    off(event: string | symbol, listener: Listener): this;
-    removeListener(event: string | symbol, listener: Listener): this;
-    removeAllListeners(event?: string | symbol): this;
-    emit(event: string | symbol, ...args: any[]): boolean;
-    listenerCount(event: string | symbol): number;
-    listeners(event: string | symbol): Listener[];
-    eventNames(): (string | symbol)[];
-    setMaxListeners(n: number): this;
-    getMaxListeners(): number;
-}
-
-interface EventEmitterConstructor {
-    new(): EventEmitter;
-    (this: EventEmitter): void;
-    prototype: EventEmitter;
-}
 
 /** One registration; `once` registrations are removed before their listener runs. */
 interface Entry { fn: Listener; once: boolean; }
 
-interface EmitterState { __events?: Record<string | symbol, Entry[] | undefined>; }
-
-function table(self: EventEmitter): Record<string | symbol, Entry[] | undefined> {
-    let state = self as EmitterState;
-    if (state.__events === undefined) {
-        Object.defineProperty(self, '__events', { value: Object.create(null), writable: true, configurable: true });
-    }
-    return state.__events!;
-}
+type EventTable = Record<string | symbol, Entry[] | undefined>;
 
 function checkListener(listener: unknown): void {
     if (typeof listener !== 'function') {
@@ -57,7 +23,19 @@ function checkListener(listener: unknown): void {
     }
 }
 
-function add(self: EventEmitter, event: string | symbol, fn: Listener, once: boolean, prepend: boolean): EventEmitter {
+/** A non-enumerable own property, so the emitter's state does not show up in util.inspect & co. */
+function hide(self: object, name: string, value: unknown): void {
+    Object.defineProperty(self, name, { value, writable: true, configurable: true });
+}
+
+/** The listeners by event, created on first use (also for objects that did not run the constructor). */
+function table(self: EventEmitter): EventTable {
+    let state = self as unknown as { __events?: EventTable };
+    if (state.__events === undefined) hide(self, '__events', Object.create(null));
+    return state.__events!;
+}
+
+function add<T extends EventEmitter>(self: T, event: string | symbol, fn: Listener, once: boolean, prepend: boolean): T {
     checkListener(fn);
     let events = table(self);
     // Like Node: 'newListener' is emitted before the listener is added.
@@ -68,103 +46,95 @@ function add(self: EventEmitter, event: string | symbol, fn: Listener, once: boo
     return self;
 }
 
-const EventEmitter = function (this: EventEmitter) {
-    table(this);
-} as unknown as EventEmitterConstructor;
+class EventEmitter {
+    constructor() {
+        table(this);
+    }
 
-const proto = EventEmitter.prototype;
+    on(event: string | symbol, listener: Listener): this { return add(this, event, listener, false, false); }
+    prependListener(event: string | symbol, listener: Listener): this { return add(this, event, listener, false, true); }
+    once(event: string | symbol, listener: Listener): this { return add(this, event, listener, true, false); }
+    prependOnceListener(event: string | symbol, listener: Listener): this { return add(this, event, listener, true, true); }
 
-proto.on = function (this: EventEmitter, event, listener) { return add(this, event, listener, false, false); };
-proto.addListener = proto.on;
-proto.prependListener = function (this: EventEmitter, event, listener) { return add(this, event, listener, false, true); };
-proto.once = function (this: EventEmitter, event, listener) { return add(this, event, listener, true, false); };
-proto.prependOnceListener = function (this: EventEmitter, event, listener) {
-    return add(this, event, listener, true, true);
-};
-
-proto.off = function (this: EventEmitter, event, listener) {
-    checkListener(listener);
-    let events = table(this);
-    let list = events[event];
-    if (list === undefined) return this;
-    // Remove the most recently added registration, as Node does.
-    for (let i = list.length - 1; i >= 0; i--) {
-        if (list[i].fn === listener) {
-            list.splice(i, 1);
-            if (list.length === 0) delete events[event];
-            if (events['removeListener'] !== undefined) this.emit('removeListener', event, listener);
-            break;
+    off(event: string | symbol, listener: Listener): this {
+        checkListener(listener);
+        let events = table(this);
+        let list = events[event];
+        if (list === undefined) return this;
+        // Remove the most recently added registration, as Node does.
+        for (let i = list.length - 1; i >= 0; i--) {
+            if (list[i].fn === listener) {
+                list.splice(i, 1);
+                if (list.length === 0) delete events[event];
+                if (events['removeListener'] !== undefined) this.emit('removeListener', event, listener);
+                break;
+            }
         }
+        return this;
     }
-    return this;
-};
-proto.removeListener = proto.off;
 
-proto.removeAllListeners = function (this: EventEmitter, event?: string | symbol) {
-    let events = table(this);
-    if (event === undefined) {
-        Object.defineProperty(this, '__events', { value: Object.create(null), writable: true, configurable: true });
-    } else {
-        delete events[event];
+    removeAllListeners(event?: string | symbol): this {
+        if (event === undefined) hide(this, '__events', Object.create(null));
+        else delete table(this)[event];
+        return this;
     }
-    return this;
-};
 
-// (`arguments` rather than a rest parameter: Rhino mixes up `event, ...args` when emit is applied.)
-proto.emit = function (this: EventEmitter, event: string | symbol) {
-    let args: any[] = Array.prototype.slice.call(arguments, 1);
-    let list = table(this)[event];
-    if (list === undefined || list.length === 0) {
-        if (event === 'error') {
-            let err = args[0];
-            if (err instanceof Error) throw err;
-            let wrapped = new Error('Unhandled error. (' + String(err) + ')');
-            (wrapped as any).code = 'ERR_UNHANDLED_ERROR';
-            (wrapped as any).context = err;
-            throw wrapped;
+    emit(event: string | symbol, ...args: any[]): boolean {
+        let list = table(this)[event];
+        if (list === undefined || list.length === 0) {
+            if (event === 'error') {
+                let err = args[0];
+                if (err instanceof Error) throw err;
+                let wrapped = new Error(`Unhandled error. (${String(err)})`);
+                (wrapped as any).code = 'ERR_UNHANDLED_ERROR';
+                (wrapped as any).context = err;
+                throw wrapped;
+            }
+            return false;
         }
-        return false;
-    }
-    // Iterate over a snapshot, so listeners added or removed while emitting take effect from the next emit.
-    let snapshot = list.slice();
-    for (let i = 0; i < snapshot.length; i++) {
-        let entry = snapshot[i];
-        if (entry.once) {
-            let index = list.indexOf(entry);
-            if (index < 0) continue; // already removed by an earlier listener
-            list.splice(index, 1);
+        // Iterate over a snapshot, so listeners added or removed while emitting take effect from the next emit.
+        for (const entry of list.slice()) {
+            if (entry.once) {
+                let index = list.indexOf(entry);
+                if (index < 0) continue; // already removed by an earlier listener
+                list.splice(index, 1);
+            }
+            entry.fn.apply(this, args);
         }
-        entry.fn.apply(this, args);
+        return true;
     }
-    return true;
-};
 
-proto.listenerCount = function (this: EventEmitter, event) {
-    let list = table(this)[event];
-    return list === undefined ? 0 : list.length;
-};
+    listenerCount(event: string | symbol): number {
+        return table(this)[event]?.length ?? 0;
+    }
 
-proto.listeners = function (this: EventEmitter, event) {
-    let list = table(this)[event];
-    let out: Listener[] = [];
-    if (list !== undefined) for (let i = 0; i < list.length; i++) out.push(list[i].fn);
-    return out;
-};
+    listeners(event: string | symbol): Listener[] {
+        return (table(this)[event] ?? []).map((entry) => entry.fn);
+    }
 
-proto.eventNames = function (this: EventEmitter) {
-    let events = table(this);
-    let names: (string | symbol)[] = Object.keys(events);
-    return names.concat(Object.getOwnPropertySymbols(events));
-};
+    eventNames(): (string | symbol)[] {
+        let events = table(this);
+        return [...Object.keys(events), ...Object.getOwnPropertySymbols(events)];
+    }
 
-// There is no listener-leak warning, so the limit is only stored.
-proto.setMaxListeners = function (this: EventEmitter, n: number) {
-    Object.defineProperty(this, '__maxListeners', { value: n, writable: true, configurable: true });
-    return this;
-};
-proto.getMaxListeners = function (this: EventEmitter) {
-    let n = (this as any).__maxListeners;
-    return typeof n === 'number' ? n : 10;
-};
+    // There is no listener-leak warning, so the limit is only stored.
+    setMaxListeners(n: number): this {
+        hide(this, '__maxListeners', n);
+        return this;
+    }
+
+    getMaxListeners(): number {
+        let n = (this as unknown as { __maxListeners?: number }).__maxListeners;
+        return typeof n === 'number' ? n : 10;
+    }
+}
+
+// Aliases are the same functions, as in Node.
+interface EventEmitter {
+    addListener: EventEmitter['on'];
+    removeListener: EventEmitter['off'];
+}
+EventEmitter.prototype.addListener = EventEmitter.prototype.on;
+EventEmitter.prototype.removeListener = EventEmitter.prototype.off;
 
 export = EventEmitter;

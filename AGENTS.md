@@ -18,7 +18,7 @@ goal of the core runtime.
 
 | File | Contents |
 |---|---|
-| [JS_MIGRATION.md](JS_MIGRATION.md) | Phase-by-phase migration plan + checklists, event-loop model, Rhino authoring constraints |
+| [JS_MIGRATION.md](JS_MIGRATION.md) | Phase-by-phase migration plan + checklists, event-loop model, modern syntax on Rhino (#47) |
 | [JS_API_REDESIGN.md](JS_API_REDESIGN.md) | Target JS API surface per module (`fs`, `system`, `events`, `turtle`, …) |
 | [JS_ROM_FEATURES.md](JS_ROM_FEATURES.md) | Feature spec for every ROM library/program to port |
 | [projects/ARCHITECTURE.md](projects/ARCHITECTURE.md) | Upstream module layout (core / common / forge / fabric) |
@@ -62,11 +62,21 @@ part of `assemble`.
   (`record ComputerCommand(String... args)`) spreads its last component and becomes a rest element in `EventMap`.
 - Every script-object type (modules and the objects their methods return) also gets a `<Name>Promises` interface;
   require-able modules additionally get `require("<module>/promises")` declarations.
-- The ROM and the TS test fixtures are compiled by `projects/core/src/build/compile-ts.mjs` (tsc via the TS API, plus a
-  transform that parenthesizes every `yield`: Rhino rejects `f(yield x)` and parses `yield`'s operand as a comma
-  expression).
-- Test programs are TypeScript too, type-checked (ROM strictness) against the ROM types and the generated `.d.ts`; the
-  Rhino authoring constraints apply. Write new ones in TS, not JS:
+- The ROM, the TS test fixtures and user projects are compiled by `projects/core/src/build/compile-ts.mjs
+  --project <tsconfig>` (#47): tsc type-checks and emits ES2015 CommonJS (it also lowers `async`/async generators to
+  generators + the native `tslib`, class fields/`#private`/static blocks, `?.`, `??`, object rest, and handles
+  `export =` / `import x = require()`), then Babel runs **`babel-preset-rhino`** (`src/build/babel-preset-rhino/`)
+  on tsc's output in memory: exactly the transforms Rhino 1.9.1 needs (classes, block scoping in
+  loops, spread in calls/`new`, rest/default parameters, destructuring, `new.target`, plus its own plugin that
+  parenthesizes every `yield`). Generators stay native (no regenerator). Babel's runtime helpers are not inlined: files
+  get `var _babelHelpers = require("babel-helpers")`, a native engine module (`JSBabelHelpers`) generated at build time
+  from `@babel/helpers` by `:core:generateBabelHelpers` (`babel-preset-rhino/helpers.mjs`: the shipped helper list +
+  Rhino fixes); a helper outside that list fails the build. Non-module files (the bios) use `require("babel-helpers").x`
+  inline, so they declare no globals. Source maps (`sourceMap`/`inlineSourceMap`) are carried through both steps.
+  Babel is a build-time npm devDependency only; the jar ships compiled JS. `JSRhinoFeatureTest` pins Rhino's feature
+  matrix (native vs. transformed, snippets per feature) and runs the compiled fixtures in `src/test/ts/features/`.
+- Test programs are TypeScript too, type-checked (ROM strictness) against the ROM types and the generated `.d.ts`, and
+  compiled by the same pipeline. Write new ones in TS, not JS:
   - `projects/core/src/test/ts/` → `:core:transpileTestTypeScript` → `build/generated/testJs`, on the test classpath as
     `ts-fixtures/…`. Engine fixtures (`async.ts`, …) and the ROM library tests in `stdio/` (`StdioLibraryTest` mounts
     `stdio/prelude.js` next to each program as `/test.js`; `stdio/bootstrap.d.ts` declares the test bios's `assert`).
@@ -99,6 +109,7 @@ part of `assemble`.
 | Turtle API + command queue | `projects/common/.../shared/turtle/apis/TurtleAPI.java`, `turtle/core/TurtleBrain.java` |
 | Turtle energy (FE / Tech Reborn Energy) | `forge|fabric/.../shared/turtle/TurtleEnergyStorage.java`, `TurtleBrain.pushEnergy` |
 | TypeScript → `.d.ts` generator | `projects/tsdoclet/` |
+| TS → Rhino JS compiler (tsc + Babel), `babel-preset-rhino`, native `babel-helpers` module | `projects/core/src/build/compile-ts.mjs`, `projects/core/src/build/babel-preset-rhino/`, `core/engine/JSBabelHelpers.java`; feature matrix: `core/engine/JSRhinoFeatureTest.java` + `src/test/ts/features/` |
 | ROM (TypeScript, transpiled to `/rom`, bios to `bios.js`) | `projects/core/src/ts/` (`bios.ts`, `rom/os`, `rom/bin`, `rom/os/bin`, `rom/lib`, `types/`) |
 | Legacy Lua ROM (reference only, not shipped to the JS machine) | `projects/core/src/main/resources/data/computercraft/lua/` |
 | Core test harness (runs `/test.js` on a real computer) | `projects/core/src/test/java/dan200/computercraft/core/computer/ComputerBootstrap.java` |
@@ -180,8 +191,9 @@ part of `assemble`.
   operation is parked like a blocking call, but with a `Waiter.Promised` instead of a continuation.
   `require('async')` has `run(function* () {…})` (yield = await) and `unwrap(p)` (block until settled);
   `require('tslib')` is native, so TS `async` functions, async generators and `for await` work (ROM tsconfig:
-  `target: es2015` + `importHelpers`; `Symbol.asyncIterator` is polyfilled). Rhino has no `async`/`await` syntax,
-  and Rhino's generator functions lack `Function.prototype` (use `Function.prototype.apply.call`).
+  `target: es2015` + `importHelpers`; `Symbol.asyncIterator` is polyfilled; `tslib` also has the `#private` helpers).
+  Rhino has no `async`/`await` syntax, and Rhino's generator functions lack `Function.prototype` (native helpers use
+  `Function.prototype.apply.call`).
 - Promise reactions belong to the thread that registered them (`Promise.prototype.then` is wrapped, see `JSPromises`):
   a stopped thread's reactions never run. A pending `/promises` operation of a stopped thread is discarded and its
   promise rejected with `Error("Terminated")`, so other threads awaiting it don't hang. Aborts inside promise code are
@@ -199,19 +211,21 @@ part of `assemble`.
 
 ## Conventions
 
-- **Rhino authoring constraints** for all ROM/bios TS: no `const` inside loops/blocks (use `let`), no spread in calls
-  or array literals (use `.concat()` / `.apply()`). TS targets ES2015 (`async` → generators + native `tslib`),
-  CommonJS (`export = {...}`). No `class` syntax (use constructor functions + prototypes). Functions that may be
-  called through `Function.prototype.apply` must not use rest parameters (Rhino 1.9.1 passes `[thisArg, argsArray]`
-  as the rest array) — read `arguments` instead. Avoid local variables named after `Object.prototype` members
-  (`constructor`, `toString`, …): in `util.ts` a `let constructor` resolved to `Object`. In plain JS generators (`async.run`), parenthesize `yield` inside expressions
-  (`f((yield p))`, `x = (yield p), y`).
+- **Writing ROM/test TS:** modern syntax works (#47): `class` (fields, `#private`, static blocks, `extends Error`/`Map`),
+  `const`/`let` anywhere, spread, rest/default parameters (also in functions called through `apply`), destructuring,
+  `new.target` — Babel (`babel-preset-rhino`) rewrites what Rhino 1.9.1 gets wrong. TS targets ES2015 (`async` →
+  generators + native `tslib`), CommonJS (`export = {...}`). What is left: leaving a `for-of` early does not call the
+  iterator's `return()` (a generator's `finally` does not run); decorators and `using` are unsupported (a missing
+  helper fails the build). Hand-written JS that bypasses the pipeline (Java text blocks, engine-test snippets) still
+  has to respect Rhino: no `class`, no spread in calls, no `const` in loops, `function*` lacks `Function.prototype`,
+  rest parameters break through `apply`, parenthesize `yield` inside expressions (`f((yield p))`).
 - Programs in `rom/bin` / `rom/os/bin` export `main(args, cwd)` (same as `process.argv.slice(2)` /
   `process.cwd()`); bash calls it, or just runs the module's top-level code (Node style). `main` may be `async`
   (return a promise); the exit code is `process.exitCode`, not `main`'s return value. Line-oriented programs use
   `readline` / `process.stdin`; full-screen programs (`edit`) may still listen to raw `char`/`key` events — bash
-  pauses its own interface while a program runs. ROM code cannot use `class` syntax (Rhino): Node-style classes
-  (`Console`, `readline.Interface`, the internal `EventEmitter`) are constructor functions with prototypes.
+  pauses its own interface while a program runs. Node-style classes (`Console`, `readline.Interface`, the internal
+  `EventEmitter`, `Timeout`/`Immediate`) are real `class`es; `Console` and the readline `Interface`s are exported
+  through `/rom/lib/internal/callable`, so that, as in Node, they also work without `new`.
 - New source files carry the MPL-2.0 SPDX header (`average-web-dev`, current year).
 - Java style follows the surrounding upstream code (jspecify `@Nullable`, `var`, records).
 - After changing `@ScriptFunction` signatures, regenerate types (`:common:generateTsTypes`) and fix ROM TS errors.

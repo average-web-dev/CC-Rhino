@@ -172,6 +172,8 @@ public class JSMachine implements IMachine {
             // promises already, so they have no /promises flavour.
             loader.registerNative("async", promises.asyncModule());
             loader.registerNative("tslib", promises.tslibModule());
+            // Babel's runtime helpers for code compiled with babel-preset-rhino (classes, spread, …), created on demand.
+            loader.registerLazyNative(JSBabelHelpers.MODULE, JSBabelHelpers::create);
             // Engine-internal primitives of the ROM's timers module and the shell's job control (keep-alive).
             loader.registerNative("internal/loop", JSLoopModule.build(cx, scope, shim, eventLoop));
 

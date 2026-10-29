@@ -718,15 +718,11 @@ function formatWithOptionsInternal(inspectOptions: InspectOptions | undefined, a
 }
 
 /** printf-like formatting: %s %d %i %f %j %o %O %c %%; remaining arguments are appended (inspected unless strings). */
-function format(): string {
-    let args: unknown[] = Array.prototype.slice.call(arguments);
+function format(...args: unknown[]): string {
     return formatWithOptionsInternal(undefined, args);
 }
 
-// Rhino (1.9.1) mixes up a rest parameter that follows named parameters when the function is called through
-// Function.prototype.apply, so functions that may be applied read `arguments` instead.
-function formatWithOptions(inspectOptions: InspectOptions): string {
-    let args: unknown[] = Array.prototype.slice.call(arguments, 1);
+function formatWithOptions(inspectOptions: InspectOptions, ...args: unknown[]): string {
     if (inspectOptions === null || typeof inspectOptions !== 'object') {
         throw invalidArgType('inspectOptions', 'object', inspectOptions);
     }
@@ -752,14 +748,11 @@ function promisify(original: Function): (...args: any[]) => Promise<any> {
     if (typeof original !== 'function') throw invalidArgType('original', 'function', original);
     let custom = (original as any)[customPromisify];
     if (typeof custom === 'function') return custom;
-    let fn = function (this: unknown) {
-        let args: any[] = Array.prototype.slice.call(arguments);
-        let self = this;
+    let fn = function (this: unknown, ...args: any[]) {
         return new Promise((resolve, reject) => {
-            args.push((err: unknown, value: unknown) => {
+            original.apply(this, [...args, (err: unknown, value: unknown) => {
                 if (err) reject(err); else resolve(value);
-            });
-            original.apply(self, args);
+            }]);
         });
     };
     Object.setPrototypeOf(fn, Object.getPrototypeOf(original));
