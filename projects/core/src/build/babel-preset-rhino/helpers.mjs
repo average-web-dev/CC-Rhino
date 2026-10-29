@@ -8,6 +8,7 @@
 
 import { buildExternalHelpers, transformSync } from "@babel/core";
 import { getDependencies, list as babelHelpers } from "@babel/helpers";
+import { fileURLToPath } from "node:url";
 
 /** The module compiled code imports the helpers from. */
 export const HELPERS_MODULE = "babel-helpers";
@@ -91,7 +92,7 @@ export function buildHelpersModule() {
         sourceType: "script",
         compact: false,
         comments: true,
-        presets: [[new URL("./index.mjs", import.meta.url).pathname, { helpersModule: false }]],
+        presets: [[fileURLToPath(new URL("./index.mjs", import.meta.url)), { helpersModule: false }]],
         plugins: [
             () => ({
                 pre(file) {
