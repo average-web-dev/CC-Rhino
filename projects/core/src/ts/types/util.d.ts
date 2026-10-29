@@ -72,3 +72,4 @@ interface UtilModule {
 declare function require(id: "util"): UtilModule;
 declare function require(id: "node:util"): UtilModule;
 declare module "util" { const util: UtilModule; export = util; }
+declare module "node:util" { const util: UtilModule; export = util; }

@@ -1,7 +1,7 @@
-const fs = require('fs');
-import resolve = require('/rom/lib/resolve');
+import fs from 'fs';
+import { resolve } from '/rom/lib/resolve';
 
-function main(args: string[], cwd: string): void {
+export function main(args: string[], cwd: string): void {
     if (args.length === 0) {
         console.error('cat: missing file operand');
         return;
@@ -14,8 +14,4 @@ function main(args: string[], cwd: string): void {
             console.error(`cat: ${arg}: ${(e as any)?.message ?? 'error'}`);
         }
     }
-}
-
-export = {
-    main,
 }

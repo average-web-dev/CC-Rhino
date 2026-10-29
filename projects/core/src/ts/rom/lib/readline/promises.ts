@@ -6,8 +6,8 @@
 // a Promise instead of blocking. Hand-written like Node's module: the engine's generated `<module>/promises` flavours
 // only exist for native (Java) modules.
 
-import readline = require('/rom/lib/readline');
-import callable = require('/rom/lib/internal/callable');
+import * as readline from '/rom/lib/readline';
+import { callable } from '/rom/lib/internal/callable';
 
 const Base = readline.Interface;
 
@@ -39,11 +39,13 @@ class Interface extends Base {
 // Like the readline Interface, it also works without `new`.
 const PublicInterface = callable(Interface) as unknown as PromisesInterfaceConstructor;
 
-function createInterface(input: ReadableInput | InterfaceOptions, output?: Writable | null, completer?: Completer,
+export function createInterface(input: ReadableInput | InterfaceOptions, output?: Writable | null, completer?: Completer,
                          terminal?: boolean): PromisesInterface {
     return new Interface(input as any, output, completer, terminal) as unknown as PromisesInterface;
 }
 
-const promises: ReadlinePromisesModule = { Interface: PublicInterface, createInterface };
+export { PublicInterface as Interface };
 
-export = promises;
+// The exports implement the module's public type (types/readline.d.ts).
+type Exports<T extends ReadlinePromisesModule> = T;
+type _Exports = Exports<typeof import('/rom/lib/readline/promises')>;

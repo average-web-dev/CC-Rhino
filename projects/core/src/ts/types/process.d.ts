@@ -159,3 +159,4 @@ declare var process: Process;
 declare function require(id: "process"): Process;
 declare function require(id: "node:process"): Process;
 declare module "process" { const process: Process; export = process; }
+declare module "node:process" { const process: Process; export = process; }

@@ -15,12 +15,12 @@
 // Differences from Node: question() without a callback blocks and returns the answer; an interface ignores input while
 // it is paused (process.stdin is shared with the shell); there is no kill ring, undo or reverse search.
 
-import EventEmitter = require('/rom/lib/internal/emitter');
-import tty = require('/rom/lib/internal/tty');
-import util = require('/rom/lib/util');
-import callable = require('/rom/lib/internal/callable');
-
-const asyncMod = require('async');
+import { EventEmitter } from '/rom/lib/internal/emitter';
+import * as tty from '/rom/lib/internal/tty';
+import * as util from '/rom/lib/util';
+import { callable } from '/rom/lib/internal/callable';
+import asyncMod from 'async';
+import events from 'events';
 
 const kHistorySize = 30;
 const kMaxLengthOfKillRing = 32;   // (unused, kept for reference to Node's defaults)
@@ -31,10 +31,10 @@ const lineEnding = /\r?\n|\r(?!\n)/g;
 // ── Cursor helpers (module functions in Node) ────────────────────────────────────
 
 function callbackLater(callback: unknown): void {
-    if (typeof callback === 'function') require('events').queueMicrotask(() => (callback as (e: null) => void)(null));
+    if (typeof callback === 'function') events.queueMicrotask(() => (callback as (e: null) => void)(null));
 }
 
-function cursorTo(stream: Writable | null | undefined, x: number, y?: number | (() => void), callback?: () => void): boolean {
+export function cursorTo(stream: Writable | null | undefined, x: number, y?: number | (() => void), callback?: () => void): boolean {
     if (typeof y === 'function') { callback = y; y = undefined; }
     if (Number.isNaN(x)) throw invalidArgValue('x', x);
     if (Number.isNaN(y as number)) throw invalidArgValue('y', y);
@@ -45,7 +45,7 @@ function cursorTo(stream: Writable | null | undefined, x: number, y?: number | (
     return stream.write(tty.CSI.cursorTo(x, y as number | undefined), callback);
 }
 
-function moveCursor(stream: Writable | null | undefined, dx: number, dy: number, callback?: () => void): boolean {
+export function moveCursor(stream: Writable | null | undefined, dx: number, dy: number, callback?: () => void): boolean {
     if (stream === null || stream === undefined || !(dx || dy)) {
         callbackLater(callback);
         return true;
@@ -53,7 +53,7 @@ function moveCursor(stream: Writable | null | undefined, dx: number, dy: number,
     return stream.write(tty.CSI.moveCursor(dx, dy), callback);
 }
 
-function clearLine(stream: Writable | null | undefined, dir: number, callback?: () => void): boolean {
+export function clearLine(stream: Writable | null | undefined, dir: number, callback?: () => void): boolean {
     if (stream === null || stream === undefined) {
         callbackLater(callback);
         return true;
@@ -61,7 +61,7 @@ function clearLine(stream: Writable | null | undefined, dir: number, callback?: 
     return stream.write(tty.CSI.clearLine(dir), callback);
 }
 
-function clearScreenDown(stream: Writable | null | undefined, callback?: () => void): boolean {
+export function clearScreenDown(stream: Writable | null | undefined, callback?: () => void): boolean {
     if (stream === null || stream === undefined) {
         callbackLater(callback);
         return true;
@@ -155,7 +155,7 @@ function decodeSingle(ch: string): Key {
  * Make `stream` emit 'keypress' events for its input, as Node's readline.emitKeypressEvents does. process.stdin
  * already emits them (decoded from the computer's key events), so this is a no-op for it.
  */
-function emitKeypressEvents(stream: ReadableInput, _iface?: unknown): void {
+export function emitKeypressEvents(stream: ReadableInput, _iface?: unknown): void {
     if (stream === tty.stdin || (stream as any)[KEYPRESS_DECODER]) return;
     let decoder = (data: string | Uint8Array) => {
         if (stream.listenerCount('keypress') === 0) return;
@@ -875,26 +875,17 @@ class Interface extends EventEmitter {
 // Like Node's readline.Interface, it also works without `new`.
 const PublicInterface = callable(Interface) as unknown as InterfaceConstructor;
 
-function createInterface(input: ReadableInput | InterfaceOptions, output?: Writable | null, completer?: Completer,
+export function createInterface(input: ReadableInput | InterfaceOptions, output?: Writable | null, completer?: Completer,
                          terminal?: boolean): Interface {
     return new Interface(input as any, output, completer, terminal);
 }
 
-const readline: ReadlineModule = {
-    Interface: PublicInterface,
-    createInterface,
-    clearLine,
-    clearScreenDown,
-    cursorTo,
-    moveCursor,
-    emitKeypressEvents,
-} as unknown as ReadlineModule;
+export { PublicInterface as Interface };
 
-// readline.promises, loaded lazily: readline/promises itself builds on this module.
-Object.defineProperty(readline, 'promises', {
+// readline.promises, loaded on first use (readline/promises builds on this module): a getter on the exports object.
+export declare const promises: ReadlinePromisesModule;
+Object.defineProperty(exports, 'promises', {
     get() { return require('readline/promises'); },
     enumerable: true,
     configurable: true,
 });
-
-export = readline;

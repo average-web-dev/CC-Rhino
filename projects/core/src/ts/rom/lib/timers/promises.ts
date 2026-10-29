@@ -9,7 +9,7 @@
 // `options.ref = false` unrefs the timer (it does not keep a shell job alive). There is no AbortController in this
 // runtime, so `options.signal` is not supported.
 
-import timers = require('/rom/lib/timers');
+import * as timers from '/rom/lib/timers';
 
 function invalidOptions(): TypeError {
     let err = new TypeError('The "options" argument must be of type object');
@@ -24,7 +24,7 @@ function isRef(options: TimerOptions | undefined): boolean {
     return options.ref !== false;
 }
 
-function setTimeout<T = void>(delay?: number, value?: T, options?: TimerOptions): Promise<T> {
+export function setTimeout<T = void>(delay?: number, value?: T, options?: TimerOptions): Promise<T> {
     let ref: boolean;
     try {
         ref = isRef(options);
@@ -37,7 +37,7 @@ function setTimeout<T = void>(delay?: number, value?: T, options?: TimerOptions)
     });
 }
 
-function setImmediate<T = void>(value?: T, options?: TimerOptions): Promise<T> {
+export function setImmediate<T = void>(value?: T, options?: TimerOptions): Promise<T> {
     let ref: boolean;
     try {
         ref = isRef(options);
@@ -55,7 +55,7 @@ function setImmediate<T = void>(value?: T, options?: TimerOptions): Promise<T> {
  * fire while nobody waits are queued, as in Node. Leaving the loop (`break`, `return`, an error) calls `return()`,
  * which clears the interval.
  */
-function setInterval<T = void>(delay?: number, value?: T, options?: TimerOptions): AsyncIterableIterator<T> {
+export function setInterval<T = void>(delay?: number, value?: T, options?: TimerOptions): AsyncIterableIterator<T> {
     let ref = isRef(options);
     let fired = 0;
     let done = false;
@@ -88,14 +88,11 @@ function setInterval<T = void>(delay?: number, value?: T, options?: TimerOptions
     return iterator;
 }
 
-const timersPromises: TimersPromisesModule = {
-    setTimeout,
-    setImmediate,
-    setInterval,
-    scheduler: {
-        wait(delay: number, options?: TimerOptions): Promise<void> { return setTimeout<void>(delay, undefined, options); },
-        yield(): Promise<void> { return setImmediate<void>(); },
-    },
+export const scheduler: TimersPromisesModule['scheduler'] = {
+    wait(delay: number, options?: TimerOptions): Promise<void> { return setTimeout<void>(delay, undefined, options); },
+    yield(): Promise<void> { return setImmediate<void>(); },
 };
 
-export = timersPromises;
+// The exports implement the module's public type (types/timers.d.ts).
+type Exports<T extends TimersPromisesModule> = T;
+type _Exports = Exports<typeof import('/rom/lib/timers/promises')>;

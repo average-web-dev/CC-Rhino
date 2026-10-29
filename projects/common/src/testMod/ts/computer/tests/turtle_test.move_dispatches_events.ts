@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
 // Other events are dispatched to listeners while a turtle command waits for a multi-tick move to finish animating.
-const events = require('events');
-const system = require('system');
-const turtle = require('turtle');
+import events from 'events';
+import system from 'system';
+import turtle from 'turtle';
 
 let moving = false;
 let timer = -1;

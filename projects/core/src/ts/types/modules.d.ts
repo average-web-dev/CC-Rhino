@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-// Ambient module declarations, so `import x = require("x")` / `import * as x` also resolves.
+// Ambient module declarations, so `import x from "x"` (and `import * as x`, `import { a } from "x"`) resolves.
 // The `require(...)` call signatures in globals.d.ts cover the `const x = require("x")` style.
 
 declare module "path" { const path: PathModule; export = path; }

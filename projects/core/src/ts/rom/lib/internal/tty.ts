@@ -22,9 +22,9 @@
 // handle while stdin flows); then it ends the job's thread so nothing the program left behind runs after it.
 // endJob() closes the job's stdin listeners and restores the shell's terminal state.
 
-const term = require('term');
-const events = require('events');
-const loop = require('internal/loop');
+import term from 'term';
+import events from 'events';
+import loop from 'internal/loop';
 
 // ── Colours ──────────────────────────────────────────────────────────────────────
 
@@ -254,7 +254,7 @@ function later(callback: unknown): void {
 }
 
 /** The CSI sequences readline (and Node's tty.WriteStream cursor methods) write. */
-const CSI = {
+export const CSI = {
     cursorTo(x: number, y?: number): string {
         return typeof y !== 'number' ? `${ESC}[${x + 1}G` : `${ESC}[${y + 1};${x + 1}H`;
     },
@@ -377,8 +377,8 @@ function makeWriteStream(fd: number, defaultFg: number): TtyWriteStream {
     return stream;
 }
 
-const stdout = makeWriteStream(1, DEFAULT_FG);
-const stderr = makeWriteStream(2, ERROR_FG);
+export const stdout = makeWriteStream(1, DEFAULT_FG);
+export const stderr = makeWriteStream(2, ERROR_FG);
 
 // ── Input ────────────────────────────────────────────────────────────────────────
 
@@ -680,7 +680,7 @@ function subscribe(event: string, fn: Listener, once: boolean): void {
 
 const stdinLocal: LocalListeners = {};
 
-const stdin: TtyReadStream = {
+export const stdin: TtyReadStream = {
     fd: 0,
     isTTY: true,
     readable: true,
@@ -801,7 +801,7 @@ function findJob(id: number): Job | undefined {
  * Start a job (a program run by the shell): it gets a fresh stdin — cooked, and not flowing until it reads — and the
  * cursor is hidden until it reads input. The shell's terminal state is restored by endJob().
  */
-function beginJob(): Job {
+export function beginJob(): Job {
     let job: Job = {
         id: nextJob++, parent: currentJob,
         saved: { raw: stdinState.raw, flowing: stdinState.flowing, line: stdinState.line },
@@ -836,7 +836,7 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
  * Always throws: the job-end signal (exitCodeOf() gives `null` for a normal end, or the process.exit code), or the
  * error of a rejected main() promise.
  */
-function waitForJob(job: Job, result?: unknown): never {
+export function waitForJob(job: Job, result?: unknown): never {
     if (isThenable(result)) {
         result.then(undefined, (error: unknown) => {
             if (job.failure === null) job.failure = { error };
@@ -851,7 +851,7 @@ function waitForJob(job: Job, result?: unknown): never {
 }
 
 /** End a job: close the stdin listeners it left behind and restore the terminal state saved by beginJob(). */
-function endJob(job: Job): void {
+export function endJob(job: Job): void {
     for (let sub of subscriptions.slice()) if (sub.job === job.id) unsubscribe(sub);
     let index = jobs.indexOf(job);
     if (index >= 0) jobs.splice(index, 1);
@@ -865,7 +865,7 @@ function endJob(job: Job): void {
 }
 
 /** The id of the running job, or 0 outside of jobs. */
-function jobId(): number { return currentJob; }
+export function jobId(): number { return currentJob; }
 
 /** The signal that ends a job: `code` null for a normal end (the job's code returned), else a process.exit code. */
 function exitSignal(code: number | null): Error {
@@ -878,7 +878,7 @@ function exitSignal(code: number | null): Error {
  * If `e` is the signal that ends a job: the process.exit() code, or `null` for a normal end (use process.exitCode).
  * Otherwise undefined.
  */
-function exitCodeOf(e: unknown): number | null | undefined {
+export function exitCodeOf(e: unknown): number | null | undefined {
     if (e !== null && typeof e === 'object' && Object.prototype.hasOwnProperty.call(e, EXIT_SIGNAL)) {
         return (e as any)[EXIT_SIGNAL] as number | null;
     }
@@ -889,7 +889,7 @@ function exitCodeOf(e: unknown): number | null | undefined {
  * process.exit(): end the running job with `code`. Returns the signal to throw, which unwinds the job's code; the
  * job also ends if the signal is caught (or thrown in a callback or another thread), as waitForJob() checks the flag.
  */
-function requestExit(code: number): Error {
+export function requestExit(code: number): Error {
     let job = findJob(currentJob);
     if (job !== undefined) {
         job.exiting = true;
@@ -899,15 +899,3 @@ function requestExit(code: number): Error {
     return exitSignal(code);
 }
 
-export = {
-    stdout,
-    stderr,
-    stdin,
-    CSI,
-    beginJob,
-    waitForJob,
-    endJob,
-    jobId,
-    requestExit,
-    exitCodeOf,
-};

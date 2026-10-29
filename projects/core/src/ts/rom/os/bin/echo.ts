@@ -6,10 +6,6 @@
 // Variable expansion ($VAR) is performed by the shell before echo runs, so by
 // the time we get here the arguments are already the resolved values.
 
-function main(args: string[]): void {
+export function main(args: string[]): void {
     console.log(args.join(' '));
-}
-
-export = {
-    main,
 }

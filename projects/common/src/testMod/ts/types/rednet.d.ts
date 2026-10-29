@@ -18,3 +18,4 @@ interface RednetModule {
 }
 
 declare function require(id: "rednet"): RednetModule;
+declare module "rednet" { const rednet: RednetModule; export = rednet; }

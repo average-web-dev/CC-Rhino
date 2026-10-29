@@ -24,6 +24,6 @@ interface InternalEventEmitterConstructor {
     new(): InternalEventEmitter;
 }
 
-declare function require(id: "/rom/lib/internal/emitter"): InternalEventEmitterConstructor;
+declare function require(id: "/rom/lib/internal/emitter"): { EventEmitter: InternalEventEmitterConstructor };
 /** The ROM's env library, which backs `process.env` (also the native-looking `require("env")`). */
 declare function require(id: "/rom/lib/env"): EnvModule;

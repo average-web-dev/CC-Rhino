@@ -4,5 +4,6 @@
         "outDir": "../../../build/generated/testJs",
         "rootDir": "."
     },
+    "ccRhino": { "esModuleSyntaxOnly": true },
     "include": [".", "../../ts/types", "./../../../../common/build/tsTypes"]
 }

@@ -3,10 +3,10 @@
 
 // /rom/os/bin/peripherals.ts — list every attached peripheral and its side.
 
-const peripheral = require('peripheral');
-const util       = require('util');
+import peripheral from 'peripheral';
+import util       from 'util';
 
-function main(): void {
+export function main(): void {
     // getSides() returns all six physical sides; keep only the ones with something on them.
     let attached = peripheral.getSides().filter(side => peripheral.isPresent(side));
 
@@ -21,8 +21,4 @@ function main(): void {
         // Side in lime (an ANSI style, ignored on monochrome terminals), type in white.
         console.log('  ' + util.styleText('greenBright', side) + ': ' + (types.length > 0 ? types.join(', ') : '?'));
     }
-}
-
-export = {
-    main,
 }

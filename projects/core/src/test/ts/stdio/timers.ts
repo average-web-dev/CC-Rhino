@@ -5,14 +5,14 @@
 // Node-style timers (#45): the globals, require('timers') and require('timers/promises'), on a real computer whose
 // clock advances one game tick (50 ms) at a time. Run by StdioLibraryTest.
 
-import prelude = require('./prelude');
+import * as prelude from './prelude';
 
 const eq = prelude.eq, throws = prelude.throws;
-const asyncMod = require('async');
-const system = require('system');
-const parallel = require('parallel');
-const timers = require('timers');
-const tp = require('timers/promises');
+import asyncMod from 'async';
+import system from 'system';
+import parallel from 'parallel';
+import timers from 'timers';
+import tp from 'timers/promises';
 
 /** The computer's clock, in ticks. */
 function ticks(): number { return Math.round(system.clock() * 20); }

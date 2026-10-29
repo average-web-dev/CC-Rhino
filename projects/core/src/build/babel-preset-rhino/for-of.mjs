@@ -44,7 +44,8 @@
  * the loop body is closed from outside (`gen.return()`), errors of the inner iterator's `return()` are ignored.
  *
  * Loops are rewritten on exit, innermost first, so that a jump leaving several loops closes the inner iterator before
- * the outer one. `for await` is left alone: tsc lowers it (with `__asyncValues`, which already closes the iterator).
+ * the outer one. `for await` is left alone: @babel/plugin-transform-async-generator-functions lowers it to a loop
+ * that closes the iterator itself.
  *
  * @param {import("@babel/core")} babel
  */

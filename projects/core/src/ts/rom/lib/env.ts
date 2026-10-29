@@ -23,34 +23,36 @@ function splitPath(value: string): string[] {
 }
 
 /** Get a variable's value, or `null` if it is not set. */
-function get(name: string): string | null {
+export function get(name: string): string | null {
     if (name === 'PATH') return require.paths.join(':');
     return owns(name) ? vars[name]! : null;
 }
 
 /** Set (or overwrite) a variable. */
-function set(name: string, value: string): void {
+export function set(name: string, value: string): void {
     if (name === 'PATH') { require.paths = splitPath(value); return; }
     vars[name] = value;
 }
 
 /** Remove a variable. */
-function unset(name: string): void {
+export function unset(name: string): void {
     if (name === 'PATH') { require.paths = []; return; }
     delete vars[name];
 }
 
 /** Whether a variable is set. */
-function has(name: string): boolean {
+export function has(name: string): boolean {
     return name === 'PATH' || owns(name);
 }
 
 /** A shallow copy of every variable, for listing/iteration. */
-function all(): Record<string, string> {
+export function all(): Record<string, string> {
     const out: Record<string, string> = {};
     for (let key of Object.keys(vars)) out[key] = vars[key]!;
     out['PATH'] = require.paths.join(':');
     return out;
 }
 
-export = { get, set, unset, has, all };
+// The exports implement the module's public type (types/env.d.ts).
+type Exports<T extends EnvModule> = T;
+type _Exports = Exports<typeof import('/rom/lib/env')>;

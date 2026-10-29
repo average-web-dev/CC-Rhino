@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 // A turtle movement suspends the program until the standard task_complete event arrives, and returns a Result.
-const events = require('events');
-const turtle = require('turtle');
+import events from 'events';
+import turtle from 'turtle';
 
 let completions = 0;
 events.on('task_complete', function () { completions++; });

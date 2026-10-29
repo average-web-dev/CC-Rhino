@@ -27,7 +27,7 @@ In order to build CC: Rhino, you'll need to download the source code and then ru
  - Make sure you've got the following software installed:
    - Java Development Kit 25 (JDK). This can be downloaded from [Adoptium].
    - [Git](https://git-scm.com/).
-   - [NodeJS 20 or later][node] (the ROM is written in TypeScript and transpiled with `tsc`).
+   - [NodeJS 20 or later][node] (the ROM is written in TypeScript, type-checked with `tsc` and compiled with Babel).
 
  - Download CC: Rhino's source code:
    ```
@@ -56,10 +56,24 @@ Have a read of the following documents first:
 
 The ROM (bios, os, bash, programs and libraries) is written in TypeScript in `projects/core/src/ts/`. Type
 definitions for the native modules are generated from the Java javadoc with `./gradlew :common:generateTsTypes`.
-It is compiled by `projects/core/src/build/compile-ts.mjs`: tsc type-checks and emits ES2015, then Babel with
-`babel-preset-rhino` (`projects/core/src/build/babel-preset-rhino/`) rewrites what Rhino lacks (classes, spread in
-calls, block scoping in loops, …), so modern TypeScript works as is. Node and the npm dev dependencies (`npm ci`) are
-only needed at build time.
+It is compiled by `projects/core/src/build/compile-ts.mjs`: tsc only type-checks (the tsconfig sets `noEmit`), then
+Babel strips the types and `babel-preset-rhino` (`projects/core/src/build/babel-preset-rhino/`) rewrites what Rhino
+lacks (`async`/`await`, classes, spread in calls, block scoping in loops, …) and turns ES modules into CommonJS, so
+modern TypeScript works as is. Node and the npm dev dependencies (`npm ci`) are only needed at build time.
+
+The sources use ES module syntax, as in modern Node code:
+
+```ts
+import fs from 'fs';                            // a native module (also `import * as fs`, `import { readFileSync }`)
+import { format } from 'util';                  // a ROM library
+import * as tty from '/rom/lib/internal/tty';   // ROM-internal modules by path
+
+export function main(args: string[], cwd: string): void { /* … */ }   // a program for bash
+```
+
+ROM libraries have named exports only, so plain JS still gets the same object from `require('util')`. TypeScript's
+`import x = require()` / `export =` are rejected in the ROM and the tests (`"ccRhino": { "esModuleSyntaxOnly": true }`
+in their tsconfigs); `console` and `process` are the module value themselves (`module.exports = …`), as in Node.
 
 ### Testing
 CC: Rhino has several test suites, each designed to test something different:

@@ -2,12 +2,12 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-import prelude = require('./prelude');
+import * as prelude from './prelude';
 
 const eq = prelude.eq, throws = prelude.throws;
 const env = require('/rom/lib/env');
-const fs = require('fs');
-const asyncMod = require('async');
+import fs from 'fs';
+import asyncMod from 'async';
 
 eq(require('node:process'), process);
 eq(process.platform, 'computercraft');

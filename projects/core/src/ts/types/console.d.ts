@@ -64,3 +64,4 @@ declare var console: GlobalConsole;
 declare function require(id: "console"): GlobalConsole;
 declare function require(id: "node:console"): GlobalConsole;
 declare module "console" { const console: GlobalConsole; export = console; }
+declare module "node:console" { const console: GlobalConsole; export = console; }

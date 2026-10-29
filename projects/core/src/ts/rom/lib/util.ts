@@ -88,7 +88,7 @@ function strEscape(str: string): string {
 
 const ansiPattern = /\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b[@-Z\\-_]/g;
 
-function stripVTControlCharacters(str: string): string {
+export function stripVTControlCharacters(str: string): string {
     if (typeof str !== 'string') throw invalidArgType('str', 'string', str);
     return str.replace(ansiPattern, '');
 }
@@ -575,7 +575,7 @@ function toNumberOption(value: unknown, fallback: number): number {
  * Return a string representation of `value` for debugging, like Node's util.inspect. The legacy signature
  * `inspect(value, showHidden, depth, colors)` is accepted too.
  */
-function inspect(value: unknown, opts?: InspectOptions | boolean, depth?: number | null, _colors?: boolean): string {
+export function inspect(value: unknown, opts?: InspectOptions | boolean, depth?: number | null, _colors?: boolean): string {
     let options: InspectOptions = {};
     if (typeof opts === 'boolean') {
         options.showHidden = opts;
@@ -718,11 +718,11 @@ function formatWithOptionsInternal(inspectOptions: InspectOptions | undefined, a
 }
 
 /** printf-like formatting: %s %d %i %f %j %o %O %c %%; remaining arguments are appended (inspected unless strings). */
-function format(...args: unknown[]): string {
+export function format(...args: unknown[]): string {
     return formatWithOptionsInternal(undefined, args);
 }
 
-function formatWithOptions(inspectOptions: InspectOptions, ...args: unknown[]): string {
+export function formatWithOptions(inspectOptions: InspectOptions, ...args: unknown[]): string {
     if (inspectOptions === null || typeof inspectOptions !== 'object') {
         throw invalidArgType('inspectOptions', 'object', inspectOptions);
     }
@@ -732,7 +732,7 @@ function formatWithOptions(inspectOptions: InspectOptions, ...args: unknown[]): 
 // ── Misc ─────────────────────────────────────────────────────────────────────────
 
 /** Legacy prototype inheritance: `ctor.prototype` inherits from `superCtor.prototype`. */
-function inherits(ctor: Function, superCtor: Function): void {
+export function inherits(ctor: Function, superCtor: Function): void {
     if (typeof ctor !== 'function') throw invalidArgType('ctor', 'function', ctor);
     if (typeof superCtor !== 'function') throw invalidArgType('superCtor', 'function', superCtor);
     if (superCtor.prototype === undefined) throw invalidArgType('superCtor.prototype', 'object', superCtor.prototype);
@@ -744,7 +744,7 @@ function inherits(ctor: Function, superCtor: Function): void {
  * Turn a function taking a Node-style `(err, value) => …` callback as its last argument into one returning a Promise.
  * A function's own promise version can be given as `fn[util.promisify.custom]`.
  */
-function promisify(original: Function): (...args: any[]) => Promise<any> {
+export function promisify(original: Function): (...args: any[]) => Promise<any> {
     if (typeof original !== 'function') throw invalidArgType('original', 'function', original);
     let custom = (original as any)[customPromisify];
     if (typeof custom === 'function') return custom;
@@ -779,7 +779,7 @@ const STYLES: Record<string, [number, number]> = {
  * Wrap `text` in the ANSI escape codes of `format` (a style name or an array of them), e.g.
  * `styleText('red', 'error')`. process.stdout/stderr map the colours onto the terminal's 16 colours.
  */
-function styleText(format: string | string[], text: string): string {
+export function styleText(format: string | string[], text: string): string {
     if (typeof text !== 'string') throw invalidArgType('text', 'string', text);
     let formats = Array.isArray(format) ? format : [format];
     let left = '';
@@ -798,7 +798,7 @@ function styleText(format: string | string[], text: string): string {
 }
 
 /** Whether two values are deeply strictly equal (own enumerable properties, same prototypes, Map/Set contents). */
-function isDeepStrictEqual(a: unknown, b: unknown): boolean {
+export function isDeepStrictEqual(a: unknown, b: unknown): boolean {
     return deepEqual(a, b, []);
 }
 
@@ -835,15 +835,6 @@ function deepEqual(a: unknown, b: unknown, seen: [unknown, unknown][]): boolean 
     return true;
 }
 
-const util: UtilModule = {
-    format,
-    formatWithOptions,
-    inspect,
-    inherits,
-    promisify,
-    stripVTControlCharacters,
-    styleText,
-    isDeepStrictEqual,
-};
-
-export = util;
+// The exports implement the module's public type (types/util.d.ts).
+type Exports<T extends UtilModule> = T;
+type _Exports = Exports<typeof import('/rom/lib/util')>;

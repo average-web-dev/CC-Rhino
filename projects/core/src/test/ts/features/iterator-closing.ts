@@ -4,7 +4,8 @@
 
 // Iterator closing (#41): leaving a for-of early must call the iterator's return(), so a generator's `finally` runs.
 // Rhino's native for-of never does; babel-preset-rhino's for-of plugin (src/build/babel-preset-rhino/for-of.mjs)
-// adds it. Destructuring is closed by Babel's slicedToArray helper, `for await` by tsc's lowering (__asyncValues).
+// adds it. Destructuring is closed by Babel's slicedToArray helper, `for await` by Babel's lowering
+// (@babel/plugin-transform-async-generator-functions).
 
 let log: string[] = [];
 

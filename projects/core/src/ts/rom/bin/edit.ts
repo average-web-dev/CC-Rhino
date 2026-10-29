@@ -14,10 +14,10 @@
 // highlighting (term.blit) and require-name tab completion are follow-ups
 // (JS_MIGRATION Phase 11.28).
 
-const events = require('events');
-const term   = require('term');
-const fs     = require('fs');
-const system = require('system');
+import events from 'events';
+import term   from 'term';
+import fs     from 'fs';
+import system from 'system';
 
 // GLFW key codes (same set used inline by bash.ts).
 const K = {
@@ -41,7 +41,7 @@ function resolve(p: string, cwd: string): string {
     return '/' + out.join('/');
 }
 
-function main(args: string[], cwd: string): void {
+export function main(args: string[], cwd: string): void {
     if (!args[0]) { console.error('Usage: edit <path>'); return; }
     const path = resolve(args[0], cwd ?? '/');
     const canColor = term.isColor();
@@ -316,5 +316,3 @@ function main(args: string[], cwd: string): void {
         term.setCursorBlink(true);
     }
 }
-
-export = { main };

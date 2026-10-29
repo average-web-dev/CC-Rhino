@@ -1,10 +1,6 @@
-const term = require('term');
+import term from 'term';
 
-function main(): void {
+export function main(): void {
     term.clear();
     term.setCursorPos({ x: 0, y: 0 });
-}
-
-export = {
-    main,
 }

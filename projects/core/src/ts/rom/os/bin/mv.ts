@@ -1,7 +1,7 @@
-const fs = require('fs');
-import resolve = require('/rom/lib/resolve');
+import fs from 'fs';
+import { resolve } from '/rom/lib/resolve';
 
-function main(args: string[], cwd: string): void {
+export function main(args: string[], cwd: string): void {
     const paths = args.filter(a => !a.startsWith('-'));
     if (paths.length < 2) { console.error('mv: missing operand'); return; }
     const src = resolve(cwd, paths[0]);
@@ -11,8 +11,4 @@ function main(args: string[], cwd: string): void {
     } catch (e: unknown) {
         console.error(`mv: ${(e as any)?.message ?? 'error'}`);
     }
-}
-
-export = {
-    main,
 }

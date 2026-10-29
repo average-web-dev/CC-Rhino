@@ -10,7 +10,7 @@
  * holds either way and `instance.constructor` is the returned function; it can be extended (`class X extends it`),
  * which constructs a real `cls` instance with the subclass's prototype.
  */
-function callable<C extends abstract new (...args: any[]) => any>(cls: C): C & ((...args: ConstructorParameters<C>) => InstanceType<C>) {
+export function callable<C extends abstract new (...args: any[]) => any>(cls: C): C & ((...args: ConstructorParameters<C>) => InstanceType<C>) {
     let wrapper = function (this: unknown) {
         // new.target: this function for `new`, a subclass for `super(…)`, undefined for a plain call.
         return Reflect.construct(cls as unknown as Function, arguments, new.target ?? wrapper);
@@ -23,5 +23,3 @@ function callable<C extends abstract new (...args: any[]) => any>(cls: C): C & (
     Object.defineProperty(cls.prototype, 'constructor', { value: wrapper, writable: true, configurable: true });
     return wrapper;
 }
-
-export = callable;

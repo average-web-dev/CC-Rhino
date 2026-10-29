@@ -11,11 +11,10 @@
 // Like in Node, the globals are writable, configurable and not enumerable; `require('process')`,
 // `require('console')` and `require('timers')` return the same objects.
 
-import proc = require('/rom/lib/process');
-import con = require('/rom/lib/console');
-import timers = require('/rom/lib/timers');
-
-const events = require('events');
+import proc from 'process';
+import con from 'console';
+import * as timers from '/rom/lib/timers';
+import events from 'events';
 
 function define(name: string, value: unknown): void {
     Object.defineProperty(globalThis, name, { value, writable: true, configurable: true, enumerable: false });
@@ -39,5 +38,3 @@ define('queueMicrotask', function queueMicrotask(callback: () => void): void {
     // function could not be).
     events.queueMicrotask(function () { callback(); });
 });
-
-export = {};

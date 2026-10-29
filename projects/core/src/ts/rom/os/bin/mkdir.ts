@@ -1,7 +1,7 @@
-const fs = require('fs');
-import resolve = require('/rom/lib/resolve');
+import fs from 'fs';
+import { resolve } from '/rom/lib/resolve';
 
-function main(args: string[], cwd: string): void {
+export function main(args: string[], cwd: string): void {
     const flags = args.filter(a => a.startsWith('-'));
     const paths = args.filter(a => !a.startsWith('-'));
     const recursive = flags.some(f => /p/.test(f));
@@ -14,8 +14,4 @@ function main(args: string[], cwd: string): void {
             console.error(`mkdir: ${arg}: ${(e as any)?.message ?? 'error'}`);
         }
     }
-}
-
-export = {
-    main,
 }

@@ -6,7 +6,7 @@
  * Wrap every `yield` expression in parentheses.
  *
  * Rhino's parser rejects a `yield` expression directly in an argument list or after a comma ("yield expression must
- * be parenthesized"), and parses the operand of `yield` as a whole comma expression, so tsc's `for await` output
+ * be parenthesized"), and parses the operand of `yield` as a whole comma expression, so lowered `await`s such as
  * `_j = yield it.next(), _a = _j.done` would run `_a = _j.done` before yielding. Parentheses never change the meaning
  * of a `yield` (it has the lowest precedence), so wrapping all of them is safe.
  *

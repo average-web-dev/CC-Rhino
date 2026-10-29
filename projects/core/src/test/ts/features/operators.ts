@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-// Newer operators (native on Rhino, lowered by tsc anyway at target es2015): optional chaining, nullish coalescing,
+// Newer operators (native on Rhino, so Babel leaves them alone): optional chaining, nullish coalescing,
 // exponent, logical assignment, numeric separators.
 
 type Node = { value: number; next?: Node; fn?: () => number };

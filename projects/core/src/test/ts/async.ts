@@ -2,8 +2,9 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-// End-to-end fixture for the async pipeline (#35): tsc compiles these `async` functions to generators driven by
-// require("tslib").__awaiter (importHelpers), which must run on Rhino. Run by JSTypeScriptAsyncTest, which provides
+// End-to-end fixture for the async pipeline (#35): Babel (babel-preset-rhino) compiles these `async` functions to
+// native generators driven by the asyncToGenerator helper of the engine's `babel-helpers` module, which must run on
+// Rhino. Run by JSTypeScriptAsyncTest, which provides
 // the `w` and `probe` modules.
 
 interface WaitPromises {

@@ -26,11 +26,13 @@ Users write JavaScript (ES6 subset) instead of Lua inside the mod.
 
 **Modern syntax on Rhino (#47):** Rhino 1.9.1 lacks or breaks part of ES2015+ (no `class` syntax, `const` in loops
 keeps its first value, no spread in calls, rest parameters wrong through `apply`, array destructuring ignores
-iterators, no `new.target`, unparenthesized `yield` rejected, …). TypeScript is therefore compiled in two steps by
-`projects/core/src/build/compile-ts.mjs`: tsc (type-check, ES2015 + CommonJS, async lowered to the native `tslib`),
-then Babel with `babel-preset-rhino` (`src/build/babel-preset-rhino/`), which transforms exactly the features Rhino
-gets wrong; its runtime helpers come from the engine's native `babel-helpers` module. ROM, test and user code can use
-classes, spread, `const` in loops, rest/default parameters and destructuring freely. `JSRhinoFeatureTest` pins the
+iterators, no `new.target`, unparenthesized `yield` rejected, no `async`, …). TypeScript is therefore compiled by
+`projects/core/src/build/compile-ts.mjs`: tsc only type-checks, then Babel strips the types and `babel-preset-rhino`
+(`src/build/babel-preset-rhino/`) transforms exactly the features Rhino gets wrong (since #49 also `async` functions,
+async generators and `for await`, to native generators) and turns ES modules into CommonJS; its runtime helpers come
+from the engine's native `babel-helpers` module. ROM, test and user code use ES module syntax (`import fs from 'fs'`,
+`export function main…`) and can use classes, spread, `const` in loops, rest/default parameters and destructuring
+freely. `JSRhinoFeatureTest` pins the
 feature matrix (what is native, what is transformed). Leaving a `for-of` early (`break`, `return`, labelled jumps,
 exceptions) closes the iterator (#41): Rhino never calls `return()`, so the preset's own `for-of.mjs` plugin keeps the
 native loop but over an iterator it obtained itself, and closes it on every jump out of the loop and, through
@@ -38,9 +40,9 @@ native loop but over an iterator it obtained itself, and closes it on every jump
 arrays +3% / +50% (one inline `Array.isArray` and a `try` per loop entry; array literals are not transformed),
 `Set` +10%, generators +1%, against +500% (`Set`) / +210% (generators) for Babel's `transform-for-of` (a closure
 call per step) and a 2× slowdown of the whole function for any variant that uses `catch`. Array destructuring is
-closed by Babel's `slicedToArray` helper, `for await` by tsc's lowering (`__asyncValues`). Remaining deviations: an
-iterator whose `next()` throws still gets `return()` called (errors ignored), and an array whose `Symbol.iterator` was
-replaced is iterated with it but not closed.
+closed by Babel's `slicedToArray` helper, `for await` by Babel's lowering (`asyncIterator` + `return()`). Remaining
+deviations: an iterator whose `next()` throws still gets `return()` called (errors ignored), and an array whose
+`Symbol.iterator` was replaced is iterated with it but not closed.
 
 **Event loop model (how `events.on` survives a blocking `turtle.dig()`):**
 
@@ -568,7 +570,7 @@ Each continuation is bucketed by its phase rather than kept in a single flat lis
 | Globals | `require` only — all APIs (`process`, `events`, `turtle`, `term`, `fs`, …) must be loaded with `require()` |
 | Event model | `var events = require('events'); events.on(event, cb)` — synchronous callbacks in `handleEvent()` |
 | Sync ops | `turtle.dig()` returns value directly (`{ success, reason? }`); blocking is the default |
-| Async ops (#35) | `require('turtle/promises').dig()` returns a `Promise`; promise jobs run in Phase 3; `async.run` / `async.unwrap` bridge the styles; TS `async` compiles to generators + native `tslib` (see `JS_API_REDESIGN.md`, "Async model") |
+| Async ops (#35) | `require('turtle/promises').dig()` returns a `Promise`; promise jobs run in Phase 3; `async.run` / `async.unwrap` bridge the styles; TS `async` compiles to generators + the native `babel-helpers` (see `JS_API_REDESIGN.md`, "Async model") |
 | Modules | `require(id)`: checks native registry first, then CC filesystem; `require.paths = ["/rom/lib", "/rom/bin"]` |
 | Native modules | Java APIs registered by name in `JSRequire.nativeModules`; CC `os` split into `process` + `events` modules; engine internals (emitter, scheduler) exposed via `require('events')` through `EventsAPI` |
 | Continuation routing | `MethodResult.Bucket` enum encodes the event-loop phase: `TIMER` → Phase 1 timer map; `IO` → Phase 2 I/O map; `YIELD` → Phase 4 yield queue; `null` → return immediately (no continuation captured) |
@@ -837,8 +839,8 @@ Work done after this plan was written, mostly from the code review in October 20
   `absorbEnergy` exploit fixed (#21); alarms (#31).
 - **Async model (#35):** Rhino promise jobs drained in the microtask phase; engine-generated
   `require('<module>/promises')` modules (with `.d.ts` from tsdoclet); `require('async')` (`run`, `unwrap`) and a
-  native `tslib`, so TS `async` functions, async generators and `for await` work (ROM `target: es2015` +
-  `importHelpers`, compiled by `src/build/compile-ts.mjs`; since #47 its Babel step parenthesizes `yield`); blocking
+  native `tslib`, so TS `async` functions, async generators and `for await` work (since #49 compiled by Babel to
+  generators driven by the `babel-helpers` module; `tslib` stays for code compiled elsewhere); blocking
   calls inside async code and native callbacks throw a clear error before running; promise reactions owned by the
   registering thread (`JSPromises`, `Waiter`); unhandled rejections fail the owning program (Node ≥ 15) or reach the
   `unhandled_rejection` event; promise-flavour types for every script object.

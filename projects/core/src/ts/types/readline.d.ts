@@ -143,3 +143,5 @@ declare function require(id: "readline/promises"): ReadlinePromisesModule;
 declare function require(id: "node:readline/promises"): ReadlinePromisesModule;
 declare module "readline" { const readline: ReadlineModule; export = readline; }
 declare module "readline/promises" { const readlinePromises: ReadlinePromisesModule; export = readlinePromises; }
+declare module "node:readline" { const readline: ReadlineModule; export = readline; }
+declare module "node:readline/promises" { const readlinePromises: ReadlinePromisesModule; export = readlinePromises; }

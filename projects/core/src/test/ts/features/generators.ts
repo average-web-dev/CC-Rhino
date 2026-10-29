@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 // Generators stay native generators (Rhino's continuations depend on it); `yield` is parenthesized for Rhino's parser.
-// Async functions and async generators are lowered by tsc (see async.ts and async-generators.ts).
+// Async functions and async generators are lowered to generators too (see async.ts and async-generators.ts).
 
 function* counter(limit: number): Generator<number, string, number | undefined> {
     let received: number[] = [];

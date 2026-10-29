@@ -10,12 +10,12 @@
 // for a program they behave like those of its own process. Things a computer does not have (pid, signals, memory
 // usage, …) are deliberately absent rather than faked.
 
-import tty = require('/rom/lib/internal/tty');
-import env = require('/rom/lib/env');
+import * as tty from '/rom/lib/internal/tty';
+import * as env from '/rom/lib/env';
 
-const fs = require('fs');
-const events = require('events');
-const system = require('system');
+import fs from 'fs';
+import events from 'events';
+import system from 'system';
 
 let cwd = '/';
 
@@ -137,4 +137,6 @@ const proc: Process = {
     },
 };
 
-export = proc;
+// The module is the process object itself (`require('process') === process`), as in Node: not a namespace of named
+// exports, so it replaces module.exports.
+module.exports = proc;
