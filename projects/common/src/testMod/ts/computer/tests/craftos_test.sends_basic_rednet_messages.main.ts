@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 // Requires the rednet library (average-web-dev/CC-Rhino#5); the corresponding gametest is disabled until it exists.
-const rednet = require('rednet');
+import rednet from 'rednet';
 
 rednet.open('top');
 

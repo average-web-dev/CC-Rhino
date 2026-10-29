@@ -13,8 +13,8 @@
 // may block, and is discarded when that thread is stopped (Ctrl+T, parallel stop). A ref'd pending timer (the
 // default) keeps a shell job alive, as it keeps a Node process alive; unref() releases it.
 
-const loop = require('internal/loop');
-const events = require('events');
+import loop from 'internal/loop';
+import events from 'events';
 
 const MS_PER_TICK = 50;
 /** Node's maximum delay; longer (and invalid) delays become 1 ms, as in Node. */
@@ -175,19 +175,28 @@ function clearImmediate(immediate: Immediate | undefined | null): void {
     events.clearImmediate(immediate._id);
 }
 
-const timers = {
-    setTimeout: setTimeout as TimersModule['setTimeout'],
-    clearTimeout,
-    setInterval: setInterval as TimersModule['setInterval'],
-    clearInterval: clearTimeout,
-    setImmediate: setImmediate as TimersModule['setImmediate'],
-    clearImmediate,
-} as TimersModule;
+// Exported with their public types (types/timers.d.ts, where Timeout and Immediate are interfaces).
+const publicSetTimeout = setTimeout as TimersModule['setTimeout'];
+const publicClearTimeout = clearTimeout as TimersModule['clearTimeout'];
+const publicSetInterval = setInterval as TimersModule['setInterval'];
+const publicSetImmediate = setImmediate as TimersModule['setImmediate'];
+const publicClearImmediate = clearImmediate as TimersModule['clearImmediate'];
+export {
+    publicSetTimeout as setTimeout,
+    publicClearTimeout as clearTimeout,
+    publicSetInterval as setInterval,
+    publicClearTimeout as clearInterval,
+    publicSetImmediate as setImmediate,
+    publicClearImmediate as clearImmediate,
+};
 
-// timers.promises, loaded on first use (timers/promises requires this module).
-Object.defineProperty(timers, 'promises', {
+// timers.promises, loaded on first use (timers/promises imports this module): a getter on the exports object.
+export declare const promises: TimersPromisesModule;
+Object.defineProperty(exports, 'promises', {
     get: function () { return require('/rom/lib/timers/promises'); },
     enumerable: true, configurable: true,
 });
 
-export = timers;
+// The exports implement the module's public type (types/timers.d.ts).
+type Exports<T extends TimersModule> = T;
+type _Exports = Exports<typeof import('/rom/lib/timers')>;

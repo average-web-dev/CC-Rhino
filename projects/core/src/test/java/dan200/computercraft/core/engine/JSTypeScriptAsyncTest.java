@@ -17,8 +17,9 @@ import java.util.Objects;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Issue #35 — TypeScript {@code async} functions, compiled by the ROM's tsc settings ({@code target: es2015} +
- * {@code importHelpers}), run on Rhino: {@code src/test/ts/async.ts} is transpiled by the build into
+ * Issue #35 — TypeScript {@code async} functions, compiled by the ROM's pipeline (Babel with
+ * {@code babel-preset-rhino}: native generators driven by the {@code asyncToGenerator} & co. helpers of the engine's
+ * {@code babel-helpers} module), run on Rhino: {@code src/test/ts/async.ts} is transpiled by the build into
  * {@code ts-fixtures/async.js}.
  */
 class JSTypeScriptAsyncTest {
@@ -29,10 +30,10 @@ class JSTypeScriptAsyncTest {
     }
 
     @Test
-    void async_functions_compile_to_the_tslib_awaiter() throws IOException {
+    void async_functions_compile_to_generators() throws IOException {
         var source = fixture("async.js");
-        assertTrue(source.contains("require(\"tslib\")"), "helpers are imported, not inlined:\n" + source);
-        assertTrue(source.contains("__awaiter("), source);
+        assertTrue(source.contains("require(\"babel-helpers\")"), "helpers are imported, not inlined:\n" + source);
+        assertTrue(source.contains(".asyncToGenerator(function* ("), source);
         assertFalse(source.contains("async function") || source.contains("async ("), "no native async functions remain:\n" + source);
         assertFalse(source.contains("await wp") || source.contains("await collect"), "no native await remains:\n" + source);
     }
@@ -47,11 +48,13 @@ class JSTypeScriptAsyncTest {
     }
 
     @Test
-    void async_generators_compile_to_the_tslib_helpers() throws IOException {
+    void async_generators_compile_to_generators() throws IOException {
         var source = fixture("async-generators.js");
-        for (var helper : new String[]{ "__asyncGenerator(", "__await(", "__asyncDelegator(", "__asyncValues(" }) {
-            assertTrue(source.contains("tslib_1." + helper), "uses " + helper + ":\n" + source);
+        var helpers = new String[]{ "wrapAsyncGenerator(", "awaitAsyncGenerator(", "asyncGeneratorDelegate(", "asyncIterator(" };
+        for (var helper : helpers) {
+            assertTrue(source.contains("_babelHelpers." + helper), "uses " + helper + ":\n" + source);
         }
+        assertFalse(source.contains("async function"), "no native async functions remain:\n" + source);
     }
 
     @Test

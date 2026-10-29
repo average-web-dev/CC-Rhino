@@ -10,15 +10,15 @@
 //   getCwd()            — current working directory (process.cwd()).
 //   setCwd(p)           — set the working directory (process.chdir()).
 
-import readline = require('/rom/lib/readline');
-import tty = require('/rom/lib/internal/tty');
+import readline from 'readline';
+import * as tty from '/rom/lib/internal/tty';
 
-const events   = require('events');
-const term     = require('term');
-const fs       = require('fs');
-const env      = require('env');
-const parallel = require('parallel');
-const util     = require('util');
+import events   from 'events';
+import term     from 'term';
+import fs       from 'fs';
+import env      from 'env';
+import parallel from 'parallel';
+import util     from 'util';
 
 // Names that may follow `$` / `${...}` during variable expansion.
 const VAR_RE = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g;
@@ -44,8 +44,8 @@ function resolvePath(p: string): string {
 
 // ── Public API ─────────────────────────────────────────────────────────────────
 
-function getCwd(): string  { return process.cwd(); }
-function setCwd(p: string) { process.chdir(p); }
+export function getCwd(): string  { return process.cwd(); }
+export function setCwd(p: string) { process.chdir(p); }
 
 /**
  * Format an error as a single `file:line: message` line. The location is taken from the first stack frame outside
@@ -82,7 +82,7 @@ let lastExitCode = 0;
  * thread it left behind is discarded, so nothing it started runs (or prints) after the prompt. Ctrl+T makes the call
  * it is blocked in — usually that wait — throw `Error("Terminated")`; we then print "Terminated".
  */
-function run(path: string, ...args: string[]): boolean {
+export function run(path: string, ...args: string[]): boolean {
     return runProgram(path, args);
 }
 
@@ -194,7 +194,7 @@ function makePrompt(): string {
  * completion. Returns immediately; the shell is driven by the interface's listeners. Ctrl+C clears the line, Ctrl+D
  * on an empty line or `exit` closes the shell.
  */
-function start(): void {
+export function start(): void {
     let rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout,
@@ -305,12 +305,5 @@ function processLine(line: string, rl: Interface): void {
 }
 
 /** Exit code of the last program run with run(). */
-function getExitCode(): number { return lastExitCode; }
+export function getExitCode(): number { return lastExitCode; }
 
-export = {
-    getCwd,
-    setCwd,
-    run,
-    start,
-    getExitCode,
-}

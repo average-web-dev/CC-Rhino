@@ -1,10 +1,14 @@
 {
     "compilerOptions": {
-        "module": "commonjs",
-        "target": "es2015",
-        "importHelpers": true,
+        "module": "preserve",
+        "moduleResolution": "bundler",
+        "esModuleInterop": true,
+        "isolatedModules": true,
+        "target": "es2022",
+        "useDefineForClassFields": true,
         "lib": ["es2017", "es2018.asyncgenerator", "es2018.asynciterable"],
         "strict": true,
+        "noEmit": true,
         "noEmitOnError": true,
         "outDir": "../../build/generated/js",
         "rootDir": ".",
@@ -14,6 +18,7 @@
             "/rom/*": ["./rom/*"]
         }
     },
+    "ccRhino": { "esModuleSyntaxOnly": true },
     "include": [".", "./../../../common/build/tsTypes"],
     "exclude": ["node_modules"]
 }

@@ -11,8 +11,8 @@
 
 interface AsyncModule {
     /**
-     * Run a generator function as an async function — the plain-JS form of a TypeScript `async` function (it uses
-     * the same helper as tsc's output). Each `yield`ed promise is awaited: `yield` evaluates to its value, or throws
+     * Run a generator function as an async function — the plain-JS form of a TypeScript `async` function (it is
+     * tslib's `__awaiter`). Each `yield`ed promise is awaited: `yield` evaluates to its value, or throws
      * its rejection reason. Other yielded values are passed back unchanged. Resolves with the generator's return
      * value, or rejects with the error it throws.
      *

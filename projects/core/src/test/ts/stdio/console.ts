@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-import prelude = require('./prelude');
+import * as prelude from './prelude';
 
 const eq = prelude.eq, matches = prelude.matches, throws = prelude.throws, sink = prelude.sink;
 

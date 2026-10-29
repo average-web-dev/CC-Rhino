@@ -4,9 +4,9 @@
 
 // turtle/promises: commands return promises settled through task_complete; async.unwrap and async.run bridge the
 // blocking and the promise style; the blocking form throws a clear error inside async code, without running.
-const async = require('async');
-const turtle = require('turtle');
-const turtleP = require('turtle/promises');
+import async from 'async';
+import turtle from 'turtle';
+import turtleP from 'turtle/promises';
 
 // The command starts without blocking the program.
 let running = true;

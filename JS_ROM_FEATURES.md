@@ -754,6 +754,12 @@ window.getLine(y: number): [string, string, string]  // text, fgColors, bgColors
 
 ## Standard Library Modules (`src/ts/rom/modules/cc/`)
 
+ROM modules are written with ES module syntax (#49) and have **named exports only** (`export function wrap…`), so
+`import { wrap } from 'cc/strings'`, `import * as strings from 'cc/strings'` and plain JS
+`require('cc/strings').wrap` all work. A module whose value is a single object of its own (like Node's `console` and
+`process`) assigns `module.exports` instead. Programs export `main(args, cwd)` (`export function main…`) or run their
+top-level code.
+
 ### cc/expect
 
 **Summary**: Runtime argument type checking with clear error messages.
@@ -1171,7 +1177,7 @@ handle_event(menu: Menu, event: string, ...args): null | false | string
 **Feature contract**:
 ```
 // Internal; exposed sub-modules: init, lexer, parser, errors
-const syntax = require('cc/internal/syntax')
+import * as syntax from 'cc/internal/syntax'
 syntax.parse_program(source: string): boolean   // false = errors were printed
 syntax.parse_repl(source: string): boolean      // same for interactive REPL input
 ```

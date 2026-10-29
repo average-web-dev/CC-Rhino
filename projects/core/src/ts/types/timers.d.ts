@@ -95,6 +95,8 @@ declare function require(id: "timers/promises"): TimersPromisesModule;
 declare function require(id: "node:timers/promises"): TimersPromisesModule;
 declare module "timers" { const timers: TimersModule; export = timers; }
 declare module "timers/promises" { const timersPromises: TimersPromisesModule; export = timersPromises; }
+declare module "node:timers" { const timers: TimersModule; export = timers; }
+declare module "node:timers/promises" { const timersPromises: TimersPromisesModule; export = timersPromises; }
 
 /**
  * Engine-internal primitives of the timers module and the shell's job control (not a public API; ids and ticks).
@@ -116,3 +118,4 @@ interface InternalLoopModule {
 }
 
 declare function require(id: "internal/loop"): InternalLoopModule;
+declare module "internal/loop" { const loop: InternalLoopModule; export = loop; }

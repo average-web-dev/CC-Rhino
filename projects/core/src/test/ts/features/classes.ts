@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-// Classes on Rhino (no native `class` syntax): compiled by tsc (fields, #private, static blocks) and Babel
-// (transform-classes), using helpers from the native `babel-helpers` module.
+// Classes on Rhino (no native `class` syntax): compiled by Babel (fields, #private, static blocks, then
+// transform-classes), using helpers from the native `babel-helpers` module.
 
 class Animal {
     static count = 0;

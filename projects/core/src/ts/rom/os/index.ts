@@ -5,8 +5,8 @@
 // Responsibilities: boot log, device detection, PATH setup, shell handoff.
 // Everything after this (aliases, autorun, completion) is bash's or future layers' job.
 
-const system = require('system');
-const util   = require('util');
+import system from 'system';
+import util   from 'util';
 
 // ── Kernel log ─────────────────────────────────────────────────────────────────
 // Inspired by Linux dmesg / systemd service lines. The tag colours are ANSI styles, which process.stdout maps onto the

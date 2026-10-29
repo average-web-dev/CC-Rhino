@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 // A turtle command whose execute() throws surfaces as a catchable JS error, rather than hanging the program.
-const turtle = require('turtle');
+import turtle from 'turtle';
 
 let error: unknown = null;
 try {

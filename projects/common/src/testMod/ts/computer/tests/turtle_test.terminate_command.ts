@@ -4,8 +4,8 @@
 
 // Ctrl+T while a turtle command is in flight terminates the foreground program (run in a parallel.waitFor* thread,
 // as the shell does) with Error("Terminated").
-const parallel = require('parallel');
-const turtle = require('turtle');
+import parallel from 'parallel';
+import turtle from 'turtle';
 
 let error: unknown = null;
 try {

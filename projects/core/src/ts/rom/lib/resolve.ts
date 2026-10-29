@@ -7,7 +7,7 @@
 // The shell now passes arguments through verbatim, so each program resolves its
 // own path operands with this helper: `resolve(cwd, arg)`.
 
-function resolve(cwd: string, p: string): string {
+export function resolve(cwd: string, p: string): string {
     const raw = (p.startsWith('/') ? '' : cwd.replace(/\/$/, '') + '/') + p;
     const out: string[] = [];
     for (let seg of raw.split('/')) {
@@ -17,5 +17,3 @@ function resolve(cwd: string, p: string): string {
     }
     return '/' + out.join('/');
 }
-
-export = resolve;

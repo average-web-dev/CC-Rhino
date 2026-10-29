@@ -15,7 +15,9 @@ import java.util.Objects;
 /**
  * The Node-style ROM modules {@code util}, {@code console}, {@code process}, {@code readline},
  * {@code readline/promises} (#34), {@code timers} and {@code timers/promises} (#45), exercised by the TypeScript
- * programs under {@code src/test/ts/stdio/} on a real computer with the ROM mounted. Readline runs against fake streams, so line editing can be driven with VT input.
+ * programs under {@code src/test/ts/stdio/} on a real computer with the ROM mounted; also the shape of every ROM
+ * module and the ES module interop (#49). Readline runs against fake streams, so line editing can be driven with VT
+ * input.
  * <p>
  * The programs are compiled by {@code :core:transpileTestTypeScript} into the {@code ts-fixtures/stdio/} test
  * resources. Each one runs as {@code /test.js}, next to the shared helpers in {@code /prelude.js}.
@@ -31,10 +33,11 @@ class StdioLibraryTest {
         }
     }
 
-    private static void run(String name) {
+    private static void run(String name, String... modules) {
         var mount = new MemoryMount()
             .addFile("prelude.js", resource("prelude.js"))
             .addFile("test.js", resource(name));
+        for (var module : modules) mount.addFile(module, resource(module));
         ComputerBootstrap.run(mount, x -> {
         }, MAX_SECONDS);
     }
@@ -62,5 +65,17 @@ class StdioLibraryTest {
     @Test
     void timers() {
         run("timers.js");
+    }
+
+    /** What plain-JS {@code require} sees of every ROM module (#49). */
+    @Test
+    void exports() {
+        run("exports.js");
+    }
+
+    /** ES module imports (default, namespace, named) of native, ROM and compiled modules (#49). */
+    @Test
+    void interop() {
+        run("interop.js", "interop-lib.js");
     }
 }

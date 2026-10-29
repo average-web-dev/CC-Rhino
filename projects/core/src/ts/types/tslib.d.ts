@@ -3,7 +3,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
 // `tslib` — the helpers tsc's `importHelpers` output calls (`require("tslib").__awaiter(...)`), provided natively by
-// the engine (JSPromises). `async` functions compile to a generator driven by `__awaiter`.
+// the engine (JSPromises) for TypeScript compiled by tsc elsewhere. (CC: Rhino's own pipeline, compile-ts.mjs, compiles
+// with Babel and uses the engine's `babel-helpers` module instead.) `async` functions compile to a generator driven by
+// `__awaiter`.
 //
 // Async generators (`async function*`, `yield*` in them) and `for await` use `__asyncGenerator`, `__await`,
 // `__asyncDelegator` and `__asyncValues`; the engine polyfills `Symbol.asyncIterator`, which Rhino lacks.

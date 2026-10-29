@@ -46,7 +46,7 @@ function add<T extends EventEmitter>(self: T, event: string | symbol, fn: Listen
     return self;
 }
 
-class EventEmitter {
+export class EventEmitter {
     constructor() {
         table(this);
     }
@@ -130,11 +130,9 @@ class EventEmitter {
 }
 
 // Aliases are the same functions, as in Node.
-interface EventEmitter {
+export interface EventEmitter {
     addListener: EventEmitter['on'];
     removeListener: EventEmitter['off'];
 }
 EventEmitter.prototype.addListener = EventEmitter.prototype.on;
 EventEmitter.prototype.removeListener = EventEmitter.prototype.off;
-
-export = EventEmitter;

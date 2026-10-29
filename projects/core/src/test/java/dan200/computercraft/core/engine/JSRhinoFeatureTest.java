@@ -30,13 +30,14 @@ import static org.junit.jupiter.api.Assertions.*;
  * drop the corresponding plugin from the preset.
  *
  * <p>{@link #compiled(String)} runs the TypeScript fixtures under {@code src/test/ts/features/}, compiled by the real
- * pipeline (tsc, then Babel with the preset; see {@code compile-ts.mjs}), which use every feature, including the
- * broken ones. Each fixture reports its checks through the global {@code check(label, actual, expected)}.
+ * pipeline (type-checked by tsc, compiled by Babel with the preset; see {@code compile-ts.mjs}), which use every
+ * feature, including the broken ones. Each fixture reports its checks through the global
+ * {@code check(label, actual, expected)}.
  */
 class JSRhinoFeatureTest {
     /** Rhino supports the feature as is. */
     private static final boolean NATIVE = true;
-    /** Rhino rejects the syntax or computes something else: babel-preset-rhino (or tsc, for async) transforms it. */
+    /** Rhino rejects the syntax or computes something else: babel-preset-rhino transforms it. */
     private static final boolean BROKEN = false;
 
     private record Feature(String name, boolean nativeSupport, String expected, String body) {
@@ -266,7 +267,7 @@ class JSRhinoFeatureTest {
             return closes;
             """),
 
-        // Broken: lowered by tsc (target es2015) to generators driven by the native tslib.
+        // Broken: lowered by babel-preset-rhino to native generators driven by the babel-helpers module.
         new Feature("async functions", BROKEN, "function", """
             async function f() { return 1; }
             return typeof f;

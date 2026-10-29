@@ -2,12 +2,12 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-import prelude = require('./prelude');
+import * as prelude from './prelude';
 
 const eq = prelude.eq, throws = prelude.throws, sink = prelude.sink, source = prelude.source;
-const readline = require('readline');
-const events = require('events');
-const asyncMod = require('async');
+import readline from 'readline';
+import events from 'events';
+import asyncMod from 'async';
 
 eq(require('node:readline'), readline);
 eq(readline.promises, require('readline/promises'));
@@ -182,7 +182,7 @@ eq(plain.join('|'), 'a|b|c|de|tail');
 eq(rl.closed, true);
 
 // readline/promises: question returns a promise; closing rejects a pending one.
-const readlinePromises = require('readline/promises');
+import readlinePromises from 'readline/promises';
 input = source();
 const rlp = readlinePromises.createInterface({ input: input, output: sink(80), terminal: true });
 events.setImmediate(function () { input.emit('data', 'yes\r'); });

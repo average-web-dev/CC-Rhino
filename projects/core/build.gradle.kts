@@ -30,8 +30,8 @@ tasks.named("npmInstall") {
     onlyIf { hasTypeScriptSources }
 }
 
-// The TypeScript compiler: tsc followed by Babel with babel-preset-rhino (see compile-ts.mjs). package-lock.json pins
-// the tsc and Babel versions, and so their output.
+// The TypeScript compiler: tsc type-checks, Babel with babel-preset-rhino emits (see compile-ts.mjs). package-lock.json
+// pins the tsc and Babel versions, and so their output.
 val tsCompiler = files("src/build/compile-ts.mjs", fileTree("src/build/babel-preset-rhino"), rootProject.file("package-lock.json"))
 
 // Babel's runtime helpers, generated from @babel/helpers, which the engine provides as its native `babel-helpers`
@@ -61,7 +61,7 @@ val transpileTypeScript by tasks.registering(cc.tweaked.gradle.NpxExecToDir::cla
 
     output = layout.buildDirectory.dir("generated/js")
 
-    // tsc plus Babel (see the script).
+    // tsc (type-check) plus Babel (emit), see the script.
     inputs.files(tsCompiler).withPropertyName("compiler")
     args = listOf("tsx", "src/build/compile-ts.mjs", "--project", "src/ts/tsconfig.json")
 
@@ -69,7 +69,7 @@ val transpileTypeScript by tasks.registering(cc.tweaked.gradle.NpxExecToDir::cla
 }
 
 // TypeScript fixtures for the engine tests (e.g. `async` functions) and the ROM library test programs (`stdio/`, run by
-// StdioLibraryTest), compiled with the ROM's compiler settings, so the tests run real tsc output on Rhino.
+// StdioLibraryTest), compiled with the ROM's compiler settings, so the tests run the real compiler output on Rhino.
 val transpileTestTypeScript by tasks.registering(cc.tweaked.gradle.NpxExecToDir::class) {
     group = LifecycleBasePlugin.VERIFICATION_GROUP
     description = "Transpile the TypeScript test fixtures under src/test/ts/ to JavaScript"

@@ -28,7 +28,7 @@ when you finish them.
 
 ## Build & test
 
-JDK 25 is required (`JAVA_HOME=/usr/lib/jvm/java-25-openjdk-amd64`), plus Node ≥ 20 for `tsc`.
+JDK 25 is required (`JAVA_HOME=/usr/lib/jvm/java-25-openjdk-amd64`), plus Node ≥ 20 for `tsc` and Babel (`npm ci`).
 
 ```sh
 ./gradlew :core:compileJava                      # core engine + APIs
@@ -63,18 +63,38 @@ part of `assemble`.
 - Every script-object type (modules and the objects their methods return) also gets a `<Name>Promises` interface;
   require-able modules additionally get `require("<module>/promises")` declarations.
 - The ROM, the TS test fixtures and user projects are compiled by `projects/core/src/build/compile-ts.mjs
-  --project <tsconfig>` (#47): tsc type-checks and emits ES2015 CommonJS (it also lowers `async`/async generators to
-  generators + the native `tslib`, class fields/`#private`/static blocks, `?.`, `??`, object rest, and handles
-  `export =` / `import x = require()`), then Babel runs **`babel-preset-rhino`** (`src/build/babel-preset-rhino/`)
-  on tsc's output in memory: exactly the transforms Rhino 1.9.1 needs (classes, block scoping in
-  loops, spread in calls/`new`, rest/default parameters, destructuring, `new.target`, plus its own plugins that
+  --project <tsconfig>` (#47, #49): tsc **only type-checks** (the ROM tsconfig sets `noEmit`, `module: preserve`,
+  `esModuleInterop`, `isolatedModules`, `useDefineForClassFields`), then Babel compiles each file on its own:
+  `@babel/preset-typescript` strips the types (type-only imports are elided), then **`babel-preset-rhino`**
+  (`src/build/babel-preset-rhino/`) applies exactly the transforms Rhino 1.9.1 needs (`async` functions, async
+  generators and `for await` → native generators driven by `asyncToGenerator`/`wrapAsyncGenerator` — never
+  regenerator; class fields/`#private`/static blocks, classes, object rest, block scoping in
+  loops, spread in calls/`new`, rest/default parameters, destructuring, `new.target`, ES modules → CommonJS
+  (`modules.mjs`), plus its own plugins that
   parenthesize every `yield` and make leaving a `for-of` early close the iterator (`for-of.mjs`: the loop stays
   native over an iterator obtained by the `rhinoForOf` helper, wrapped in `try`/`finally` — never `catch`, which
-  halves the interpreter's speed for the whole function — with arrays iterated as is). Generators stay native (no regenerator). Babel's runtime helpers are not inlined: files
+  halves the interpreter's speed for the whole function — with arrays iterated as is). Babel's runtime helpers are not inlined: files
   get `var _babelHelpers = require("babel-helpers")`, a native engine module (`JSBabelHelpers`) generated at build time
   from `@babel/helpers` by `:core:generateBabelHelpers` (`babel-preset-rhino/helpers.mjs`: the shipped helper list +
   Rhino fixes); a helper outside that list fails the build. Non-module files (the bios) use `require("babel-helpers").x`
-  inline, so they declare no globals. Source maps (`sourceMap`/`inlineSourceMap`) are carried through both steps.
+  inline, so they declare no globals. Source maps (`sourceMap`/`inlineSourceMap`) map straight to the `.ts` files.
+  Output paths follow `outDir`/`rootDir` like tsc's; `noEmitOnError` is honoured. `tslib` stays a native module for
+  TS compiled elsewhere.
+- **Module syntax (#49):** sources use ES modules. Native modules (`declare module "fs" { export = … }`):
+  `import fs from 'fs'` (canonical; `esModuleInterop` + `interopRequireDefault`), `import * as fs from 'fs'`, and
+  `import { readFileSync } from 'fs'` all work. ROM libraries have **named exports only**, so plain-JS `require('util')`
+  returns the same object as before (no `default`, no `__esModule`; `StdioLibraryTest.exports` pins every ROM
+  module's keys). Interop rules (`babel-preset-rhino/modules.mjs`, `helpers.mjs`): CommonJS `strict` mode — the
+  `__esModule` flag is only set for a module with a default export, so a default import of any other module is its
+  `module.exports` (Node semantics, matching the `export =` typings); a namespace import of a CommonJS module is an
+  object inheriting from it with `default` = the module (the engine's `interopRequireWildcard`, no copying). Named
+  imports are live bindings (`(0, _m.f)(…)`). Exceptions: `console` and `process` assign `module.exports = …` (the
+  module *is* the object, as in Node; ROM code imports them as `import proc from 'process'`, typed by the ambient
+  declarations), and `readline.promises` / `timers.promises` are lazy getters defined on `exports`
+  (`export declare const promises` types them). TypeScript's `import x = require()` / `export =` are rejected where the
+  tsconfig has `"ccRhino": { "esModuleSyntaxOnly": true }` (ROM, tests; not inherited through `extends`); user
+  projects may still use them (Babel compiles them to `require` / `module.exports`). ROM tests import ROM internals
+  with plain `require('/rom/lib/…')` (an `import` would pull the ROM source into the test program).
   Babel is a build-time npm devDependency only; the jar ships compiled JS. `JSRhinoFeatureTest` pins Rhino's feature
   matrix (native vs. transformed, snippets per feature) and runs the compiled fixtures in `src/test/ts/features/`.
 - Test programs are TypeScript too, type-checked (ROM strictness) against the ROM types and the generated `.d.ts`, and
@@ -111,7 +131,7 @@ part of `assemble`.
 | Turtle API + command queue | `projects/common/.../shared/turtle/apis/TurtleAPI.java`, `turtle/core/TurtleBrain.java` |
 | Turtle energy (FE / Tech Reborn Energy) | `forge|fabric/.../shared/turtle/TurtleEnergyStorage.java`, `TurtleBrain.pushEnergy` |
 | TypeScript → `.d.ts` generator | `projects/tsdoclet/` |
-| TS → Rhino JS compiler (tsc + Babel), `babel-preset-rhino`, native `babel-helpers` module | `projects/core/src/build/compile-ts.mjs`, `projects/core/src/build/babel-preset-rhino/`, `core/engine/JSBabelHelpers.java`; feature matrix: `core/engine/JSRhinoFeatureTest.java` + `src/test/ts/features/` |
+| TS → Rhino JS compiler (tsc type-check + Babel emit), `babel-preset-rhino`, native `babel-helpers` module | `projects/core/src/build/compile-ts.mjs`, `projects/core/src/build/babel-preset-rhino/`, `core/engine/JSBabelHelpers.java`; feature matrix: `core/engine/JSRhinoFeatureTest.java` + `src/test/ts/features/` |
 | ROM (TypeScript, transpiled to `/rom`, bios to `bios.js`) | `projects/core/src/ts/` (`bios.ts`, `rom/os`, `rom/bin`, `rom/os/bin`, `rom/lib`, `types/`) |
 | Legacy Lua ROM (reference only, not shipped to the JS machine) | `projects/core/src/main/resources/data/computercraft/lua/` |
 | Core test harness (runs `/test.js` on a real computer) | `projects/core/src/test/java/dan200/computercraft/core/computer/ComputerBootstrap.java` |
@@ -192,10 +212,10 @@ part of `assemble`.
   loop's microtask queue (`JSMachine.CCContext.enqueueMicrotask` → `EventLoop.schedulePromiseJob`). A pending
   operation is parked like a blocking call, but with a `Waiter.Promised` instead of a continuation.
   `require('async')` has `run(function* () {…})` (yield = await) and `unwrap(p)` (block until settled);
-  `require('tslib')` is native, so TS `async` functions, async generators and `for await` work (ROM tsconfig:
-  `target: es2015` + `importHelpers`; `Symbol.asyncIterator` is polyfilled; `tslib` also has the `#private` helpers).
-  Rhino has no `async`/`await` syntax, and Rhino's generator functions lack `Function.prototype` (native helpers use
-  `Function.prototype.apply.call`).
+  TS `async` functions, async generators and `for await` work: Babel lowers them to generators driven by the
+  `babel-helpers` module (`Symbol.asyncIterator` is polyfilled); `require('tslib')` is native too, for TS compiled
+  elsewhere (`importHelpers`; it also has the `#private` helpers). Rhino has no `async`/`await` syntax, and Rhino's
+  generator functions lack `Function.prototype` (the helpers use `Function.prototype.apply.call`).
 - Promise reactions belong to the thread that registered them (`Promise.prototype.then` is wrapped, see `JSPromises`):
   a stopped thread's reactions never run. A pending `/promises` operation of a stopped thread is discarded and its
   promise rejected with `Error("Terminated")`, so other threads awaiting it don't hang. Aborts inside promise code are
@@ -215,14 +235,16 @@ part of `assemble`.
 
 - **Writing ROM/test TS:** modern syntax works (#47): `class` (fields, `#private`, static blocks, `extends Error`/`Map`),
   `const`/`let` anywhere, spread, rest/default parameters (also in functions called through `apply`), destructuring,
-  `new.target` — Babel (`babel-preset-rhino`) rewrites what Rhino 1.9.1 gets wrong. TS targets ES2015 (`async` →
-  generators + native `tslib`), CommonJS (`export = {...}`). Leaving a `for-of` early closes the iterator (a generator's
+  `new.target`, `async`/`await` — Babel (`babel-preset-rhino`) rewrites what Rhino 1.9.1 gets wrong. ES module syntax
+  (`import fs from 'fs'`, named exports; see "Module syntax" above). Type-only imports may use `import type`.
+  Leaving a `for-of` early closes the iterator (a generator's
   `finally` runs). What is left: decorators and `using` are unsupported (a missing
   helper fails the build). Hand-written JS that bypasses the pipeline (Java text blocks, engine-test snippets) still
   has to respect Rhino: no `class`, no spread in calls, no `const` in loops, `for-of` never closes its iterator, `function*` lacks `Function.prototype`,
   rest parameters break through `apply`, parenthesize `yield` inside expressions (`f((yield p))`).
-- Programs in `rom/bin` / `rom/os/bin` export `main(args, cwd)` (same as `process.argv.slice(2)` /
-  `process.cwd()`); bash calls it, or just runs the module's top-level code (Node style). `main` may be `async`
+- Programs in `rom/bin` / `rom/os/bin` export `main(args, cwd)` (`export function main…`; same as
+  `process.argv.slice(2)` / `process.cwd()`); bash calls it, or just runs the module's top-level code (Node style).
+  `main` may be `async`
   (return a promise); the exit code is `process.exitCode`, not `main`'s return value. Line-oriented programs use
   `readline` / `process.stdin`; full-screen programs (`edit`) may still listen to raw `char`/`key` events — bash
   pauses its own interface while a program runs. Node-style classes (`Console`, `readline.Interface`, the internal

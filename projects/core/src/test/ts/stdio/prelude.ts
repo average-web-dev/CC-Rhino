@@ -6,7 +6,7 @@
 // program (/test.js). Run by ComputerBootstrap's test bios, which installs the `process` and `console` globals and
 // provides `assert(value, message)`.
 
-const EventEmitter = require('/rom/lib/internal/emitter');
+const { EventEmitter } = require('/rom/lib/internal/emitter');
 
 /** A writable stream collecting everything written to it. */
 interface Sink extends Writable {
@@ -79,4 +79,4 @@ function source(): Source {
     return e;
 }
 
-export = { eq: eq, matches: matches, throws: throws, sink: sink, source: source };
+export { eq, matches, throws, sink, source };

@@ -10,9 +10,9 @@
 // Differences from Node: console.table draws its borders with ASCII characters (the terminal font has no box-drawing
 // characters); inspected values break lines at the terminal width rather than at 80 columns; there is no colour mode.
 
-import util = require('/rom/lib/util');
-import proc = require('/rom/lib/process');
-import callable = require('/rom/lib/internal/callable');
+import * as util from '/rom/lib/util';
+import proc from 'process';
+import { callable } from '/rom/lib/internal/callable';
 
 const kSecond = 1000;
 const kMinute = 60 * kSecond;
@@ -356,4 +356,6 @@ Object.defineProperty(globalConsole, 'Console', {
     value: callable(Console), writable: true, configurable: true, enumerable: false,
 });
 
-export = globalConsole;
+// The module is the global console itself (`require('console') === console`), as in Node: not a namespace of named
+// exports, so it replaces module.exports.
+module.exports = globalConsole;

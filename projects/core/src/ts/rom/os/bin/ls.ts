@@ -1,8 +1,8 @@
-const fs   = require('fs');
-const util = require('util');
-import resolve = require('/rom/lib/resolve');
+import fs   from 'fs';
+import util from 'util';
+import { resolve } from '/rom/lib/resolve';
 
-function main(args: string[], cwd: string): void {
+export function main(args: string[], cwd: string): void {
     let path = args[0] ? resolve(cwd, args[0]) : cwd;
     try {
         let entries = fs.readdirSync(path, { withFileTypes: true })
@@ -14,8 +14,4 @@ function main(args: string[], cwd: string): void {
     } catch (e: unknown) {
         console.error(`ls: ${(e as any)?.message ?? 'error'}`);
     }
-}
-
-export = {
-    main,
 }

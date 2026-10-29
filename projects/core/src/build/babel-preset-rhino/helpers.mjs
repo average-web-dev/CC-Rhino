@@ -14,8 +14,8 @@ import { fileURLToPath } from "node:url";
 export const HELPERS_MODULE = "babel-helpers";
 
 /**
- * The helpers the preset's plugins use (plus their dependencies, added below). Decorators, async-to-generator,
- * regenerator & co. are deliberately missing: the preset does not include those transforms.
+ * The helpers the preset's plugins use (plus their dependencies, added below). Decorators, regenerator & co. are
+ * deliberately missing: the preset does not include those transforms.
  */
 const USED_HELPERS = [
     // classes
@@ -31,6 +31,11 @@ const USED_HELPERS = [
     "objectWithoutProperties", "objectWithoutPropertiesLoose", "extends", "objectSpread2",
     // block scoping
     "tdz", "temporalRef", "temporalUndefined",
+    // async functions, async generators, for await
+    "asyncToGenerator", "wrapAsyncGenerator", "awaitAsyncGenerator", "asyncGeneratorDelegate", "asyncIterator",
+    "OverloadYield",
+    // ES modules → CommonJS
+    "interopRequireDefault", "interopRequireWildcard",
 ];
 
 function withDependencies(names) {
@@ -77,6 +82,35 @@ babelHelpers.get = function (target, property, receiver) {
   if (!base) return undefined;
   var descriptor = Object.getOwnPropertyDescriptor(base, property);
   return descriptor.get ? descriptor.get.call(arguments.length < 3 ? target : receiver) : descriptor.value;
+};
+
+// Rhino's generator functions do not inherit from Function.prototype, but asyncToGenerator and wrapAsyncGenerator call
+// \`fn.apply(this, arguments)\` on the generator function they get: hand them a plain function that borrows apply.
+var apply = Function.prototype.apply;
+function applyGenerator(wrap) {
+  return function (fn) {
+    return wrap(function () { return apply.call(fn, this, arguments); });
+  };
+}
+babelHelpers.asyncToGenerator = applyGenerator(babelHelpers.asyncToGenerator);
+babelHelpers.wrapAsyncGenerator = applyGenerator(babelHelpers.wrapAsyncGenerator);
+
+// The namespace of a CommonJS module (a native module, a ROM module, anything without __esModule) for
+// \`import * as m from "m"\` (and for \`import m, { a } from "m"\`, which Babel compiles to \`ns.default\` / \`ns.a\`): an
+// object whose prototype is the module object, with \`default\` (the module object) as its only own member. Babel's
+// helper copies the module's own enumerable properties instead, so later changes to the module (a circular import
+// that has not finished yet) are lost and non-enumerable members are missing; here every member is read from the
+// module when it is used. One namespace per module, as with Babel's helper.
+var namespaces = new WeakMap();
+babelHelpers.interopRequireWildcard = function (obj) {
+  if (obj === null || (typeof obj !== "object" && typeof obj !== "function")) return { default: obj };
+  if (obj.__esModule) return obj;
+  var namespace = namespaces.get(obj);
+  if (namespace === undefined) {
+    namespace = Object.create(obj, { default: { value: obj, enumerable: true } });
+    namespaces.set(obj, namespace);
+  }
+  return namespace;
 };
 `;
 
