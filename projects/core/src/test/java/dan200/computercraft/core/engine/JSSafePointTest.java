@@ -6,6 +6,8 @@ package dan200.computercraft.core.engine;
 
 import dan200.computercraft.core.computer.TimeoutState;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Duration;
 
@@ -106,6 +108,41 @@ class JSSafePointTest {
 
                 assertTrue(result.isError(), "infinite loop should be aborted");
                 assertEquals(TimeoutState.ABORT_MESSAGE, result.getMessage(), "soft abort should use the abort message");
+            } finally {
+                machine.close();
+            }
+        });
+    }
+
+    /**
+     * #37 — built-ins that loop up to the {@code length} of an array-like run in Java, but still reach the safepoint
+     * (Rhino counts their iterations as instructions), so a hard abort interrupts them.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "Array.prototype.indexOf.call({ length: 2 ** 53 - 1 }, 1)",
+        "Array.prototype.includes.call({ length: 2 ** 53 - 1 }, 1)",
+        "Array.prototype.fill.call({ length: 2 ** 53 - 1 }, 1)",
+        "Array.prototype.forEach.call({ length: 2 ** 53 - 1 }, function () {})",
+        "Array.prototype.sort.call({ length: 2 ** 31 - 1 })",
+        "var a = []; a.length = 2 ** 31 - 1; a.join('')",
+        "Array.from({ length: 2 ** 32 - 1 })",
+    })
+    void native_array_loop_is_hard_aborted(String bios) {
+        assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
+            var timeout = new FlippableTimeout();
+            var machine = new JSMachineBuilder().bios(bios).timeout(timeout).build();
+            try {
+                var flipper = new Thread(() -> {
+                    sleep(100);
+                    timeout.triggerHardAbort();
+                });
+                flipper.start();
+
+                var result = machine.handleEvent(null, null);
+                flipper.join();
+
+                assertEquals(MachineResult.TIMEOUT, result, "native loop should be aborted");
             } finally {
                 machine.close();
             }

@@ -42,6 +42,7 @@ public final class ConfigSpec {
     public static final ConfigFile.Value<Integer> maxMainComputerTime;
     public static final ConfigFile.Value<Integer> jsMaxStackDepth;
     public static final ConfigFile.Value<Integer> jsMaxStringLength;
+    public static final ConfigFile.Value<Integer> jsMaxArrayBufferSize;
 
     public static final ConfigFile.Value<Boolean> httpEnabled;
     public static final ConfigFile.Value<Boolean> httpWebsocketEnabled;
@@ -192,10 +193,16 @@ public final class ConfigSpec {
 
             jsMaxStringLength = builder
                 .comment("""
-                    The maximum length (in UTF-16 code units) of a string built in one step by
-                    String.prototype.repeat, padStart and padEnd. Longer results throw a catchable
-                    RangeError.""")
+                    The maximum length (in UTF-16 code units) of a JavaScript string. Creating a
+                    longer string (by concatenation, repeat, join, JSON.stringify, ...) throws a
+                    catchable RangeError.""")
                 .defineInRange("js_max_string_length", CoreConfig.jsMaxStringLength, 1024, Integer.MAX_VALUE);
+
+            jsMaxArrayBufferSize = builder
+                .comment("""
+                    The maximum size in bytes of a JavaScript ArrayBuffer (including the buffers
+                    behind typed arrays). Larger buffers throw a catchable RangeError.""")
+                .defineInRange("js_max_array_buffer_size", CoreConfig.jsMaxArrayBufferSize, 1024, Integer.MAX_VALUE);
 
             builder.pop();
         }
@@ -430,6 +437,7 @@ public final class ConfigSpec {
         // Execution. The stack depth is read when a computer's JS context is created, so it applies on the next boot.
         CoreConfig.jsMaxStackDepth = jsMaxStackDepth.get();
         CoreConfig.jsMaxStringLength = jsMaxStringLength.get();
+        CoreConfig.jsMaxArrayBufferSize = jsMaxArrayBufferSize.get();
 
         // Update our log filter if needed.
         var logFilter = MarkerFilter.createFilter(

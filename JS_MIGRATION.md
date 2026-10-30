@@ -828,8 +828,10 @@ function transferUntil(side: string, amount: number): number { /* loop transferE
 Work done after this plan was written, mostly from the code review in October 2026 (see the issues for details):
 
 - **Engine:** catchable errors from failed blocking calls (`JSCallShim`, #23); cycle-safe Java⇄JS conversion and array
-  round-trips (#20, #26); returned Java objects with script methods are wrapped (`JSObjects`); stack-depth and
-  string-length limits exposed in the server config (#19, still open for a real memory budget); uniform abort mapping
+  round-trips (#20, #26); returned Java objects with script methods are wrapped (`JSObjects`); resource limits
+  from the Rhino fork (#19, #37): stack depth, string length (every string, incl. `+`), `ArrayBuffer` size and `apply`
+  argument count throw catchable errors (configurable), and native array loops reach the abort safepoint; memory that
+  a script fills gradually is only bounded by the timeout and the out-of-memory net; uniform abort mapping
   (`JSAbort`, #30); `initSafeStandardObjects` + globals allow-list, no `Continuation`/`Script`/`With`/`Call` (#22).
 - **Modules / loader:** module cached before execution (cycles, #28); `require.uncached` / `require.resolve`, bash runs
   programs uncached (#24); `getModuleName()` APIs are registered; `IFunction` return values are callable.

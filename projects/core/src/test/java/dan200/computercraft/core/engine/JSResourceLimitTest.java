@@ -7,10 +7,10 @@ package dan200.computercraft.core.engine;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Issue #19 — a script must not be able to exhaust the server heap or the interpreter stack. Runaway recursion and
@@ -60,31 +60,52 @@ class JSResourceLimitTest {
         assertTrue(run.result().isError(), "native recursion should fail as a machine error");
     }
 
+    /** The string, buffer and argument limits are set on the context, see {@code CCContextFactory.makeContext}. */
+    private static final String CHECK = """
+        var probe = require('probe');
+        function check(fn) {
+            try { fn(); probe.record("no error"); }
+            catch (e) { probe.record((e instanceof RangeError) + ":" + e.message); }
+        }
+        """;
+
+    private static final String STRING_TOO_LONG = "true:Invalid string length";
+
     @Test
-    void doubling_concatenation_does_not_escape_as_out_of_memory() {
-        // The flattened 2^30-char string needs a 2 GiB char[], which only fails if the heap is smaller than that.
-        assumeTrue(Runtime.getRuntime().maxMemory() < 2L * 1024 * 1024 * 1024, "needs a heap below 2 GiB");
-        var run = run("var s = 'x'; for (var i = 0; i < 30; i++) s = s + s; s.charAt(5);");
-        assertTrue(run.result().isError());
-        assertEquals(JSMachine.OUT_OF_MEMORY_MESSAGE, run.result().getMessage());
+    void doubling_concatenation_is_a_catchable_range_error() {
+        var run = run(CHECK + "check(function () { var s = 'x'; for (var i = 0; i < 40; i++) s = s + s; });");
+        assertFalse(run.result().isError(), () -> String.valueOf(run.result().getMessage()));
+        assertEquals(List.of(STRING_TOO_LONG), run.values());
     }
 
     @Test
-    void oversized_repeat_and_pad_are_catchable_range_errors() {
-        var run = run("""
-            var probe = require('probe');
-            function check(fn) {
-                try { fn(); probe.record("no error"); }
-                catch (e) { probe.record((e instanceof RangeError) + ":" + e.message); }
-            }
+    void oversized_strings_are_catchable_range_errors() {
+        var run = run(CHECK + """
+            var s = 'x'.repeat(1 << 24);
             check(function () { return 'x'.repeat(1e9); });
-            check(function () { return 'abc'.repeat(Math.pow(2, 40)); });
             check(function () { return 'x'.padStart(1e9); });
             check(function () { return 'x'.padEnd(1e9, 'ab'); });
+            check(function () { return s + s + s; });
+            check(function () { return [s, s, s].join(''); });
+            check(function () { var a = []; a.length = 1e8; return a.join('xyz'); });
+            check(function () { return JSON.stringify([s, s, s]); });
+            check(function () { return s.replace(/^/, "$'$'"); });
             """);
         assertFalse(run.result().isError(), () -> String.valueOf(run.result().getMessage()));
-        var expected = "true:" + JSLimits.STRING_TOO_LARGE;
-        assertEquals(List.of(expected, expected, expected, expected), run.values());
+        assertEquals(Collections.nCopies(8, STRING_TOO_LONG), run.values());
+    }
+
+    @Test
+    void oversized_buffers_and_argument_lists_are_catchable_range_errors() {
+        var run = run(CHECK + """
+            check(function () { return new ArrayBuffer(2 ** 31 - 2); });
+            check(function () { return new Float64Array(2 ** 27); });
+            check(function () { return Math.max.apply(null, { length: 2 ** 31 - 1 }); });
+            check(function () { return Reflect.apply(Math.max, null, { length: 1e9 }); });
+            """);
+        assertFalse(run.result().isError(), () -> String.valueOf(run.result().getMessage()));
+        assertEquals(4, run.values().size(), run.values()::toString);
+        for (var value : run.values()) assertTrue(value.toString().startsWith("true:"), run.values()::toString);
     }
 
     @Test

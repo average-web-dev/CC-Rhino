@@ -25,6 +25,12 @@ public class JSMachine implements IMachine {
     private static final String TERMINATE_EVENT = "terminate";
 
     /**
+     * The most arguments {@code apply}, {@code Reflect.apply} and {@code Reflect.construct} read from an array-like
+     * (as in SpiderMonkey), so that {@code f.apply(null, { length: 2 ** 31 - 1 })} cannot allocate gigabytes.
+     */
+    private static final int MAX_APPLY_ARGUMENTS = 500_000;
+
+    /**
      * Legacy Rhino globals removed from the scope. {@code new Continuation()} would let a script capture (and re-enter)
      * interpreter continuations behind the event loop's back; {@code Script}, {@code With} and {@code Call} expose
      * compiler / scope internals. The interpreter itself does not need these globals: it creates continuations, with
@@ -129,7 +135,6 @@ public class JSMachine implements IMachine {
             var globals = (ScriptableObject) cx.initSafeStandardObjects(new TopLevel());
             scope = globals;
             for (var name : REMOVED_GLOBALS) ScriptableObject.deleteProperty(globals, name);
-            JSLimits.install(globals);
 
             // Compile bios now so we can use executeScriptWithContinuations later.
             biosScript = cx.compileString(biosSource, "bios.js", 1, null);
@@ -379,6 +384,11 @@ public class JSMachine implements IMachine {
             cx.setInstructionObserverThreshold(CoreConfig.jsInstructionThreshold);
             // Interpreter frames live on the heap, so unbounded recursion would otherwise eat memory until timeout.
             cx.setMaximumInterpreterStackDepth(CoreConfig.jsMaxStackDepth);
+            // A single operation must not allocate an arbitrary amount of memory (#19): longer strings, larger buffers
+            // and apply() with a huge array-like throw a catchable RangeError instead.
+            cx.setMaximumStringLength(CoreConfig.jsMaxStringLength);
+            cx.setMaximumArrayBufferLength(CoreConfig.jsMaxArrayBufferSize);
+            cx.setMaximumArgumentsLength(MAX_APPLY_ARGUMENTS);
             cx.setClassShutter(className -> false);
             return cx;
         }
