@@ -52,7 +52,29 @@ for (project in rootProject.children) {
     project.projectDir = file("projects/${project.name}")
 }
 
-// Opt-in: build Rhino from a local checkout instead of the Maven artifact, e.g. to test a Rhino fork/branch.
+// Opt-in: build Rhino from a Git branch instead of the Maven artifact, e.g. to test a Rhino fork. Gradle clones it
+// into .gradle/vcs-1 (new commits are fetched with --refresh-dependencies).
+// ./gradlew :core:test -PrhinoGit=https://github.com/<user>/rhino.git -PrhinoBranch=<branch>
+val rhinoGit = providers.gradleProperty("rhinoGit").orNull
+if (rhinoGit != null) {
+    val rhinoBranch = providers.gradleProperty("rhinoBranch").orNull ?: error("rhinoGit requires rhinoBranch")
+    sourceControl {
+        gitRepository(uri(rhinoGit)) {
+            producesModule("org.mozilla:rhino")
+        }
+    }
+    gradle.allprojects {
+        configurations.configureEach {
+            withDependencies {
+                filterIsInstance<ExternalModuleDependency>()
+                    .filter { it.group == "org.mozilla" && it.name == "rhino" }
+                    .forEach { it.version { branch = rhinoBranch } }
+            }
+        }
+    }
+}
+
+// Opt-in: build Rhino from a local checkout instead of the Maven artifact.
 // ./gradlew :core:test -PrhinoDir=../rhino   (or set rhinoDir in ~/.gradle/gradle.properties)
 providers.gradleProperty("rhinoDir").orNull?.let { dir ->
     includeBuild(dir) {
