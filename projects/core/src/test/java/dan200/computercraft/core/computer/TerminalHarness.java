@@ -9,12 +9,11 @@ import dan200.computercraft.api.scripting.IComputerAPI;
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.ComputerContext;
-import dan200.computercraft.core.apis.events.CharEvent;
 import dan200.computercraft.core.apis.events.CoreEvents;
-import dan200.computercraft.core.apis.events.KeyEvent;
 import dan200.computercraft.core.computer.mainthread.MainThread;
 import dan200.computercraft.core.computer.mainthread.MainThreadConfig;
 import dan200.computercraft.core.filesystem.MemoryMount;
+import dan200.computercraft.core.input.EventComputerInput;
 import dan200.computercraft.core.terminal.Terminal;
 import dan200.computercraft.test.core.computer.BasicEnvironment;
 import org.jspecify.annotations.Nullable;
@@ -54,6 +53,8 @@ public final class TerminalHarness implements AutoCloseable {
     private final MainThread mainThread;
     private final ComputerContext context;
     private final Computer computer;
+    /** Input as a player gives it: events, and the visible console of the screen. */
+    private final EventComputerInput input;
     private final Probe probe = new Probe();
 
     private TerminalHarness(MemoryMount mount, @Nullable String bios, int width, int height, boolean colour) {
@@ -70,6 +71,7 @@ public final class TerminalHarness implements AutoCloseable {
         };
         context = ComputerContext.builder(environment).mainThreadScheduler(mainThread).build();
         computer = new Computer(context, environment, terminal, 0);
+        input = new EventComputerInput(computer);
         computer.addApi(probe);
         computer.turnOn();
     }
@@ -125,25 +127,25 @@ public final class TerminalHarness implements AutoCloseable {
 
     /** Type text, one {@code char} event per character. */
     public void type(String text) {
-        for (var i = 0; i < text.length(); i++) computer.queueEvent(new CharEvent(String.valueOf(text.charAt(i))));
+        for (var i = 0; i < text.length(); i++) input.charTyped((byte) text.charAt(i));
     }
 
     public void paste(String text) {
-        computer.queueEvent(new CoreEvents.Paste(ByteBuffer.wrap(text.getBytes(StandardCharsets.ISO_8859_1))));
+        input.paste(ByteBuffer.wrap(text.getBytes(StandardCharsets.ISO_8859_1)));
     }
 
     /** Press and release a key. */
     public void key(int key) {
-        computer.queueEvent(new KeyEvent(key, false));
-        computer.queueEvent(new CoreEvents.KeyUp(key));
+        input.keyDown(key, false);
+        input.keyUp(key);
     }
 
     /** Press a key while Ctrl is held. */
     public void ctrl(int key) {
-        computer.queueEvent(new KeyEvent(KEY_LEFT_CONTROL, false));
-        computer.queueEvent(new KeyEvent(key, false));
-        computer.queueEvent(new CoreEvents.KeyUp(key));
-        computer.queueEvent(new CoreEvents.KeyUp(KEY_LEFT_CONTROL));
+        input.keyDown(KEY_LEFT_CONTROL, false);
+        input.keyDown(key, false);
+        input.keyUp(key);
+        input.keyUp(KEY_LEFT_CONTROL);
     }
 
     /** Type a line and press Enter. */

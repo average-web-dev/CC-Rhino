@@ -16,7 +16,7 @@ class ScreenAPITest {
     void consoles() {
         assertTimeoutPreemptively(ofSeconds(30), () -> ComputerBootstrap.run("""
             var screen = require('screen');
-            assert(!screen.isActive(), 'inactive until activated');
+            assert(screen.isActive(), 'the ROM (process, loaded by the bios) has taken over the screen');
             assert(screen.isColor(), 'colour terminal');
             assert(screen.getConsoleCount() === 4, 'advanced computers have 4 consoles by default');
 
@@ -26,8 +26,6 @@ class ScreenAPITest {
             assert(!consoles[0].isResizable(), 'the size is set by the screen');
             assert(consoles[0].getSize().columns === 51 && consoles[0].getSize().rows === 19, 'screen size');
 
-            screen.activate();
-            assert(screen.isActive(), 'active');
             screen.show(2);
             assert(screen.getVisible() === 2, 'visible');
 

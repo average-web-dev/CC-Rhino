@@ -62,7 +62,6 @@ import dan200.computercraft.core.util.Colour;
  * <p>
  * The [`paintutils`] API provides several helpful functions for displaying graphics using [`term.setBackgroundColour`].
  *
- * @cc.module term
  */
 public class TermAPI extends TermMethods implements IComputerAPI {
     private final Terminal terminal;

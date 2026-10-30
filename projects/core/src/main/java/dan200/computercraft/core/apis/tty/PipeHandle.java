@@ -38,7 +38,7 @@ public final class PipeHandle {
     }
 
     /**
-     * The id of this pipe, as carried by the {@code pipe_data} event.
+     * The id of this pipe, as carried by the {@code pipe_data} and {@code pipe_readable} events.
      *
      * @return The id.
      */
@@ -79,6 +79,27 @@ public final class PipeHandle {
         writer.accept(data);
     }
 
+    /**
+     * Start or stop pushing what becomes readable as {@code pipe_data} events (data, or {@code null} at end of input)
+     * to this computer, instead of keeping it for {@link #read()}. Buffered data is pushed at once.
+     *
+     * @param flowing Whether to push.
+     */
+    @ScriptFunction
+    public void setFlowing(boolean flowing) {
+        pipe.setFlow(flowing ? read -> queue.accept(new CoreEvents.PipeData(pipe.id(), read.data())) : null);
+    }
+
+    /**
+     * Whether data is pushed as {@code pipe_data} events.
+     *
+     * @return Whether the pipe flows.
+     */
+    @ScriptFunction
+    public boolean isFlowing() {
+        return pipe.isFlowing();
+    }
+
     /** Close the pipe: readers get end of input once the buffered data is read. */
     @ScriptFunction
     public void end() {
@@ -106,13 +127,13 @@ public final class PipeHandle {
     }
 
     private final class ReadCallback implements ICallback {
-        private final MethodResult pull = MethodResult.pullEvent("pipe_data", this);
+        private final MethodResult pull = MethodResult.pullEvent("pipe_readable", this);
 
         MethodResult next() {
             while (true) {
                 var read = pipe.read();
                 if (!read.isEmpty()) return MethodResult.of(read.data());
-                if (pipe.await(() -> queue.accept(new CoreEvents.PipeData(pipe.id())))) return pull;
+                if (pipe.await(() -> queue.accept(new CoreEvents.PipeReadable(pipe.id())))) return pull;
             }
         }
 

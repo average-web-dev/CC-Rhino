@@ -67,6 +67,12 @@ class StdioLibraryTest {
         run("timers.js");
     }
 
+    /** The tty module and Term on virtual TTYs. */
+    @Test
+    void tty() {
+        run("tty.js");
+    }
+
     /** What plain-JS {@code require} sees of every ROM module (#49). */
     @Test
     void exports() {

@@ -65,6 +65,13 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    void cc_colour_extension() {
+        emulator.writeOut("\u001b[38;6;12;48;6;4ma\u001b[38;6;16mb");
+        assertEquals("cc", fg(0).substring(0, 2), "brown, which ANSI cannot name; 16 is ignored");
+        assertEquals("44", bg(0).substring(0, 2), "yellow background");
+    }
+
+    @Test
     void stderr_is_red_and_restores_the_colour() {
         emulator.writeOut("\u001b[32m");
         emulator.writeErr("e\u001b[0mf");

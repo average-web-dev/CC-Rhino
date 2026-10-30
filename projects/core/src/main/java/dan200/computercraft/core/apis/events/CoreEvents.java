@@ -142,7 +142,19 @@ public final class CoreEvents {
      * A TTY pipe that a program is waiting on became readable (data, end of input or closed). It wakes blocked
      * {@code read()} calls; programs read pipes rather than listening for it.
      */
+    @Event("pipe_readable")
+    public record PipeReadable(int pipe) {
+    }
+
+    /**
+     * Data read from a flowing TTY pipe (see {@code setFlowing}): the streams of the ROM's {@code tty} module turn it
+     * into their {@code 'data'} and {@code 'end'} events.
+     *
+     * @param pipe The pipe.
+     * @param data The text, or {@code null} at end of input.
+     * @cc-r.param data string | null
+     */
     @Event("pipe_data")
-    public record PipeData(int pipe) {
+    public record PipeData(int pipe, @Nullable String data) {
     }
 }

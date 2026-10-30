@@ -76,6 +76,38 @@ class TtyTest {
     }
 
     @Test
+    void flow_pushes_buffered_and_later_data() {
+        var pipe = new Pipe();
+        var pushed = new ArrayList<Pipe.Read>();
+        pipe.write("a");
+        pipe.setFlow(pushed::add);
+        assertTrue(pipe.isFlowing());
+        pipe.write("b");
+        pipe.writeEof();
+        assertEquals(3, pushed.size());
+        assertEquals("a", pushed.get(0).data());
+        assertEquals("b", pushed.get(1).data());
+        assertTrue(pushed.get(2).isEof());
+
+        pipe.setFlow(null);
+        pipe.write("kept");
+        assertEquals(3, pushed.size(), "a paused pipe buffers");
+        assertEquals("kept", readAll(pipe));
+    }
+
+    @Test
+    void flow_pushes_the_end_once() {
+        var pipe = new Pipe();
+        var pushed = new ArrayList<Pipe.Read>();
+        pipe.setFlow(pushed::add);
+        pipe.write("x");
+        pipe.end();
+        assertEquals(2, pushed.size());
+        assertTrue(pushed.get(1).isEof());
+        assertFalse(pipe.isFlowing(), "the flow stops after the end");
+    }
+
+    @Test
     void ids_are_unique() {
         assertNotEquals(new Pipe().id(), new Pipe().id());
         assertNotEquals(new Tty(1, 1).id(), new Tty(1, 1).id());

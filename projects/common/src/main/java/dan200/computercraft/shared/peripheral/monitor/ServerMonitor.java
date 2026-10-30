@@ -22,7 +22,7 @@ public class ServerMonitor {
     private int textScale = 2;
     private @Nullable NetworkedTerminal terminal;
     /** The TTY of this monitor: what programs write to it is rendered on the terminal; touches arrive as mouse input. */
-    private final Tty tty = new Tty(1, 1);
+    private final Tty tty;
     private final InputEncoder encoder = new InputEncoder();
     private @Nullable TerminalEmulator emulator;
     private final AtomicBoolean resized = new AtomicBoolean(false);
@@ -31,6 +31,11 @@ public class ServerMonitor {
     ServerMonitor(boolean colour, MonitorBlockEntity origin) {
         this.colour = colour;
         this.origin = origin;
+        tty = new Tty(1, 1, colour);
+        tty.setColumnSource(() -> {
+            var terminal = this.terminal;
+            return terminal == null ? -1 : terminal.getCursorX();
+        });
     }
 
     synchronized void rebuild() {

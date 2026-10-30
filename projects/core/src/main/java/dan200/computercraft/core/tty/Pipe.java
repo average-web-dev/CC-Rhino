@@ -35,6 +35,8 @@ public final class Pipe {
     private boolean ended;
     private final List<Runnable> waiters = new ArrayList<>();
     private @Nullable Consumer<String> sink;
+    private @Nullable Consumer<Read> flow;
+    private boolean pushing;
 
     /** The id of this pipe, unique within the server. */
     public int id() {
@@ -44,6 +46,22 @@ public final class Pipe {
     /** Send every write to {@code sink} instead of buffering it ({@code null}: buffer again). */
     public synchronized void setSink(@Nullable Consumer<String> sink) {
         this.sink = sink;
+    }
+
+    /**
+     * Push everything that becomes readable to {@code flow} instead of keeping it for {@link #read()}: buffered data at
+     * once, later writes as they happen; end of input is pushed as {@link Read#eof()}. {@code null} stops the flow, and
+     * data is buffered again (a paused stream).
+     */
+    public void setFlow(@Nullable Consumer<Read> flow) {
+        synchronized (this) {
+            this.flow = flow;
+        }
+        if (flow != null) readable();
+    }
+
+    public synchronized boolean isFlowing() {
+        return flow != null;
     }
 
     /** Write {@code data}; writes after {@link #end()} are dropped. */
@@ -58,7 +76,7 @@ public final class Pipe {
                 buffered += data.length();
             }
         }
-        if (sink != null) sink.accept(data); else notifyReader();
+        if (sink != null) sink.accept(data); else readable();
     }
 
     /** Mark the end of the current input: the next read returns end of input once. */
@@ -67,7 +85,7 @@ public final class Pipe {
             if (ended || sink != null) return;
             chunks.add(EOF);
         }
-        notifyReader();
+        readable();
     }
 
     /** Close the pipe: after the buffered data, every read returns end of input. */
@@ -76,7 +94,7 @@ public final class Pipe {
             if (ended) return;
             ended = true;
         }
-        notifyReader();
+        readable();
     }
 
     public synchronized boolean isEnded() {
@@ -121,6 +139,35 @@ public final class Pipe {
         if (!chunks.isEmpty() || ended) return false;
         waiters.add(notify);
         return true;
+    }
+
+    /** Something became readable: push it to the flow, or wake the waiting readers. */
+    private void readable() {
+        synchronized (this) {
+            // Only one thread pushes at a time, so pushed data keeps its order; it also picks up what others append.
+            if (flow != null && pushing) return;
+            pushing = flow != null;
+        }
+        try {
+            while (true) {
+                Consumer<Read> flow;
+                Read read;
+                synchronized (this) {
+                    flow = this.flow;
+                    if (flow == null) break;
+                    read = read();
+                    if (read.isEmpty()) return;
+                    // Once ended and drained, the end is pushed once; afterwards the pipe stays quiet.
+                    if (read.isEof() && ended && chunks.isEmpty()) this.flow = null;
+                }
+                flow.accept(read);
+            }
+        } finally {
+            synchronized (this) {
+                pushing = false;
+            }
+        }
+        notifyReader();
     }
 
     private void notifyReader() {

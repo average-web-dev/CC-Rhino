@@ -8,16 +8,18 @@
 // Interactive program model: main() blocks (spinning on system.yield) while its
 // own char/key/paste listeners do the editing, so the parent shell stays parked
 // until the editor exits. Press Ctrl to open the menu (Save / Exit), arrows to
-// select, Enter to invoke.
+// select, Enter to invoke. It draws through a Term on the program's TTY, which
+// it keeps in raw mode (so typed keys are not echoed) and empties on exit.
 //
 // MVP scope: load/edit/save plaintext, scrolling, paste, resize. Syntax
 // highlighting (term.blit) and require-name tab completion are follow-ups
 // (JS_MIGRATION Phase 11.28).
 
 import events from 'events';
-import term   from 'term';
 import fs     from 'fs';
 import system from 'system';
+import { Term } from '/rom/lib/term';
+import * as tty from '/rom/lib/internal/tty';
 
 // GLFW key codes (same set used inline by bash.ts).
 const K = {
@@ -44,6 +46,7 @@ function resolve(p: string, cwd: string): string {
 export function main(args: string[], cwd: string): void {
     if (!args[0]) { console.error('Usage: edit <path>'); return; }
     const path = resolve(args[0], cwd ?? '/');
+    const term = new Term();
     const canColor = term.isColor();
 
     // ── Document + view state ───────────────────────────────────────────────────
@@ -290,6 +293,7 @@ export function main(args: string[], cwd: string): void {
     // ── Lifecycle ───────────────────────────────────────────────────────────────
 
     load();
+    tty.stdin.setRawMode(true);
     term.clear();
     draw();
 
@@ -308,11 +312,12 @@ export function main(args: string[], cwd: string): void {
         events.off('paste', onPaste);
         events.off('term_resize', onResize);
 
-        // Restore the terminal for the shell.
+        // Restore the terminal for the shell; what was typed went to the editor's listeners, not to the shell.
         term.setBackgroundColor(BLACK);
         term.setTextColor(WHITE);
         term.clear();
         term.setCursorPos({ x: 0, y: 0 });
         term.setCursorBlink(true);
+        tty.stdin.discard();
     }
 }

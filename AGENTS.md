@@ -128,9 +128,10 @@ part of `assemble`.
 | Deferring JS callbacks from native code onto the event loop (e.g. fs callbacks) | `core/engine/JSScheduler.java` |
 | Promises: `/promises` modules, promise jobs, `async`/`tslib` modules, async-code detection | `core/engine/JSPromises.java`, `Waiter.java`, `JSAPIBuilder.java` (+ `EventLoop`) |
 | Safepoint aborts, resource limits (Rhino `Context` limits for strings, `ArrayBuffer`s, `apply` arguments, stack depth, set in `CCContextFactory.makeContext`; native array loops reach the safepoint) | `core/engine/JSAbort.java`, `JSMachine.java`, `core/CoreConfig.java` (+ `ConfigSpec`) |
-| Node-style stdio: `process`, `console`, `util`, `readline` (+`/promises`), terminal driver + job control | `projects/core/src/ts/rom/lib/` (`internal/tty.ts`, `internal/globals.ts`, `internal/emitter.ts`); types in `src/ts/types/{process,console,util,readline}.d.ts` |
+| Node-style stdio: `process`, `console`, `util`, `readline` (+`/promises`), `tty` streams, `term` (Term), job control | `projects/core/src/ts/rom/lib/` (`tty.ts`, `term.ts`, `internal/tty.ts`, `internal/keys.ts`, `internal/globals.ts`, `internal/emitter.ts`); types in `src/ts/types/{process,console,util,readline,tty,term}.d.ts` |
+| Native TTYs: pipes, line discipline, terminal emulator, input encoder, screen consoles; `internal/pty`, `screen` modules | `core/tty/` (`Pipe`, `LineDiscipline`, `Tty`, `TerminalEmulator`, `InputEncoder`, `Screen`), `core/apis/tty/`, monitor: `common/.../peripheral/monitor/ServerMonitor.java` |
 | Event bus (`events.on/once/off/emit`, `fireNow`, native-name registry) | `core/engine/JSEventEmitter.java` (incl. the JS `emit`), `core/apis/EventsAPI.java`, `EventLoop.emitPlan`/`dispatchNow`, core-api `scripting/Events.java` |
-| Core APIs (`fs`, `system`, `term`, `http`, `peripheral`, `redstone`) | `projects/core/src/main/java/dan200/computercraft/core/apis/` |
+| Core APIs (`fs`, `system`, `http`, `peripheral`, `redstone`, `screen`) | `projects/core/src/main/java/dan200/computercraft/core/apis/` |
 | Scripting API for addon mods (`@ScriptFunction`, `MethodResult`, `Result`, `TaskCompletion`) | `projects/core-api/src/main/java/dan200/computercraft/api/scripting/` |
 | Turtle API + command queue | `projects/common/.../shared/turtle/apis/TurtleAPI.java`, `turtle/core/TurtleBrain.java` |
 | Turtle energy (FE / Tech Reborn Energy) | `forge|fabric/.../shared/turtle/TurtleEnergyStorage.java`, `TurtleBrain.pushEnergy` |
@@ -152,13 +153,23 @@ part of `assemble`.
   `process.stdout.write`. There is no global `sleep`: `require('system').sleep(ticks)`. Every computer API is a native module:
   `require('fs')`, `require('system')`, `require('events')`, `require('turtle')` … Native modules only exist when
   the hardware is present (e.g. `turtle` only on turtles).
+- TTYs (feature/tty-term): a TTY is native (`core/tty`): a pair of pipes (`Pipe`) plus a line discipline (cooked:
+  echo, editing, Ctrl+U/D/C; raw: passed through), created virtually (`internal/pty`) or owned by a device. A
+  `TerminalEmulator` renders a TTY's output onto a `Terminal` grid (VT-style: pending wrap, scrolling, SGR colours →
+  CC colours plus the CC extension `38/48;6;i`, cursor/erase sequences, the blit sequence `ESC P cc-blit;fg;bg;text
+  ESC \`, mouse modes); an `InputEncoder` turns keys/chars/mouse into what a terminal sends. Every computer has a
+  `Screen` (module `screen`) with virtual consoles (1 on normal, `advanced_consoles` on advanced computers; Alt+1…9);
+  it stays inactive until a script activates it (the ROM's `internal/tty` does), then mirrors the visible console onto
+  the computer's terminal; input reaches it through `EventComputerInput` (events are still queued too). Monitors have
+  a TTY too (`monitor.getTty()`). There is no native `term` module any more: the ROM module `term` (class `Term`)
+  draws by writing ANSI into a TTY, and `tty.CSI` holds the escape sequences (no raw `'\x1b[…'` in ROM code).
 - Node-style stdio (#34) is ROM TypeScript in `/rom/lib`: `process`, `console`, `util`, `readline`,
-  `readline/promises`. These "ROM core modules" resolve before `require.paths` and with a `node:` prefix
-  (`JSRequire.ROM_CORE_MODULES`). `/rom/lib/internal/tty.ts` is the terminal driver: stdout/stderr write with VT
-  semantics (wrapping, ANSI SGR colours → CC colours, cursor/erase CSI sequences; stderr in red); stdin turns
-  `char`/`key`/`paste` into a Node TTY stream (cooked line discipline or raw VT sequences, `'keypress'` events). Its
-  input listeners are registered by the bios (root thread) first; `process.stdin.on(...)` registers native listeners
-  in the *calling* thread, so a program's stdin handlers may block and die with the program. bash runs each program
+  `readline/promises`, `tty`, `term`. These "ROM core modules" resolve before `require.paths` and with a `node:`
+  prefix (`JSRequire.ROM_CORE_MODULES`). `tty` has Node's `ReadStream`/`WriteStream` over native TTYs plus the `TTY`
+  class; `process.stdin/stdout/stderr` are those of the first screen console (`/rom/lib/internal/tty.ts`). While a
+  ReadStream flows, the TTY pushes what can be read as `pipe_data` events; `stream.on(...)` registers native listeners
+  in the *calling* thread, so a program's stdin handlers may block and die with the program. Input typed while stdin
+  is paused stays in the TTY (type ahead); `'keypress'` is decoded from the delivered input. bash runs each program
   as a job (`tty.beginJob/waitForJob/endJob`): fresh stdin, `process.argv`, cwd restored afterwards; see job
   lifetime below. `readline.Interface#question` without a callback **blocks**; `readline/promises` returns a promise (hand-written —
   the engine's generated `/promises` modules exist only for native modules).

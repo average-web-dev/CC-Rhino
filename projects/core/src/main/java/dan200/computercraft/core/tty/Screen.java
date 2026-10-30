@@ -40,9 +40,10 @@ public final class Screen {
 
         private Console(int index) {
             this.index = index;
-            tty = new Tty(display.getWidth(), display.getHeight());
+            tty = new Tty(display.getWidth(), display.getHeight(), display.isColour());
             buffer = new Terminal(display.getWidth(), display.getHeight(), display.isColour());
             emulator = new TerminalEmulator(buffer);
+            tty.setColumnSource(buffer::getCursorX);
             tty.attach(text -> {
                 emulator.writeOut(text);
                 rendered(this);

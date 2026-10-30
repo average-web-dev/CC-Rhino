@@ -14,7 +14,6 @@ import readline from 'readline';
 import * as tty from '/rom/lib/internal/tty';
 
 import events   from 'events';
-import term     from 'term';
 import fs       from 'fs';
 import env      from 'env';
 import parallel from 'parallel';
@@ -118,7 +117,7 @@ function runProgram(path: string, args: string[]): boolean {
         } else {
             lastExitCode = 1;
             // Report on a row of its own, even if the program was interrupted mid-line (e.g. at its prompt).
-            if (term.getCursorPos().x > 0) process.stdout.write('\n');
+            if (tty.cursorColumn() > 0) process.stdout.write('\n');
             if (e?.message === 'Terminated') console.error('Terminated');
             else console.error(formatError(resolved, e));
         }
@@ -205,7 +204,7 @@ export function start(): void {
 
     function prompt(): void {
         // Start the prompt on a fresh row if a program left the cursor mid-line.
-        if (term.getCursorPos().x > 0) process.stdout.write('\n');
+        if (tty.cursorColumn() > 0) process.stdout.write('\n');
         rl.setPrompt(makePrompt());
         rl.prompt();
     }
@@ -267,7 +266,7 @@ function processLine(line: string, rl: Interface): void {
 
     if (cmd === 'exit') {
         rl.close();
-        term.setCursorBlink(false);
+        process.stdout.write(tty.CSI.hideCursor);
         return;
     }
 

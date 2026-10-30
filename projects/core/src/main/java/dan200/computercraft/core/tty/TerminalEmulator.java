@@ -17,8 +17,9 @@ import java.nio.charset.StandardCharsets;
  * bottom and honours {@code \n} (new line, at column 0), {@code \r}, {@code \t} and {@code \b}. Escape sequences:
  * <ul>
  *   <li>SGR colours ({@code ESC [ … m}): 30–37/90–97 and 40–47/100–107 onto the 16 CC colours, 38/48;5;n for the first
- *   16 palette entries, 0/39/49 back to the stream's defaults. Everything else (bold, underline, RGB, …) is
- *   ignored;</li>
+ *   16 palette entries, 38/48;6;i for CC colour i (0–15, its blit digit; a CC extension, as the ANSI colours
+ *   cannot name all 16 CC colours), 0/39/49 back to the stream's defaults. Everything else (bold, underline, RGB, …)
+ *   is ignored;</li>
  *   <li>cursor movement and erasing: CUU/CUD/CUF/CUB ({@code A B C D}), CNL/CPL ({@code E F}), CHA ({@code G}),
  *   CUP ({@code H f}), ED ({@code J}), EL ({@code K}), SU/SD ({@code S T}), save/restore ({@code s u}, {@code ESC 7},
  *   {@code ESC 8}), full reset ({@code ESC c});</li>
@@ -339,6 +340,12 @@ public final class TerminalEmulator {
                     i += 2;
                 } else if (mode == 2) {
                     i += 4;
+                } else if (mode == 6) {
+                    // CC extension: 6;i selects CC colour i (its blit digit, 0 = white … 15 = black) directly.
+                    if (i + 2 < params.length && params[i + 2] >= 0 && params[i + 2] < 16) {
+                        if (p == 38) setFg(params[i + 2]); else setBg(params[i + 2]);
+                    }
+                    i += 2;
                 }
             }
             // Everything else (bold, italic, underline, inverse, …) has no equivalent on a CC terminal.

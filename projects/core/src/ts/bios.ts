@@ -4,8 +4,8 @@
 
 // ── Firmware / Bootloader ──────────────────────────────────────────────────
 // Responsibilities (in order):
-//   1. Install the Node-style globals `process` and `console` (and with them the terminal driver)
-//   2. Terminal hardware reset
+//   1. Install the Node-style globals `process` and `console` (and with them the computer's TTY)
+//   2. Terminal reset
 //   3. Set require.paths so /rom/lib and /rom/bin are resolvable
 //   4. Discover alternate boot entries (disk drives, local /boot.js)
 //   5. If only the default OS → boot it directly (synchronous)
@@ -18,12 +18,12 @@
 // The bios runs in the global scope, so everything lives in a function: the only globals it leaves behind are
 // `process` and `console` (plus the engine's `require`), like Node.
 
-// Must come first: loading `process` registers the terminal driver's input listeners, which have to belong to the
-// root thread and run before any other listener (see /rom/lib/internal/tty.ts).
+// Must come first: loading `process` takes over the screen (the computer's TTY, see /rom/lib/internal/tty.ts).
 require('/rom/lib/internal/globals');
 
 (function (){
-  const term   = require('term');
+  const tty    = require('/rom/lib/internal/tty') as typeof import('/rom/lib/internal/tty');
+  const term   = new (require('/rom/lib/term') as typeof import('/rom/lib/term')).Term();
   const fs     = require('fs');
   const events = require('events');
   const system = require('system');
@@ -158,6 +158,9 @@ require('/rom/lib/internal/globals');
       function cleanup(): void {
           events.off("key",   onKey);
           events.off("timer", onTimer);
+          // The menu read keys through events: drop what they typed into the TTY meanwhile.
+          tty.stdin.discard();
+          tty.stdin.setRawMode(false);
       }
 
       function doBoot(entry: BootEntry): void {
@@ -201,6 +204,7 @@ require('/rom/lib/internal/globals');
           }
       }
 
+      tty.stdin.setRawMode(true);
       events.on("key",   onKey);
       events.on("timer", onTimer);
   }

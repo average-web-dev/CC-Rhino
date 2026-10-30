@@ -159,7 +159,6 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
         var environment = computer.getAPIEnvironment();
 
         // Add all default APIs to the loaded list.
-        addApi(new TermAPI(environment));
         addApi(new RedstoneAPI(computer.getRedstone()));
         addApi(new FSAPI(environment));
         addApi(new PeripheralAPI(environment, context.peripheralMethods()));

@@ -8,6 +8,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.util.function.IntSupplier;
 
 /**
  * A teletype: the channel a program talks through, as a pair of directions plus a line discipline.
@@ -28,17 +29,31 @@ public final class Tty {
     private final Pipe stderr = new Pipe();
     private final LineDiscipline discipline;
 
+    private final boolean colour;
     private int columns;
     private int rows;
     private @Nullable Runnable onInterrupt;
     private @Nullable Runnable onResize;
+    private @Nullable IntSupplier column;
 
     /**
+     * A TTY for a colour device (or a virtual one).
+     *
      * @param columns The width of the TTY in characters.
      * @param rows    The height of the TTY in lines.
      */
     public Tty(int columns, int rows) {
+        this(columns, rows, true);
+    }
+
+    /**
+     * @param columns The width of the TTY in characters.
+     * @param rows    The height of the TTY in lines.
+     * @param colour  Whether the device shows colours.
+     */
+    public Tty(int columns, int rows, boolean colour) {
         if (columns < 1 || rows < 1) throw new IllegalArgumentException("size must be positive");
+        this.colour = colour;
         this.columns = columns;
         this.rows = rows;
         discipline = new LineDiscipline(stdin, stdout::write, this::interrupt);
@@ -94,6 +109,11 @@ public final class Tty {
         stderr.setSink(null);
     }
 
+    /** Whether the device shows colours (virtual TTYs do). */
+    public boolean isColour() {
+        return colour;
+    }
+
     public synchronized int columns() {
         return columns;
     }
@@ -117,6 +137,20 @@ public final class Tty {
     /** Called for Ctrl+C in cooked mode, while the input is processed (so it must not call back into this TTY). */
     public synchronized void setOnInterrupt(@Nullable Runnable onInterrupt) {
         this.onInterrupt = onInterrupt;
+    }
+
+    /** Where the attached device reports its cursor column ({@code null}: none). */
+    public synchronized void setColumnSource(@Nullable IntSupplier column) {
+        this.column = column;
+    }
+
+    /** The cursor column of the attached device (starting at 0), or -1 if unknown (a virtual TTY). */
+    public int column() {
+        IntSupplier column;
+        synchronized (this) {
+            column = this.column;
+        }
+        return column == null ? -1 : column.getAsInt();
     }
 
     /** Called when the size changes. */

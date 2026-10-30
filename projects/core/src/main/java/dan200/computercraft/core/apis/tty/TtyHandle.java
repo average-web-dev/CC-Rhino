@@ -7,6 +7,7 @@ package dan200.computercraft.core.apis.tty;
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.tty.Tty;
+import org.jspecify.annotations.Nullable;
 
 import java.util.function.Consumer;
 
@@ -110,6 +111,28 @@ public final class TtyHandle {
     @ScriptFunction
     public TtySize getSize() {
         return new TtySize(tty.columns(), tty.rows());
+    }
+
+    /**
+     * Whether the device showing this TTY shows colours (virtual TTYs do).
+     *
+     * @return Whether colours are shown.
+     */
+    @ScriptFunction
+    public boolean isColor() {
+        return tty.isColour();
+    }
+
+    /**
+     * The cursor column of the device showing this TTY.
+     *
+     * @return The column, starting at 0, or {@code undefined} for a virtual TTY.
+     * @cc-r.return number | undefined
+     */
+    @ScriptFunction
+    public @Nullable Integer getCursorColumn() {
+        var column = tty.column();
+        return column < 0 ? null : column;
     }
 
     /**

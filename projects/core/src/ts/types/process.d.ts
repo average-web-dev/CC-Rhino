@@ -78,14 +78,15 @@ interface TtyWriteStream extends Writable {
 }
 
 /**
- * process.stdin: the keyboard as a Node `tty.ReadStream`.
+ * process.stdin: the program's TTY (the keyboard) as a Node `tty.ReadStream`.
  *
- * - `'data'`: in cooked mode (the default) a line discipline echoes what is typed, handles Backspace / Ctrl+U and
- *   delivers whole lines including `"\n"`; Ctrl+D on an empty line emits `'end'` (the stream stays usable, like a
+ * - `'data'`: in cooked mode (the default) the TTY's line discipline echoes what is typed, handles Backspace / Ctrl+U
+ *   and delivers whole lines including `"\n"`; Ctrl+D on an empty line emits `'end'` (the stream stays usable, like a
  *   terminal). In raw mode (`setRawMode(true)`) every key is delivered as the characters a VT terminal sends.
- * - `'keypress'`: `(sequence, key)` for every key, in both modes.
- * - Nothing is read (or echoed) until the stream flows: adding a `'data'` listener or calling `resume()` starts it,
- *   `pause()` stops it. Input arriving meanwhile is dropped (there is no type-ahead buffer).
+ * - `'keypress'`: `(sequence, key)` for each key in the delivered input (as with Node's emitKeypressEvents), so in
+ *   cooked mode only for what the line discipline passes on.
+ * - Nothing is delivered until the stream flows: adding a `'data'` listener or calling `resume()` starts it, `pause()`
+ *   stops it. Input typed meanwhile stays in the TTY (type ahead) and is delivered when it flows again.
  * - Listeners belong to the thread that adds them: they may block, and are dropped when the program is stopped. A
  *   program run by the shell keeps running while it has stdin listeners and stdin is not paused (as a Node process
  *   does); the shell closes them when the program ends.
