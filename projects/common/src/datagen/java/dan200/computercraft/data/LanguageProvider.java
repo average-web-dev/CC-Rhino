@@ -240,6 +240,7 @@ public final class LanguageProvider implements DataProvider {
         addConfigEntry(ConfigSpec.jsMaxStackDepth, "Maximum JavaScript call depth");
         addConfigEntry(ConfigSpec.jsMaxStringLength, "Maximum JavaScript string length");
         addConfigEntry(ConfigSpec.jsMaxArrayBufferSize, "Maximum JavaScript ArrayBuffer size");
+        addConfigEntry(ConfigSpec.advancedConsoles, "Virtual consoles (advanced computers)");
 
         addConfigGroup(ConfigSpec.serverSpec, "http", "HTTP");
         addConfigEntry(ConfigSpec.httpEnabled, "Enable the HTTP API");

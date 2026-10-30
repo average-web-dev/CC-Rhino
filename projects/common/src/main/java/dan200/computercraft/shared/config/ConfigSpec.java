@@ -43,6 +43,7 @@ public final class ConfigSpec {
     public static final ConfigFile.Value<Integer> jsMaxStackDepth;
     public static final ConfigFile.Value<Integer> jsMaxStringLength;
     public static final ConfigFile.Value<Integer> jsMaxArrayBufferSize;
+    public static final ConfigFile.Value<Integer> advancedConsoles;
 
     public static final ConfigFile.Value<Boolean> httpEnabled;
     public static final ConfigFile.Value<Boolean> httpWebsocketEnabled;
@@ -203,6 +204,12 @@ public final class ConfigSpec {
                     The maximum size in bytes of a JavaScript ArrayBuffer (including the buffers
                     behind typed arrays). Larger buffers throw a catchable RangeError.""")
                 .defineInRange("js_max_array_buffer_size", CoreConfig.jsMaxArrayBufferSize, 1024, Integer.MAX_VALUE);
+
+            advancedConsoles = builder
+                .comment("""
+                    The number of virtual consoles on the screen of an advanced computer (switched
+                    with Alt+1 ... Alt+9). Normal computers always have one.""")
+                .defineInRange("advanced_consoles", CoreConfig.advancedConsoles, 1, 9);
 
             builder.pop();
         }
@@ -438,6 +445,7 @@ public final class ConfigSpec {
         CoreConfig.jsMaxStackDepth = jsMaxStackDepth.get();
         CoreConfig.jsMaxStringLength = jsMaxStringLength.get();
         CoreConfig.jsMaxArrayBufferSize = jsMaxArrayBufferSize.get();
+        CoreConfig.advancedConsoles = advancedConsoles.get();
 
         // Update our log filter if needed.
         var logFilter = MarkerFilter.createFilter(

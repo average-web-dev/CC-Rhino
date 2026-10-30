@@ -15,7 +15,9 @@ import dan200.computercraft.core.apis.events.RedstoneEvent;
 import dan200.computercraft.core.computer.mainthread.MainThreadScheduler;
 import dan200.computercraft.core.filesystem.FileSystem;
 import dan200.computercraft.core.redstone.RedstoneState;
+import dan200.computercraft.core.CoreConfig;
 import dan200.computercraft.core.terminal.Terminal;
+import dan200.computercraft.core.tty.Screen;
 import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.atomic.AtomicLong;
@@ -43,6 +45,7 @@ public class Computer {
     // Read-only fields about the computer
     private final GlobalEnvironment globalEnvironment;
     private final Terminal terminal;
+    private final Screen screen;
     private final ComputerExecutor executor;
     private final MainThreadScheduler.Executor serverExecutor;
 
@@ -66,6 +69,7 @@ public class Computer {
         this.id = id;
         globalEnvironment = context.globalEnvironment();
         this.terminal = terminal;
+        screen = new Screen(terminal, terminal.isColour() ? Math.max(1, CoreConfig.advancedConsoles) : 1);
 
         internalEnvironment = new Environment(this, environment);
         executor = new ComputerExecutor(this, environment, context);
@@ -82,6 +86,11 @@ public class Computer {
 
     Terminal getTerminal() {
         return terminal;
+    }
+
+    /** The virtual consoles on this computer's screen. */
+    public Screen getScreen() {
+        return screen;
     }
 
     public Environment getEnvironment() {

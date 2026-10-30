@@ -29,6 +29,8 @@ public final class CoreConfig {
     public static int jsMaxStringLength = 32 * 1024 * 1024;
     /** Maximum size in bytes of a JS {@code ArrayBuffer} (including the buffers behind typed arrays). */
     public static int jsMaxArrayBufferSize = 64 * 1024 * 1024;
+    /** The number of virtual consoles of an advanced (colour) computer; normal computers have one. */
+    public static int advancedConsoles = 4;
     public static String defaultComputerSettings = "";
 
     public static boolean httpEnabled = true;

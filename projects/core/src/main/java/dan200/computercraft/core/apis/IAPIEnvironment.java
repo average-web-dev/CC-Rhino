@@ -15,6 +15,7 @@ import dan200.computercraft.core.metrics.Metric;
 import dan200.computercraft.core.metrics.MetricsObserver;
 import dan200.computercraft.core.metrics.OperationTimer;
 import dan200.computercraft.core.terminal.Terminal;
+import dan200.computercraft.core.tty.Screen;
 import org.jspecify.annotations.Nullable;
 
 public interface IAPIEnvironment {
@@ -34,6 +35,9 @@ public interface IAPIEnvironment {
     WorkMonitor getMainThreadMonitor();
 
     Terminal getTerminal();
+
+    /** The virtual consoles on the computer's screen. */
+    Screen getScreen();
 
     FileSystem getFileSystem();
 

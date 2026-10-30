@@ -13,6 +13,7 @@ import dan200.computercraft.core.engine.MachineTimers;
 import dan200.computercraft.core.filesystem.FileSystem;
 import dan200.computercraft.core.metrics.MetricsObserver;
 import dan200.computercraft.core.terminal.Terminal;
+import dan200.computercraft.core.tty.Screen;
 import dan200.computercraft.core.util.PeripheralHelpers;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
@@ -70,6 +71,11 @@ public final class Environment implements IAPIEnvironment, MachineTimers {
     @Override
     public Terminal getTerminal() {
         return computer.getTerminal();
+    }
+
+    @Override
+    public Screen getScreen() {
+        return computer.getScreen();
     }
 
     @Override

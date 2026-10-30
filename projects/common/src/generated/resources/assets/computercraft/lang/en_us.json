@@ -82,6 +82,8 @@
   "gui.computercraft.config.disabled_generic_methods": "Disabled generic methods",
   "gui.computercraft.config.disabled_generic_methods.tooltip": "A list of generic methods or method sources to disable. Generic methods are\nmethods added to a block/block entity when there is no explicit peripheral\nprovider. This includes inventory methods (i.e. inventory.getItemDetail,\ninventory.pushItems), and (if on Forge), the fluid_storage and energy_storage\nmethods.\nMethods in this list can either be a whole group of methods (computercraft:inventory)\nor a single method (computercraft:inventory#pushItems).\n",
   "gui.computercraft.config.execution": "Execution",
+  "gui.computercraft.config.execution.advanced_consoles": "Virtual consoles (advanced computers)",
+  "gui.computercraft.config.execution.advanced_consoles.tooltip": "The number of virtual consoles on the screen of an advanced computer (switched\nwith Alt+1 ... Alt+9). Normal computers always have one.",
   "gui.computercraft.config.execution.computer_threads": "Computer threads",
   "gui.computercraft.config.execution.computer_threads.tooltip": "Set the number of threads computers can run on. A higher number means more\ncomputers can run at once, but may induce lag. Please note that some mods may\nnot work with a thread count higher than 1. Use with caution.",
   "gui.computercraft.config.execution.js_max_array_buffer_size": "Maximum JavaScript ArrayBuffer size",

@@ -13,6 +13,7 @@ import dan200.computercraft.core.ComputerContext;
 import dan200.computercraft.core.CoreConfig;
 import dan200.computercraft.core.apis.*;
 import dan200.computercraft.core.apis.tty.PtyAPI;
+import dan200.computercraft.core.apis.tty.ScreenAPI;
 import dan200.computercraft.core.computer.computerthread.ComputerScheduler;
 import dan200.computercraft.core.computer.computerthread.ComputerThread;
 import dan200.computercraft.core.filesystem.FileSystem;
@@ -164,6 +165,7 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
         addApi(new PeripheralAPI(environment, context.peripheralMethods()));
         addApi(new SystemAPI(environment));
         addApi(new PtyAPI(environment));
+        addApi(new ScreenAPI(environment));
         if (CoreConfig.httpEnabled) addApi(new HTTPAPI(environment));
     }
 
@@ -393,6 +395,7 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
         try {
             // Reset the terminal and event queue
             computer.getTerminal().reset();
+            computer.getScreen().reset();
             synchronized (queueLock) {
                 eventQueue.clear();
             }
@@ -500,11 +503,13 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
                 case SHUTDOWN -> {
                     if (!isOn) return;
                     computer.getTerminal().reset();
+                    computer.getScreen().reset();
                     shutdown();
                 }
                 case REBOOT -> {
                     if (!isOn) return;
                     computer.getTerminal().reset();
+                    computer.getScreen().reset();
                     shutdown();
                     computer.turnOn();
                 }
