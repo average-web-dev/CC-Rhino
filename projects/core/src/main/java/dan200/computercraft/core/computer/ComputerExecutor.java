@@ -12,6 +12,7 @@ import dan200.computercraft.api.scripting.IComputerAPI;
 import dan200.computercraft.core.ComputerContext;
 import dan200.computercraft.core.CoreConfig;
 import dan200.computercraft.core.apis.*;
+import dan200.computercraft.core.apis.tty.PtyAPI;
 import dan200.computercraft.core.computer.computerthread.ComputerScheduler;
 import dan200.computercraft.core.computer.computerthread.ComputerThread;
 import dan200.computercraft.core.filesystem.FileSystem;
@@ -162,6 +163,7 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
         addApi(new FSAPI(environment));
         addApi(new PeripheralAPI(environment, context.peripheralMethods()));
         addApi(new SystemAPI(environment));
+        addApi(new PtyAPI(environment));
         if (CoreConfig.httpEnabled) addApi(new HTTPAPI(environment));
     }
 

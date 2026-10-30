@@ -137,4 +137,12 @@ public final class CoreEvents {
     @Event("file_transfer")
     public record FileTransfer(TransferredFiles files) {
     }
+
+    /**
+     * A TTY pipe that a program is waiting on became readable (data, end of input or closed). It wakes blocked
+     * {@code read()} calls; programs read pipes rather than listening for it.
+     */
+    @Event("pipe_data")
+    public record PipeData(int pipe) {
+    }
 }
