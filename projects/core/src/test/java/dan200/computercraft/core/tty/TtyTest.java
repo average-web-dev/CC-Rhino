@@ -155,7 +155,7 @@ class TtyTest {
     void attached_device_receives_output_and_echo() {
         var tty = new Tty(51, 19);
         var screen = new StringBuilder();
-        tty.attach(screen::append);
+        tty.attach(screen::append, screen::append);
         tty.stdout().write("$ ");
         tty.stderr().write("!");
         tty.input("ls\r");

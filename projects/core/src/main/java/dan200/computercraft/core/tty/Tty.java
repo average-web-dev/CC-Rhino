@@ -15,7 +15,7 @@ import java.util.function.Consumer;
  * The <em>program side</em> reads {@link #stdin()} and writes {@link #stdout()} / {@link #stderr()}. The <em>device
  * side</em> (a terminal emulator on a screen or monitor, or whoever holds a virtual TTY) feeds typed input through
  * {@link #input(String)}, which passes the {@link LineDiscipline}, and consumes the output, either through a
- * {@linkplain #attach(Consumer) sink} or, for a virtual TTY, by reading {@code stdout}/{@code stderr}.
+ * {@linkplain #attach(Consumer, Consumer) sink} or, for a virtual TTY, by reading {@code stdout}/{@code stderr}.
  * <p>
  * Thread-safe: input arrives on the server thread, programs run on the computer thread.
  */
@@ -80,11 +80,18 @@ public final class Tty {
     /**
      * Send the output of this TTY to a device instead of buffering it for readers.
      *
-     * @param sink Receives everything written to {@code stdout} and {@code stderr}, or {@code null} to detach.
+     * @param out Receives everything written to {@code stdout} (including the echo of typed input).
+     * @param err Receives everything written to {@code stderr}.
      */
-    public void attach(@Nullable Consumer<String> sink) {
-        stdout.setSink(sink);
-        stderr.setSink(sink);
+    public void attach(Consumer<String> out, Consumer<String> err) {
+        stdout.setSink(out);
+        stderr.setSink(err);
+    }
+
+    /** Buffer the output for readers again. */
+    public void detach() {
+        stdout.setSink(null);
+        stderr.setSink(null);
     }
 
     public synchronized int columns() {
