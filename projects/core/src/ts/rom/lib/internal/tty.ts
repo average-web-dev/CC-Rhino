@@ -2,135 +2,114 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-// /rom/lib/internal/tty.ts — the computer's TTY behind process.stdin/stdout/stderr, plus job control for the shell.
+// /rom/lib/internal/tty.ts — the computer's TTYs and the jobs (programs) running on them.
 //
-// The computer's TTY is the first console of its screen (`require('screen')`), which this module takes over; the
-// streams are the `tty` module's ReadStream / WriteStream (see /rom/lib/tty for how they work). The output is rendered
-// by the console's terminal emulator (VT-style: wrapping, scrolling, ANSI colours and cursor sequences; stderr in red).
-// Typed input passes the TTY's line discipline (cooked by default, raw with setRawMode). The cursor is shown while
-// stdin flows. While stdin is paused, input stays in the TTY (type ahead) until someone reads.
+// TTYs: one TTY object (/rom/lib/tty) per native TTY, so the stream state of a TTY (flowing, listeners) is shared by
+// everyone using it. The first console of the screen is the computer's TTY; this module takes over the screen.
 //
-// Job control: the shell runs each program as a job. beginJob() gives the program a fresh stdin (not flowing, cooked);
-// waitForJob() keeps the program running while it has ref'd pending work, like a Node process (#46): a pending timer,
-// a blocked call or /promises operation, a child thread, or stdin it reads (each stdin listener holds a keep-alive
-// handle while stdin flows); then it ends the job's thread so nothing the program left behind runs after it.
-// endJob() closes the job's stdin listeners and restores the shell's terminal state.
+// Jobs: a running program is a job — its TTY (process.stdin/stdout/stderr), argv, working directory and exit code. The
+// job is the *context* of the thread running the program (internal/loop.setContext), so every thread, timer and
+// listener the program creates belongs to it, and `process` (/rom/lib/process) always means the calling program's job.
+// The bios, the OS layer and everything outside a program run as the root job (on the first console).
+//
+// run() runs a program as a job, like a child process: in a thread of its own, with a fresh stdin (cooked, not
+// flowing). After main() (or the module's top-level code) returns, the job keeps running while it has ref'd pending
+// work, as a Node process would (#46): a pending (ref'd) timer, a blocked callback or pending /promises operation, a
+// child thread, or stdin it reads (each stdin listener holds a keep-alive handle while stdin flows). If main() returns
+// a promise (`async main`, #44), its rejection is the program's error. When nothing is left, or on process.exit(), the
+// job's thread is stopped: every events.on listener, unref'd timer, promise reaction or thread it left behind is
+// discarded. Ctrl+T makes the call it is blocked in throw `Error("Terminated")`.
 
+import events from 'events';
 import loop from 'internal/loop';
+import parallel from 'parallel';
 import screen from 'screen';
+import system from 'system';
 import { TTY, CSI as TTY_CSI } from '/rom/lib/tty';
 
-// ── The TTY ──────────────────────────────────────────────────────────────────────
-
-/** The cursor blinks while someone reads the terminal. */
-let cursorShown = false;
-
-function showCursor(show: boolean): void {
-    if (show === cursorShown) return;
-    cursorShown = show;
-    terminal.stdout.write(show ? TTY_CSI.showCursor : TTY_CSI.hideCursor);
-}
-
-/** The id of the running job, or 0 outside of jobs. */
-let currentJob = 0;
-
-/** The computer's TTY: the first console of the screen, which this module shows from now on. */
-export const terminal = TTY.from(screen.getConsole(0), { owner: () => currentJob, onFlowing: showCursor });
-screen.activate();
-
-export const stdin = terminal.stdin;
-export const stdout = terminal.stdout;
-export const stderr = terminal.stderr;
 export const CSI = TTY_CSI;
 
-/** The column of the cursor on the screen (0 at the start of a line). */
-export function cursorColumn(): number {
-    return terminal.cursorColumn() ?? 0;
-}
+// ── Jobs ─────────────────────────────────────────────────────────────────────────
 
-// ── Job control (used by the shell) ─────────────────────────────────────────────
-
-const EXIT_SIGNAL = '__ccProcessExit';
-
-interface Job {
-    id: number;
-    parent: number;
-    savedRaw: boolean;
-    savedFlowing: boolean | null;
-    exiting: boolean;
-    exitCode: number;
+/** A running program: its TTY, arguments, working directory and exit code. */
+export class Job {
+    readonly id: number;
+    readonly tty: TTY;
+    argv: string[];
+    cwd: string;
+    /** process.exitCode. */
+    exitCode: number | undefined = undefined;
+    /** Set by process.exit(). */
+    exiting = false;
+    exitRequest = 0;
     /** Set when the promise returned by main() rejected. */
-    failure: { error: unknown } | null;
+    failure: { error: unknown } | null = null;
+    /** A shell: Ctrl+T while it waits for input does not end it (it reaches the programs it runs instead). */
+    shell = false;
+
+    constructor(id: number, tty: TTY, argv: string[], cwd: string) {
+        this.id = id;
+        this.tty = tty;
+        this.argv = argv;
+        this.cwd = cwd;
+    }
 }
 
 let nextJob = 1;
-let jobs: Job[] = [];
 
-function findJob(id: number): Job | undefined {
-    for (let job of jobs) if (job.id === id) return job;
-    return undefined;
+/** The job of the calling thread: the program it belongs to, or the root job. */
+export function current(): Job {
+    let context = loop.context();
+    return context instanceof Job ? context : root;
 }
 
-/**
- * Start a job (a program run by the shell): it gets a fresh stdin — cooked, and not flowing until it reads — and the
- * cursor is hidden until it reads input. The shell's terminal state is restored by endJob().
- */
-export function beginJob(): Job {
-    let job: Job = {
-        id: nextJob++, parent: currentJob,
-        savedRaw: terminal.isRaw, savedFlowing: stdin.readableFlowing,
-        exiting: false, exitCode: 0, failure: null,
-    };
-    jobs.push(job);
-    currentJob = job.id;
-    terminal.setRawMode(false);
-    stdin.setFlowing(null);
-    return job;
+// ── TTYs ─────────────────────────────────────────────────────────────────────────
+
+const ttys: { [id: number]: TTY } = {};
+
+/** The TTY object for a native TTY (one per native TTY, so everyone shares its stream state). */
+export function ttyOf(handle: TtyHandle): TTY {
+    let id = handle.getId();
+    let tty = ttys[id];
+    if (tty === undefined) tty = ttys[id] = TTY.from(handle, { owner: () => current().id });
+    return tty;
 }
 
-function isThenable(value: unknown): value is PromiseLike<unknown> {
-    return value !== null && (typeof value === 'object' || typeof value === 'function')
-        && typeof (value as { then?: unknown }).then === 'function';
+/** A new virtual TTY whose stdin listeners belong to the program adding them (for child_process). */
+export function createVirtual(columns?: number, rows?: number): TTY {
+    let tty = new TTY(columns, rows, { owner: () => current().id });
+    ttys[tty.handle.getId()] = tty;
+    return tty;
 }
 
-/**
- * Called by the job's thread once its main code has returned (`result` is what main() returned): block while the
- * thread has ref'd pending work, like a Node process (see the header), then end the job by throwing a signal that
- * stops the job's thread — its leftover listeners, unref'd timers and promise reactions never run.
- *
- * - If main() returned a promise (an `async main`), its rejection is the program's error (exit code 1).
- * - process.exit() (also from a callback, or caught) ends the wait at once with its exit code.
- * - Ctrl+T reaches the wait like any blocking call: it throws "Terminated".
- *
- * Always throws: the job-end signal (exitCodeOf() gives `null` for a normal end, or the process.exit code), or the
- * error of a rejected main() promise.
- */
-export function waitForJob(job: Job, result?: unknown): never {
-    if (isThenable(result)) {
-        result.then(undefined, (error: unknown) => {
-            if (job.failure === null) job.failure = { error };
-            loop.wakeIdle();
-        });
-    }
-    while (!job.exiting && job.failure === null) {
-        if (loop.waitIdle()) break;
-    }
-    if (!job.exiting && job.failure !== null) throw job.failure.error;
-    throw exitSignal(job.exiting ? job.exitCode : null);
+/** A console of the screen, as a TTY. */
+export function console(index: number): TTY {
+    return ttyOf(screen.getConsole(index));
 }
 
-/** End a job: close the stdin listeners it left behind and restore the terminal state saved by beginJob(). */
-export function endJob(job: Job): void {
-    stdin.removeListenersOf(job.id);
-    let index = jobs.indexOf(job);
-    if (index >= 0) jobs.splice(index, 1);
-    currentJob = job.parent;
-    terminal.setRawMode(job.savedRaw);
-    stdin.setFlowing(job.savedFlowing);
+/** The computer's TTY: the first console of the screen, which this module shows from now on. */
+export const terminal = console(0);
+screen.activate();
+
+/** The root job: the bios, the OS layer and everything not run as a program. */
+export const root = new Job(0, terminal, ['bash'], '/');
+
+/** The column of the cursor on the calling program's TTY (0 at the start of a line, or for a virtual TTY). */
+export function cursorColumn(): number {
+    return current().tty.cursorColumn() ?? 0;
 }
 
-/** The id of the running job, or 0 outside of jobs. */
-export function jobId(): number { return currentJob; }
+/** How many jobs use each TTY (by native id). */
+const users: { [id: number]: number } = {};
+
+/** Whether a program is running on `tty` (the OS starts a shell on a console only while it is free). */
+export function inUse(tty: TTY): boolean {
+    return (users[tty.handle.getId()] ?? 0) > 0;
+}
+
+// ── Running programs ─────────────────────────────────────────────────────────────
+
+const EXIT_SIGNAL = '__ccProcessExit';
 
 /** The signal that ends a job: `code` null for a normal end (the job's code returned), else a process.exit code. */
 function exitSignal(code: number | null): Error {
@@ -151,15 +130,133 @@ export function exitCodeOf(e: unknown): number | null | undefined {
 }
 
 /**
- * process.exit(): end the running job with `code`. Returns the signal to throw, which unwinds the job's code; the
- * job also ends if the signal is caught (or thrown in a callback or another thread), as waitForJob() checks the flag.
+ * process.exit(): end the calling program with `code`. Returns the signal to throw, which unwinds the program's code;
+ * the job also ends if the signal is caught (or thrown in a callback or another thread), as the job's wait checks the
+ * flag.
  */
 export function requestExit(code: number): Error {
-    let job = findJob(currentJob);
-    if (job !== undefined) {
-        job.exiting = true;
-        job.exitCode = code;
-        loop.wakeIdle();
-    }
+    let job = current();
+    job.exiting = true;
+    job.exitRequest = code;
+    loop.wakeIdle();
     return exitSignal(code);
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+    return value !== null && (typeof value === 'object' || typeof value === 'function')
+        && typeof (value as { then?: unknown }).then === 'function';
+}
+
+/** Block the job's thread while it has ref'd pending work, then end it (always throws, see the header). */
+function waitForJob(job: Job, result?: unknown): never {
+    if (isThenable(result)) {
+        result.then(undefined, (error: unknown) => {
+            if (job.failure === null) job.failure = { error };
+            loop.wakeIdle();
+        });
+    }
+    while (!job.exiting && job.failure === null) {
+        try {
+            if (loop.waitIdle()) break;
+        } catch (e: any) {
+            if (job.shell && e?.message === 'Terminated') continue;
+            throw e;
+        }
+    }
+    if (!job.exiting && job.failure !== null) throw job.failure.error;
+    throw exitSignal(job.exiting ? job.exitRequest : null);
+}
+
+/**
+ * Format a program's error as a single `file:line: message` line. The location is taken from the first stack frame
+ * outside the module loader, as errors created with `new Error()` carry no fileName/lineNumber of their own.
+ */
+export function formatError(fallbackFile: string, e: any): string {
+    let msg = e?.message ?? String(e);
+    let frames = String(e?.stack ?? '').split('\n');
+    for (let frame of frames) {
+        let m = /^\s*at (.+?):(\d+)(?: \(.*\))?$/.exec(frame);
+        if (m && m[1] !== 'require-setup.js') return `${m[1]}:${m[2]}: ${msg}`;
+    }
+    return `${fallbackFile}: ${msg}`;
+}
+
+/** How a job ended. */
+export interface JobResult {
+    /** The exit code (process.exit, process.exitCode; 1 if it failed). */
+    code: number;
+    /** The error the program failed with (including `Error("Terminated")` for Ctrl+T or kill()). */
+    error?: unknown;
+}
+
+/** Create a job (not started yet). */
+export function createJob(tty: TTY, argv: string[], cwd: string): Job {
+    return new Job(nextJob++, tty, argv, cwd);
+}
+
+/** Wait until `thread` ended. */
+function join(thread: ThreadHandle): void {
+    while (thread.isAlive()) system.yield();
+}
+
+/** How to run a program (see run()). */
+export interface RunOptions {
+    /**
+     * Run in the background: the caller waits for the program in a thread of its own, and `onStart` receives the
+     * program's thread (kill() stops it). Otherwise the program is part of the caller's foreground.
+     */
+    background?: boolean;
+    onStart?: (thread: ThreadHandle) => void;
+}
+
+/**
+ * Run the program at `resolved` (a path require.resolve returned) as `job`, blocking the calling thread until it ends.
+ * The program runs in a new thread whose context is the job (so Ctrl+T on the job's TTY reaches it).
+ */
+export function run(job: Job, resolved: string, args: string[], options: RunOptions = {}): JobResult {
+    let tty = job.tty;
+    let id = tty.handle.getId();
+    let savedRaw = tty.isRaw;
+    let savedFlowing = tty.stdin.readableFlowing;
+    users[id] = (users[id] ?? 0) + 1;
+    tty.setRawMode(false);
+    tty.stdin.setFlowing(null);
+    try {
+        let body = () => {
+            loop.setContext(job, id);
+            let mod = require.uncached(resolved) as any;
+            let result: unknown = typeof mod?.main === 'function' ? mod.main(args, job.cwd) : undefined;
+            waitForJob(job, result);
+        };
+        let error: unknown = undefined;
+        if (options.background) {
+            let thread = parallel.spawn(body);
+            if (options.onStart !== undefined) options.onStart(thread);
+            join(thread);
+            error = thread.getError();
+        } else {
+            try {
+                parallel.waitForAll(body);
+            } catch (e: unknown) {
+                error = e;
+            }
+        }
+        let code = exitCodeOf(error);
+        if (error === undefined || code === null) return { code: job.exitCode ?? 0 };
+        if (code !== undefined) return { code };
+        // The program failed: report it on its TTY, on a row of its own (it may have stopped mid-line, at its prompt).
+        if ((tty.cursorColumn() ?? 0) > 0) tty.stderr.write('\n');
+        let message = (error as any)?.message === 'Terminated' ? 'Terminated' : formatError(resolved, error);
+        tty.stderr.write(message + '\n');
+        return { code: 1, error };
+    } finally {
+        tty.stdin.removeListenersOf(job.id);
+        tty.setRawMode(savedRaw);
+        tty.stdin.setFlowing(savedFlowing);
+        users[id] -= 1;
+        if (users[id] <= 0) {
+            delete users[id];
+            events.emit('tty_released', id);
+        }
+    }
 }

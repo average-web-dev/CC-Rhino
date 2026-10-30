@@ -6,8 +6,11 @@ package dan200.computercraft.core.tty;
 
 import dan200.computercraft.core.terminal.Terminal;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.IntConsumer;
 
 /**
  * The screen and keyboard of a computer, as a set of virtual consoles.
@@ -30,6 +33,7 @@ public final class Screen {
     private List<Console> consoles = List.of();
     private int visible;
     private boolean active;
+    private @Nullable IntConsumer onShow;
 
     /** One virtual console: a TTY and the emulator rendering it into an off-screen buffer. */
     public final class Console {
@@ -111,24 +115,41 @@ public final class Screen {
         return consoles.get(visible);
     }
 
+    /** The TTY Ctrl+T goes to: the visible console's, or 0 (every program) while the screen is inactive. */
+    public synchronized int terminateTarget() {
+        return active ? consoles.get(visible).tty().id() : 0;
+    }
+
+    /** Called (on the thread that switched) when another console becomes visible. */
+    public synchronized void setOnShow(@Nullable IntConsumer onShow) {
+        this.onShow = onShow;
+    }
+
     /**
      * Show another console.
      *
      * @param index The console, starting at 0.
      * @return Whether the index names a console.
      */
-    public synchronized boolean show(int index) {
-        if (index < 0 || index >= consoles.size()) return false;
-        visible = index;
-        if (active) copyToDisplay(consoles.get(index));
+    public boolean show(int index) {
+        IntConsumer callback;
+        synchronized (this) {
+            if (index < 0 || index >= consoles.size()) return false;
+            if (visible == index) return true;
+            visible = index;
+            if (active) copyToDisplay(consoles.get(index));
+            callback = onShow;
+        }
+        if (callback != null) callback.accept(index);
         return true;
     }
 
     // ── Input ────────────────────────────────────────────────────────────────────
 
     public void keyDown(int key) {
-        String data;
-        Tty tty;
+        var switchTo = -1;
+        String data = null;
+        Tty tty = null;
         synchronized (this) {
             if (!active) {
                 encoder.keyDown(key);
@@ -136,13 +157,14 @@ public final class Screen {
             }
             // Alt+1 … Alt+9 switch consoles, even while the program on the visible one hangs.
             if (encoder.isAlt() && !encoder.isCtrl() && key >= KEY_1 && key < KEY_1 + 9 && consoles.size() > 1) {
-                show(key - KEY_1);
-                return;
+                switchTo = key - KEY_1;
+            } else {
+                data = encoder.keyDown(key);
+                tty = consoles.get(visible).tty;
             }
-            data = encoder.keyDown(key);
-            tty = consoles.get(visible).tty;
         }
-        if (data != null) tty.input(data);
+        if (switchTo >= 0) show(switchTo);
+        if (data != null && tty != null) tty.input(data);
     }
 
     public synchronized void keyUp(int key) {

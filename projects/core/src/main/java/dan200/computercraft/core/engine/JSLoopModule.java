@@ -21,6 +21,11 @@ import org.mozilla.javascript.*;
  *   <li>{@code waitIdle() → boolean}: block until the calling thread is idle ({@link EventLoop#isIdle}) and return
  *   {@code true}, or until {@code wakeIdle()} is called and return {@code false}. Ctrl+T reaches it like any blocking
  *   call.</li>
+ *   <li>Thread context ({@link JSThread#context()}): {@code setContext(value, tty?)} attaches a value (and the id of
+ *   the TTY the program runs on, for Ctrl+T) to the calling thread, {@code context()} returns the calling thread's (or
+ *   its nearest ancestor's); descendants inherit it, also after their parent returned. The ROM's job control keeps the
+ *   running program's TTY, argv and directory there. A thread with a context is where a program's foreground starts
+ *   (see {@link JSThread#isForeground()}).</li>
  * </ul>
  */
 final class JSLoopModule {
@@ -102,6 +107,18 @@ final class JSLoopModule {
         ScriptableObject.putProperty(module, "waitIdle", shim.wrap(cx, scope, waitIdle));
         put(cx, scope, module, new NativeFunction("wakeIdle", (c, s, args) -> {
             eventLoop.wakeIdle();
+            return Undefined.instance;
+        }));
+
+        put(cx, scope, module, new NativeFunction("context", (c, s, args) -> {
+            var context = eventLoop.currentThread().context();
+            return context == null ? Undefined.instance : context;
+        }));
+        put(cx, scope, module, new NativeFunction("setContext", (c, s, args) -> {
+            var value = args.length == 0 || args[0] == Undefined.instance || args[0] == null ? null : args[0];
+            var thread = eventLoop.currentThread();
+            thread.context = value;
+            thread.terminal = (int) number(args, 1);
             return Undefined.instance;
         }));
         return module;

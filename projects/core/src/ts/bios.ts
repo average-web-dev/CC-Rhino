@@ -22,7 +22,6 @@
 require('/rom/lib/internal/globals');
 
 (function (){
-  const tty    = require('/rom/lib/internal/tty') as typeof import('/rom/lib/internal/tty');
   const term   = new (require('/rom/lib/term') as typeof import('/rom/lib/term')).Term();
   const fs     = require('fs');
   const events = require('events');
@@ -159,8 +158,8 @@ require('/rom/lib/internal/globals');
           events.off("key",   onKey);
           events.off("timer", onTimer);
           // The menu read keys through events: drop what they typed into the TTY meanwhile.
-          tty.stdin.discard();
-          tty.stdin.setRawMode(false);
+          (process.stdin as TtyStdin).discard();
+          process.stdin.setRawMode(false);
       }
 
       function doBoot(entry: BootEntry): void {
@@ -204,7 +203,7 @@ require('/rom/lib/internal/globals');
           }
       }
 
-      tty.stdin.setRawMode(true);
+      process.stdin.setRawMode(true);
       events.on("key",   onKey);
       events.on("timer", onTimer);
   }

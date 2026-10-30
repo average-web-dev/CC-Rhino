@@ -9,7 +9,6 @@ import dan200.computercraft.api.scripting.IComputerAPI;
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.ComputerContext;
-import dan200.computercraft.core.apis.events.CoreEvents;
 import dan200.computercraft.core.computer.mainthread.MainThread;
 import dan200.computercraft.core.computer.mainthread.MainThreadConfig;
 import dan200.computercraft.core.filesystem.MemoryMount;
@@ -46,6 +45,8 @@ public final class TerminalHarness implements AutoCloseable {
     public static final int KEY_HOME = 268;
     public static final int KEY_END = 269;
     public static final int KEY_LEFT_CONTROL = 341;
+    public static final int KEY_LEFT_ALT = 342;
+    public static final int KEY_ESCAPE = 256;
 
     private static final int TICK_MILLIS = 50;
 
@@ -148,6 +149,14 @@ public final class TerminalHarness implements AutoCloseable {
         input.keyUp(KEY_LEFT_CONTROL);
     }
 
+    /** Press a key while Alt is held (Alt+1 … Alt+9 switch consoles). */
+    public void alt(int key) {
+        input.keyDown(KEY_LEFT_ALT, false);
+        input.keyDown(key, false);
+        input.keyUp(key);
+        input.keyUp(KEY_LEFT_ALT);
+    }
+
     /** Type a line and press Enter. */
     public void enter(String line) {
         type(line);
@@ -155,7 +164,7 @@ public final class TerminalHarness implements AutoCloseable {
     }
 
     public void terminate() {
-        computer.queueEvent(new CoreEvents.Terminate());
+        computer.terminate();
     }
 
     /** A row of the screen, without trailing spaces. */

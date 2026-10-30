@@ -5,15 +5,27 @@
 // /rom/lib/internal/keys.ts — decoding terminal input (the characters and VT sequences a TTY delivers) into Node
 // keypress events. Used by the tty streams (process.stdin emits 'keypress') and by readline.emitKeypressEvents.
 
+/** The names of the keys in Node key objects (`key.name`), so code compares against constants, not strings. */
+export const KeyName = {
+    UP: 'up', DOWN: 'down', LEFT: 'left', RIGHT: 'right',
+    HOME: 'home', END: 'end', PAGE_UP: 'pageup', PAGE_DOWN: 'pagedown', INSERT: 'insert', DELETE: 'delete',
+    CLEAR: 'clear', RETURN: 'return', ENTER: 'enter', TAB: 'tab', BACKSPACE: 'backspace', ESCAPE: 'escape',
+    SPACE: 'space',
+    F1: 'f1', F2: 'f2', F3: 'f3', F4: 'f4', F5: 'f5', F6: 'f6', F7: 'f7', F8: 'f8', F9: 'f9', F10: 'f10', F11: 'f11',
+    F12: 'f12',
+} as const;
+
 function keyFor(name: string | undefined, sequence: string, ctrl = false, meta = false, shift = false): Key {
     return { sequence, name, ctrl, meta, shift };
 }
 
 const CSI_KEYS: Record<string, string> = {
-    A: 'up', B: 'down', C: 'right', D: 'left', H: 'home', F: 'end', E: 'clear',
-    '1~': 'home', '2~': 'insert', '3~': 'delete', '4~': 'end', '5~': 'pageup', '6~': 'pagedown',
-    '7~': 'home', '8~': 'end', P: 'f1', Q: 'f2', R: 'f3', S: 'f4',
-    '15~': 'f5', '17~': 'f6', '18~': 'f7', '19~': 'f8', '20~': 'f9', '21~': 'f10', '23~': 'f11', '24~': 'f12',
+    A: KeyName.UP, B: KeyName.DOWN, C: KeyName.RIGHT, D: KeyName.LEFT, H: KeyName.HOME, F: KeyName.END,
+    E: KeyName.CLEAR, '1~': KeyName.HOME, '2~': KeyName.INSERT, '3~': KeyName.DELETE, '4~': KeyName.END,
+    '5~': KeyName.PAGE_UP, '6~': KeyName.PAGE_DOWN, '7~': KeyName.HOME, '8~': KeyName.END,
+    P: KeyName.F1, Q: KeyName.F2, R: KeyName.F3, S: KeyName.F4, '15~': KeyName.F5, '17~': KeyName.F6,
+    '18~': KeyName.F7, '19~': KeyName.F8, '20~': KeyName.F9, '21~': KeyName.F10, '23~': KeyName.F11,
+    '24~': KeyName.F12,
 };
 
 /** A mouse report from the TTY (see the xterm mouse protocols). */
@@ -91,14 +103,14 @@ export function decodeKeys(data: string, emit: (s: string | undefined, key: Key)
                 }
                 let m = modifier - 1;
                 if (final === 'Z') {
-                    emit(undefined, keyFor('tab', sequence, false, false, true));
+                    emit(undefined, keyFor(KeyName.TAB, sequence, false, false, true));
                 } else {
                     emit(undefined, keyFor(CSI_KEYS[code], sequence, (m & 4) !== 0, (m & 2) !== 0, (m & 1) !== 0));
                 }
                 i = j + 1;
                 continue;
             }
-            if (next === '') { emit('\x1b', keyFor('escape', '\x1b')); i++; continue; }
+            if (next === '') { emit('\x1b', keyFor(KeyName.ESCAPE, '\x1b')); i++; continue; }
             // ESC + key: the key with meta.
             let key = decodeSingle(next);
             key.meta = true;
@@ -114,12 +126,12 @@ export function decodeKeys(data: string, emit: (s: string | undefined, key: Key)
 
 function decodeSingle(ch: string): Key {
     let code = ch.charCodeAt(0);
-    if (ch === '\r') return keyFor('return', ch);
-    if (ch === '\n') return keyFor('enter', ch);
-    if (ch === '\t') return keyFor('tab', ch);
-    if (ch === '\b' || ch === '\x7f') return keyFor('backspace', ch, ch === '\b');
-    if (ch === '\x1b') return keyFor('escape', ch);
-    if (ch === ' ') return keyFor('space', ch);
+    if (ch === '\r') return keyFor(KeyName.RETURN, ch);
+    if (ch === '\n') return keyFor(KeyName.ENTER, ch);
+    if (ch === '\t') return keyFor(KeyName.TAB, ch);
+    if (ch === '\b' || ch === '\x7f') return keyFor(KeyName.BACKSPACE, ch, ch === '\b');
+    if (ch === '\x1b') return keyFor(KeyName.ESCAPE, ch);
+    if (ch === ' ') return keyFor(KeyName.SPACE, ch);
     if (code > 0 && code <= 26) return keyFor(String.fromCharCode(code + 96), ch, true);
     if (/^[0-9A-Za-z]$/.test(ch)) return keyFor(ch.toLowerCase(), ch, false, false, /^[A-Z]$/.test(ch));
     return keyFor(undefined, ch);

@@ -33,9 +33,17 @@ public final class CoreEvents {
     public record Alarm(int id) {
     }
 
-    /** Ctrl+T was held: the foreground program should stop. */
+    /**
+     * Ctrl+T was held: the foreground program should stop.
+     *
+     * @param tty The TTY whose program should stop (the visible console), or 0 for every program.
+     */
     @Event("terminate")
-    public record Terminate() {
+    public record Terminate(int tty) {
+        /** Stop every program (no console in particular). */
+        public Terminate() {
+            this(0);
+        }
     }
 
     /** A key was released. */
@@ -144,6 +152,15 @@ public final class CoreEvents {
      */
     @Event("pipe_readable")
     public record PipeReadable(int pipe) {
+    }
+
+    /**
+     * A virtual console of the screen became visible (Alt+1 … Alt+9 or {@code screen.show}).
+     *
+     * @param console The console, starting at 0.
+     */
+    @Event("console_show")
+    public record ConsoleShow(int console) {
     }
 
     /**

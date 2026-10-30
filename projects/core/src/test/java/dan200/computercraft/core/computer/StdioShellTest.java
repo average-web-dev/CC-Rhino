@@ -376,4 +376,50 @@ class StdioShellTest {
             assertEquals(-1, h.rowOf("process.exit"), h.dump());
         }
     }
+
+    /** edit reads keys through a Term on process.stdin: typing, Ctrl+S saves, Ctrl+Q exits. */
+    @Test
+    void edit_saves_and_exits() {
+        try (var h = TerminalHarness.boot(programs())) {
+            waitForPrompt(h, "/");
+            h.enter("edit /notes.txt");
+            h.waitFor("the editor", x -> x.screen().contains("/notes.txt"));
+            h.type("hello");
+            h.key(KEY_ENTER);
+            h.type("world");
+            h.waitFor("the typed text", x -> x.line(1).startsWith("world"));
+            h.ctrl('S');
+            h.waitForText("Saved /notes.txt");
+            h.ctrl('Q');
+            waitForPrompt(h, "/");
+            h.enter("cat /notes.txt");
+            h.waitForText("world");
+            assertTrue(h.screen().contains("hello"), h.dump());
+        }
+    }
+
+    /** Alt+2 shows the second console with a shell of its own; Ctrl+T only reaches the visible console. */
+    @Test
+    void virtual_consoles() {
+        try (var h = TerminalHarness.boot(programs()
+            .addFile("wait.js", "exports.main = function () { require('system').sleep(40); console.log('slept'); };"))) {
+            waitForPrompt(h, "/");
+            h.enter("/wait.js");
+            h.ticks(3);
+
+            h.alt('2');
+            waitForPrompt(h, "/");
+            assertEquals(-1, h.rowOf("/ $ /wait.js"), "console 2 has its own screen\n" + h.dump());
+            h.enter("echo on two");
+            h.waitForText("on two");
+            h.terminate(); // Ctrl+T on console 2: its shell lives on, the program on console 1 too
+            h.ticks(5);
+            waitForPrompt(h, "/");
+
+            h.alt('1');
+            h.waitForText("slept");
+            assertEquals(-1, h.rowOf("Terminated"), "Ctrl+T on console 2 did not reach console 1\n" + h.dump());
+            assertEquals(-1, h.rowOf("on two"), h.dump());
+        }
+    }
 }

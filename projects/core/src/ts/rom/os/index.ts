@@ -7,6 +7,10 @@
 
 import system from 'system';
 import util   from 'util';
+import screen from 'screen';
+import events from 'events';
+import * as jobs from '/rom/lib/internal/tty';
+import { spawn } from '/rom/lib/child_process';
 
 // ── Kernel log ─────────────────────────────────────────────────────────────────
 // Inspired by Linux dmesg / systemd service lines. The tag colours are ANSI styles, which process.stdout maps onto the
@@ -47,34 +51,30 @@ klog('ok', 'Module paths: ' + require.paths.join(', '));
 
 klog('ok', 'Kernel ready - handing off to shell');
 
-/**
- * Format an error as a single `file:line: message` line. The location is taken from the first stack frame outside
- * the module loader, as errors created with `new Error()` carry no fileName/lineNumber of their own.
- */
-function formatError(fallbackFile: string, e: any): string {
-    const msg = e?.message ?? String(e);
-    const frames = String(e?.stack ?? '').split('\n');
-    for (let frame of frames) {
-        let m = /^\s*at (.+?):(\d+)(?: \(.*\))?$/.exec(frame);
-        if (m && m[1] !== 'require-setup.js') return `${m[1]}:${m[2]}: ${msg}`;
+// ── Shells on the consoles ──────────────────────────────────────────────────────
+// A shell runs on every console that is shown and not used by a program, like getty: on the first console at boot,
+// on another one when it is switched to (Alt+1 … Alt+9, chvt), and again on the visible console when the program
+// that used it ends (also after `exit`). A program may run on another console (child_process.spawn with
+// { stdio: tty.console(n) }); no shell starts there while it does.
+
+/** Start a shell on console `index` if no program uses it. */
+function ensureShell(index: number): void {
+    let tty = jobs.console(index);
+    if (jobs.inUse(tty)) return;
+    try {
+        spawn('/rom/bin/bash', [], { stdio: tty });
+    } catch (error: any) {
+        tty.stderr.write(jobs.formatError('/rom/bin/bash.js', error) + '\n');
     }
-    return `${fallbackFile}: ${msg}`;
 }
 
-// ── Shell handoff ──────────────────────────────────────────────────────────────
-try {
+events.on('console_show', (index: number) => ensureShell(index));
+events.on('tty_released', (id: number) => {
+    let visible = screen.getVisible();
+    if (screen.getConsole(visible).getId() === id) ensureShell(visible);
+});
 
-    const bash = require('/rom/bin/bash') as {
-        run(path: string, ...args: string[]): boolean;
-        start(): void;
-    };
+// // Run the user startup script if one exists; silently skip if absent.
+// if (fs.existsSync('/startup.js') || fs.existsSync('/startup')) os.run('/startup');
 
-    // // Run the user startup script if one exists; silently skip if absent.
-    // if (fs.existsSync('/startup.js') || fs.existsSync('/startup')) {
-    //     bash.run('/startup');
-    // }
-
-    bash.start();
-} catch (error: any) {
-    console.error(formatError('/rom/bin/bash.js', error));
-}
+ensureShell(screen.getVisible());

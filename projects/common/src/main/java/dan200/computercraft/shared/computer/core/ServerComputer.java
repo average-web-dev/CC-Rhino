@@ -221,6 +221,11 @@ public class ServerComputer implements ComputerEnvironment {
         queueEvent(event, null);
     }
 
+    /** Ctrl+T: stop the program on the visible console. */
+    public final void terminate() {
+        computer.terminate();
+    }
+
     /** Queue an {@link dan200.computercraft.api.scripting.Event @Event} record (see {@link Computer#queueEvent(Record)}). */
     public final void queueEvent(Record event) {
         computer.queueEvent(event);

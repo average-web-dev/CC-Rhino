@@ -204,18 +204,20 @@ public final class EventLoop {
      * {@code Error("Terminated")}. A thread that does not catch it fails, which fails its {@code waitFor*} group in
      * turn, and so on up to the caller — usually the shell. Threads blocked in a {@code waitFor*} are reached through
      * their children; spawned (background) threads and the root thread are left alone.
+     *
+     * @param tty Only programs on this TTY (see {@link JSThread#terminal()}), the visible console; 0 for all.
      */
-    void terminate(Context cx, Scriptable scope) {
+    void terminate(Context cx, Scriptable scope, int tty) {
         var targets = new ArrayList<Parked>();
-        timerMap.values().removeIf(p -> takeTerminable(p.strand(), p.waiter(), targets));
+        timerMap.values().removeIf(p -> takeTerminable(p.strand(), p.waiter(), targets, tty));
         for (var it = ioMap.values().iterator(); it.hasNext(); ) {
             var list = it.next();
-            list.removeIf(e -> takeTerminable(e.strand(), e.waiter(), targets));
+            list.removeIf(e -> takeTerminable(e.strand(), e.waiter(), targets, tty));
             if (list.isEmpty()) it.remove();
         }
-        pendingYields.removeIf(p -> takeTerminable(p.strand(), p.waiter(), targets));
-        awaiting.removeIf(p -> takeTerminable(p.strand(), p.waiter(), targets));
-        idleWaiters.removeIf(p -> takeTerminable(p.strand(), p.waiter(), targets));
+        pendingYields.removeIf(p -> takeTerminable(p.strand(), p.waiter(), targets, tty));
+        awaiting.removeIf(p -> takeTerminable(p.strand(), p.waiter(), targets, tty));
+        idleWaiters.removeIf(p -> takeTerminable(p.strand(), p.waiter(), targets, tty));
 
         for (var target : targets) {
             ready.add(new Resume(target.strand(), target.waiter(), newError(cx, scope, "Error", TERMINATED), true));
@@ -227,11 +229,13 @@ public final class EventLoop {
      * operations started through a {@code /promises} module (parked on a non-main strand) are left alone: they end
      * when the thread that started them fails.
      */
-    private static boolean takeTerminable(Strand strand, Waiter waiter, List<Parked> targets) {
+    private static boolean takeTerminable(Strand strand, Waiter waiter, List<Parked> targets, int tty) {
         var thread = strand.thread();
         if (!strand.main() || thread.state != JSThread.State.RUNNING || thread.isRoot() || !thread.isForeground()) {
             return false;
         }
+        var terminal = thread.terminal();
+        if (tty != 0 && terminal != 0 && terminal != tty) return false;
         targets.add(new Parked(strand, waiter));
         return true;
     }

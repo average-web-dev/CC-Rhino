@@ -259,7 +259,8 @@ public class JSMachine implements IMachine {
 
             // Ctrl+T: make the foreground program's blocked calls throw "Terminated" (see EventLoop.terminate).
             if (TERMINATE_EVENT.equals(eventName)) {
-                eventLoop.terminate(cx, scope);
+                var tty = rawArgs.length >= 1 && rawArgs[0] instanceof Number n ? n.intValue() : 0;
+                eventLoop.terminate(cx, scope, tty);
                 var r = eventLoop.drainMicrotasks(cx, scope);
                 if (r.isError()) { close(); return r; }
             }

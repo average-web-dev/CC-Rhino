@@ -5,7 +5,7 @@
 // /rom/lib/term.ts — Term: a convenient drawing and input API over a TTY.
 //
 //   import { Term } from 'term';
-//   const term = new Term();                   // the program's TTY (process.stdout / process.stdin)
+//   const term = new Term();                   // the program's own: process.stdout / process.stdin
 //   const mon = new Term(TTY.from(monitor.getTty()));
 //   term.setTextColor(16384); term.write('red'); term.setCursorPos({ x: 0, y: 2 }); term.blit('ab', '0e', 'ff');
 //
@@ -20,8 +20,10 @@
 //   monitor_touch) for the mouse.
 
 import { TTY, CSI, colourIndex } from '/rom/lib/tty';
-import { decodeKeys, stripMouse } from '/rom/lib/internal/keys';
-import * as processTty from '/rom/lib/internal/tty';
+import { decodeKeys, stripMouse, KeyName } from '/rom/lib/internal/keys';
+
+/** The names of the keys readKey() returns (`key.name`). */
+export { KeyName };
 
 const WHITE = 1;
 const BLACK = 32768;
@@ -32,7 +34,9 @@ export interface CursorPosition { x: number; y: number; }
 export interface TermSize { width: number; height: number; }
 
 export class Term {
-    readonly #tty: TTY;
+    readonly #tty: TTY | undefined;
+    readonly #input: TtyStdin;
+    readonly #output: TtyWriteStream;
     #x = 0;
     #y = 0;
     #size: TermSize | null = null;
@@ -42,19 +46,21 @@ export class Term {
     /** Input read from the TTY but not consumed yet. */
     #text = '';
 
-    /** A Term over `tty` (default: the program's TTY, the one behind process.stdout). */
+    /** A Term over `tty`, or (without one) over the calling program's process.stdin / process.stdout. */
     constructor(tty?: TTY) {
-        this.#tty = tty ?? processTty.terminal;
+        this.#tty = tty;
+        this.#input = (tty?.stdin ?? process.stdin) as TtyStdin;
+        this.#output = tty?.stdout ?? process.stdout;
     }
 
-    /** The TTY this Term draws on. */
-    get tty(): TTY { return this.#tty; }
+    /** The TTY this Term draws on, if it was given one. */
+    get tty(): TTY | undefined { return this.#tty; }
 
     // ── Size ─────────────────────────────────────────────────────────────────────
 
     /** The size text wraps at: the TTY's, unless set with setSize. */
     getSize(): TermSize {
-        return this.#size ?? { width: this.#tty.columns, height: this.#tty.rows };
+        return this.#size ?? { width: this.#output.columns, height: this.#output.rows };
     }
 
     /** Wrap text at `width` and treat `height` as the last row (e.g. to draw into part of the TTY). */
@@ -63,7 +69,7 @@ export class Term {
         this.#size = { width: Math.floor(width), height: Math.floor(height) };
     }
 
-    isColor(): boolean { return this.#tty.isColor(); }
+    isColor(): boolean { return this.#output.hasColors(16); }
 
     // ── Cursor ───────────────────────────────────────────────────────────────────
 
@@ -107,7 +113,7 @@ export class Term {
     // ── Drawing ──────────────────────────────────────────────────────────────────
 
     #out(data: string): void {
-        this.#tty.stdout.write(data);
+        this.#output.write(data);
     }
 
     /** Move to the start of the next row (the TTY scrolls at its bottom). */
@@ -193,7 +199,7 @@ export class Term {
 
     /** Read more input from the TTY (blocks); mouse reports are dropped. */
     #fill(): boolean {
-        let data = this.#tty.handle.getStdin().read();
+        let data = this.#input.readSync();
         if (data === undefined) return false;
         this.#text += stripMouse(data);
         return true;
@@ -201,7 +207,7 @@ export class Term {
 
     /**
      * Wait for a key and return it as a Node key object (`{ sequence, name, ctrl, meta, shift }`), or `undefined` at
-     * end of input. Use the TTY in raw mode (`term.tty.setRawMode(true)`) to get every key as it is pressed.
+     * end of input. Use raw mode (`process.stdin.setRawMode(true)`) to get every key as it is pressed.
      */
     readKey(): Key | undefined {
         while (this.#text.length === 0) {

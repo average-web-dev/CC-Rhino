@@ -136,7 +136,7 @@ public class InputState {
 
     public void update() {
         if (terminateTimer >= 0 && terminateTimer < TERMINATE_TIME && (terminateTimer += 0.05f) > TERMINATE_TIME) {
-            computer.queueEvent(new CoreEvents.Terminate());
+            computer.terminate();
         }
 
         if (shutdownTimer >= 0 && shutdownTimer < TERMINATE_TIME && (shutdownTimer += 0.05f) > TERMINATE_TIME) {

@@ -120,20 +120,28 @@ interface TtyReadStream extends ReadableInput {
     listenerCount(event: string): number;
 }
 
+/**
+ * `process` always means the calling program: each program (started by the shell or child_process) has its own TTY,
+ * argv, working directory and exit code. Outside of a program (the bios, the OS layer) it is the computer's root
+ * process on the first console.
+ */
 interface Process {
+    /** The program's TTY: its stdin, stdout and stderr. */
     readonly stdin: TtyReadStream;
     readonly stdout: TtyWriteStream;
     readonly stderr: TtyWriteStream;
-    /** `["bash", "/path/to/program.js", ...args]` while the shell runs a program (`argv.slice(2)` are its arguments). */
+    /** `["bash", "/path/to/program.js", ...args]` for a program (`argv.slice(2)` are its arguments). */
     argv: string[];
-    argv0: string;
+    readonly argv0: string;
     execArgv: string[];
-    /** Environment variables: a live view of the `env` module (`PATH` mirrors `require.paths`). */
+    /** Environment variables: a live view of the `env` module (`PATH` mirrors `require.paths`); shared by all programs. */
     env: Record<string, string | undefined>;
     readonly platform: "computercraft";
+    /** The id of the running program (0 outside of a program). */
+    readonly pid: number;
     /** Exit code of the running program; set by `exit(code)`. */
     exitCode: number | undefined;
-    /** The working directory (the shell's, saved and restored around each program). */
+    /** The program's working directory (a child starts in its parent's; chdir() does not move the parent). */
     cwd(): string;
     /** Change the working directory; throws ENOENT / ENOTDIR like Node. */
     chdir(directory: string): void;

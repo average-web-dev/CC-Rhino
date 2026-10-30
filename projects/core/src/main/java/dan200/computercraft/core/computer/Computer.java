@@ -10,12 +10,13 @@ import dan200.computercraft.api.scripting.IContext;
 import dan200.computercraft.api.scripting.ScriptTask;
 import dan200.computercraft.api.peripheral.WorkMonitor;
 import dan200.computercraft.core.ComputerContext;
+import dan200.computercraft.core.CoreConfig;
 import dan200.computercraft.core.apis.IAPIEnvironment;
+import dan200.computercraft.core.apis.events.CoreEvents;
 import dan200.computercraft.core.apis.events.RedstoneEvent;
 import dan200.computercraft.core.computer.mainthread.MainThreadScheduler;
 import dan200.computercraft.core.filesystem.FileSystem;
 import dan200.computercraft.core.redstone.RedstoneState;
-import dan200.computercraft.core.CoreConfig;
 import dan200.computercraft.core.terminal.Terminal;
 import dan200.computercraft.core.tty.Screen;
 import org.jspecify.annotations.Nullable;
@@ -70,6 +71,7 @@ public class Computer {
         globalEnvironment = context.globalEnvironment();
         this.terminal = terminal;
         screen = new Screen(terminal, terminal.isColour() ? Math.max(1, CoreConfig.advancedConsoles) : 1);
+        screen.setOnShow(console -> queueEvent(new CoreEvents.ConsoleShow(console)));
 
         internalEnvironment = new Environment(this, environment);
         executor = new ComputerExecutor(this, environment, context);
@@ -86,6 +88,11 @@ public class Computer {
 
     Terminal getTerminal() {
         return terminal;
+    }
+
+    /** Ctrl+T: stop the program on the visible console (every program while the screen is inactive). */
+    public void terminate() {
+        queueEvent(new CoreEvents.Terminate(screen.terminateTarget()));
     }
 
     /** The virtual consoles on this computer's screen. */

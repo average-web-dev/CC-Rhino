@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 // /rom/lib/console.ts — Node's console (lib/internal/console/constructor.js): a Console class writing formatted
-// messages to two streams, and the global console writing to process.stdout / process.stderr.
+// messages to two streams, and the global console writing to process.stdout / process.stderr (of the calling program).
 //
 // `require('console')` returns the global console, whose `Console` property is the class — as in Node.
 //
@@ -350,7 +350,21 @@ class Console {
     }
 }
 
-const globalConsole = new Console({ stdout: proc.stdout, stderr: proc.stderr }) as unknown as GlobalConsole;
+/** A stream that writes to process.stdout / process.stderr of the *calling* program (each program has its TTY). */
+function currentStream(get: () => TtyWriteStream): Writable {
+    return {
+        write(chunk: string | Uint8Array, encoding?: string | ((err: Error | null) => void), callback?: (err: Error | null) => void): boolean {
+            return get().write(chunk, encoding, callback);
+        },
+        get isTTY() { return get().isTTY; },
+        get columns() { return get().columns; },
+        get rows() { return get().rows; },
+    };
+}
+
+const globalConsole = new Console({
+    stdout: currentStream(() => proc.stdout), stderr: currentStream(() => proc.stderr),
+}) as unknown as GlobalConsole;
 // Like Node's Console, `console.Console` also works without `new`.
 Object.defineProperty(globalConsole, 'Console', {
     value: callable(Console), writable: true, configurable: true, enumerable: false,

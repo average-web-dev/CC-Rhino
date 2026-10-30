@@ -119,7 +119,7 @@ part of `assemble`.
 | JS machine (Rhino context, safepoint, sandbox) | `projects/core/src/main/java/dan200/computercraft/core/engine/JSMachine.java` |
 | Event loop (timers / IO / microtasks / yields / setImmediate) | `core/engine/EventLoop.java` |
 | Node timers (`setTimeout` & co., #45): native queue + `internal/loop` module, ROM `timers` / `timers/promises` | `core/engine/JSTimers.java`, `JSLoopModule.java`, `MachineTimers.java` (tick clock, `computer/Environment`), `src/ts/rom/lib/timers.ts`, `timers/promises.ts`; types `src/ts/types/timers.d.ts` |
-| Job lifetime / keep-alive (#46): `EventLoop.isIdle`, `waitIdle`, keep-alive handles; bash job wait | `core/engine/EventLoop.java`, `JSLoopModule.java`, `src/ts/rom/lib/internal/tty.ts` (`waitForJob`), `rom/bin/bash.ts` |
+| Job lifetime / keep-alive (#46): `EventLoop.isIdle`, `waitIdle`, keep-alive handles; jobs, thread context, `child_process`, `os.run` | `core/engine/EventLoop.java`, `JSLoopModule.java`, `JSThread.java` (context, terminal), `src/ts/rom/lib/internal/tty.ts` (`run`, `Job`), `rom/lib/child_process.ts`, `rom/lib/os.ts`, `rom/bin/bash.ts`, `rom/os/index.ts` |
 | Green threads (`parallel` module), thread ownership/cancellation, Ctrl+T | `core/engine/JSParallel.java`, `JSThread.java`, `JSTaskGroup.java`, `EventLoop.java` |
 | `require()` resolver + module cache (`require.uncached`, `require.resolve`) | `core/engine/JSRequire.java` (+ `REQUIRE_SETUP_JS` in `JSMachine`) |
 | Java ⇄ JS value conversion (records, cycle-safe tables, `ArrayTable`) | `core/engine/JSValues.java`, `JSArguments.java` |
@@ -169,9 +169,16 @@ part of `assemble`.
   class; `process.stdin/stdout/stderr` are those of the first screen console (`/rom/lib/internal/tty.ts`). While a
   ReadStream flows, the TTY pushes what can be read as `pipe_data` events; `stream.on(...)` registers native listeners
   in the *calling* thread, so a program's stdin handlers may block and die with the program. Input typed while stdin
-  is paused stays in the TTY (type ahead); `'keypress'` is decoded from the delivered input. bash runs each program
-  as a job (`tty.beginJob/waitForJob/endJob`): fresh stdin, `process.argv`, cwd restored afterwards; see job
-  lifetime below. `readline.Interface#question` without a callback **blocks**; `readline/promises` returns a promise (hand-written —
+  is paused stays in the TTY (type ahead); `'keypress'` is decoded from the delivered input. `process` follows Node's
+  API strictly; everything beyond it (cursor, CC colours, blit, reading keys) is on `Term` (`new Term()` uses
+  `process.stdin/stdout`). Programs run as **jobs** (`/rom/lib/internal/tty`: `run`, `Job`): a job is the *context*
+  of the program's thread (`internal/loop.setContext(job, ttyId)`, inherited by every descendant thread, timer and
+  listener, also after a parent returns), so `process` (stdin/stdout/stderr, argv, cwd, exitCode, pid) always means
+  the calling program; a child's `chdir` does not move its shell. Programs are started through `child_process`
+  (`spawn`/`spawnSync`/`exec`/`execSync`; `stdio`: 'pipe' = fresh virtual TTY, 'inherit', or a TTY) or `os.run`;
+  bash uses `spawnSync` (foreground, on its own TTY) and `bash -c` backs `exec`. A failing program is reported on
+  its own stderr. The OS layer (`rom/os/index.ts`) runs a shell on every shown console that no program uses (getty-like,
+  `console_show` / `tty_released` events; `chvt`); see job lifetime below. `readline.Interface#question` without a callback **blocks**; `readline/promises` returns a promise (hand-written —
   the engine's generated `/promises` modules exist only for native modules).
 - Timers (#45): `setTimeout` & co. are ROM TypeScript (`/rom/lib/timers`, `timers/promises`) over a native queue
   (`JSTimers`, via the engine-internal `internal/loop` module). Delays are rounded up to whole ticks (≥ 1 tick, so
@@ -179,13 +186,13 @@ part of `assemble`.
   due-time/creation order (`MachineTimers.start` reports the due tick, as CC queues same-tick `timer` events in
   hash order). Callbacks run in the creating thread (may block, discarded when it stops); they return a Node-like
   `Timeout` (`ref`/`unref`/`hasRef`/`refresh`/`close`, `Number(t)` = id).
-- Job lifetime (#46): after a program's `main()` / top-level code returns, `tty.waitForJob` blocks in
+- Job lifetime (#46): after a program's `main()` / top-level code returns, the job (`internal/tty`) blocks in
   `internal/loop.waitIdle()` until the job's thread is idle (`EventLoop.isIdle`): no child threads and no *ref'd*
   pending work — blocked calls, pending `/promises` operations, queued immediates/microtasks, ref'd timers, ref'd
   keep-alive handles (`handle()`/`handleRef`/`handleClose`; tty holds one per `process.stdin` listener while stdin
   flows). Plain pending promises and `events.on` listeners don't count (Node semantics). If `main()` returned a
   thenable (`async main`, #44), its rejection is the program's error (exit code 1). `process.exit()` wakes the wait
-  (`wakeIdle`). Then `waitForJob` throws the job-end signal (`tty.exitCodeOf` → `null` for a normal end), which
+  (`wakeIdle`). Then the job throws its end signal (`exitCodeOf` → `null` for a normal end), which
   *stops* the job's thread: everything it left behind (listeners, unref'd timers, reactions, spawned threads) is
   discarded and nothing runs after the prompt. Daemons that outlive their program are not supported yet.
 - Blocking calls look synchronous. A Java method returns a `MethodResult` with a destination
@@ -209,8 +216,10 @@ part of `assemble`.
   for `IFunction`s / `IDynamicObject` methods everything not declared otherwise (`IFunction.nonYielding(fn)`,
   `IDynamicObject.isNonYielding(i)`).
 - Concurrency: `require('parallel')` is native (green threads). Every parked continuation, listener, microtask and
-  `setImmediate` belongs to a thread; stopping a thread discards them. Ctrl+T raises `Error("Terminated")` in the
-  foreground program; bash runs each program as a foreground thread. There is deliberately **no** public
+  `setImmediate` belongs to a thread; stopping a thread discards them. Ctrl+T (`terminate` event carrying the visible
+  console's TTY id) raises `Error("Terminated")` in the foreground of the programs on that TTY: a thread is in the
+  foreground if every thread up to its program's thread (the one with a context) is waited for by `parallel.waitFor*`
+  (`JSThread.isForeground`); a shell job (`job.shell`) survives it at its prompt. There is deliberately **no** public
   `pullEvent`/`queueEvent`.
 - Events: native events (`@Event` records → `EventMap`) are queued with `queueEvent(record)` from any thread and reach
   listeners on a later tick (listeners may block; blocked calls waiting for the event are woken). `events.emit(name,

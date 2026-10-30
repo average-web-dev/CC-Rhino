@@ -4,8 +4,7 @@
 
 // clear — clear the terminal and move the cursor to the top left.
 
-import { CSI } from '/rom/lib/tty';
-
 export function main(): void {
-    process.stdout.write(CSI.clearScreen + CSI.home);
+    process.stdout.cursorTo(0, 0);
+    process.stdout.clearScreenDown();
 }

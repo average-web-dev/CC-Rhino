@@ -258,6 +258,8 @@ export interface ReadStreamOptions {
     owner?: () => number;
     /** Called when the stream starts (true) or stops (false) flowing. */
     onFlowing?: (flowing: boolean) => void;
+    /** The pipe to read (default: the TTY's stdin; a ChildProcess reads its child's stdout this way). */
+    pipe?: PipeHandle;
 }
 
 /** Node's tty.ReadStream: what programs read from a TTY (`stdin`). */
@@ -276,7 +278,7 @@ export class ReadStream implements TtyReadStream {
 
     constructor(tty: TtyHandle, options: ReadStreamOptions = {}) {
         this.#tty = tty;
-        this.#pipe = tty.getStdin();
+        this.#pipe = options.pipe ?? tty.getStdin();
         this.#pipeId = this.#pipe.getId();
         this.#options = options;
     }
@@ -319,6 +321,14 @@ export class ReadStream implements TtyReadStream {
     setEncoding(_encoding?: string): this { return this; }
     ref(): this { this.#refd = true; this.#syncHandles(); return this; }
     unref(): this { this.#refd = false; this.#syncHandles(); return this; }
+
+    /**
+     * CC extension: wait until input is available and return it (in cooked mode a line, in raw mode what was typed),
+     * or `undefined` at end of input. For programs that read input step by step rather than with listeners.
+     */
+    readSync(): string | undefined {
+        return this.#pipe.read();
+    }
 
     /** Drop what was typed but not read yet. */
     discard(): void {
@@ -487,7 +497,17 @@ export class TTY {
     constructor(columns?: number, rows?: number, options?: ReadStreamOptions) {
         this.handle = wrapping ?? pty.create(columns, rows);
         wrapping = undefined;
-        this.stdin = new ReadStream(this.handle, options);
+        // A device shows the cursor while its stdin is read (a virtual TTY's output gets no cursor sequences).
+        let onFlowing = options?.onFlowing;
+        if (onFlowing === undefined && this.handle.getCursorColumn() !== undefined) {
+            let shown = false;
+            onFlowing = (flowing: boolean) => {
+                if (flowing === shown) return;
+                shown = flowing;
+                this.stdout.write(flowing ? CSI.showCursor : CSI.hideCursor);
+            };
+        }
+        this.stdin = new ReadStream(this.handle, { ...options, onFlowing });
         this.stdout = new WriteStream(this.handle, this.handle.getStdout(), 1);
         this.stderr = new WriteStream(this.handle, this.handle.getStderr(), 2);
     }

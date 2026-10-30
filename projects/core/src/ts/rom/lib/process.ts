@@ -2,25 +2,24 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-// /rom/lib/process.ts — Node's `process`, for what a computer has: the terminal streams (stdin/stdout/stderr, see
-// internal/tty), the program's arguments and working directory, environment variables, exit codes and timing.
+// /rom/lib/process.ts — Node's `process`, for what a computer has: the streams of the program's TTY
+// (stdin/stdout/stderr), its arguments and working directory, environment variables, exit codes and timing.
 //
 // One object for the whole computer, installed as the global `process` by the bios (and returned by
-// `require('process')`). The shell runs one foreground program at a time and sets argv / restores cwd around it, so
-// for a program they behave like those of its own process. Things a computer does not have (pid, signals, memory
-// usage, …) are deliberately absent rather than faked.
+// `require('process')`); it always means the *calling* program (see the jobs in /rom/lib/internal/tty): each program
+// has its own TTY, argv, working directory and exit code, so chdir() in a program does not move its shell. Things a
+// computer does not have (signals, memory usage, …) are deliberately absent rather than faked.
 
-import * as tty from '/rom/lib/internal/tty';
+import * as jobs from '/rom/lib/internal/tty';
 import * as env from '/rom/lib/env';
 
 import fs from 'fs';
 import events from 'events';
 import system from 'system';
 
-let cwd = '/';
-
 /** Normalise `p` against the current directory. */
 function resolvePath(p: string): string {
+    let cwd = jobs.current().cwd;
     let raw = (p.startsWith('/') ? '' : cwd.replace(/\/$/, '') + '/') + p;
     let out: string[] = [];
     for (let seg of raw.split('/')) {
@@ -47,14 +46,14 @@ function chdir(directory: string): void {
     }
     if (!isDirectory) {
         let code = exists ? 'ENOTDIR' : 'ENOENT';
-        let err = new Error(
-            `${code}: ${exists ? 'not a directory' : 'no such file or directory'}, chdir '${cwd}' -> '${directory}'`);
+        let err = new Error(`${code}: ${exists ? 'not a directory' : 'no such file or directory'}, `
+            + `chdir '${jobs.current().cwd}' -> '${directory}'`);
         (err as any).code = code;
         (err as any).syscall = 'chdir';
         (err as any).path = directory;
         throw err;
     }
-    cwd = target;
+    jobs.current().cwd = target;
 }
 
 /** process.env: a live view of the `env` module (PATH included, which mirrors require.paths). */
@@ -100,26 +99,29 @@ hrtime.bigint = function (): bigint {
 };
 
 const proc: Process = {
-    stdin: tty.stdin,
-    stdout: tty.stdout,
-    stderr: tty.stderr,
+    get stdin() { return jobs.current().tty.stdin; },
+    get stdout() { return jobs.current().tty.stdout; },
+    get stderr() { return jobs.current().tty.stderr; },
 
-    argv: ['bash'],
-    argv0: 'bash',
+    get argv() { return jobs.current().argv; },
+    set argv(value: string[]) { jobs.current().argv = value; },
+    get argv0() { return jobs.current().argv[0] ?? 'bash'; },
     execArgv: [],
     env: envProxy,
     platform: 'computercraft',
-    exitCode: undefined,
+    get pid() { return jobs.current().id; },
+    get exitCode() { return jobs.current().exitCode; },
+    set exitCode(value: number | undefined) { jobs.current().exitCode = value; },
 
-    cwd(): string { return cwd; },
+    cwd(): string { return jobs.current().cwd; },
     chdir,
 
     exit(code?: number): never {
         if (code !== undefined) proc.exitCode = code;
         let exitCode = typeof proc.exitCode === 'number' ? proc.exitCode : 0;
-        // Outside of a program (the shell or the bios) the whole computer is the process.
-        if (tty.jobId() === 0) system.shutdown();
-        throw tty.requestExit(exitCode);
+        // Outside of a program (the bios, the OS layer) the whole computer is the process.
+        if (jobs.current() === jobs.root) system.shutdown();
+        throw jobs.requestExit(exitCode);
     },
 
     nextTick: function (callback: (...args: any[]) => void, ...args: any[]): void {
@@ -133,7 +135,7 @@ const proc: Process = {
     emitWarning(warning: string | Error, type?: string): void {
         let message = typeof warning === 'string' ? warning : warning.message;
         let name = typeof warning === 'string' ? (type ?? 'Warning') : (warning.name || 'Warning');
-        tty.stderr.write(`${name}: ${message}\n`);
+        jobs.current().tty.stderr.write(`${name}: ${message}\n`);
     },
 };
 

@@ -16,7 +16,7 @@
 // it is paused (process.stdin is shared with the shell); there is no kill ring, undo or reverse search.
 
 import { EventEmitter } from '/rom/lib/internal/emitter';
-import * as tty from '/rom/lib/internal/tty';
+import * as tty from '/rom/lib/tty';
 import { decodeKeys } from '/rom/lib/internal/keys';
 import * as util from '/rom/lib/util';
 import { callable } from '/rom/lib/internal/callable';
@@ -81,11 +81,11 @@ function invalidArgValue(name: string, value: unknown): TypeError {
 const KEYPRESS_DECODER = '__ccKeypressDecoder';
 
 /**
- * Make `stream` emit 'keypress' events for its input, as Node's readline.emitKeypressEvents does. process.stdin
- * already emits them (decoded from what the TTY delivers), so this is a no-op for it.
+ * Make `stream` emit 'keypress' events for its input, as Node's readline.emitKeypressEvents does. TTY streams
+ * (process.stdin) already emit them (decoded from what the TTY delivers), so this is a no-op for them.
  */
 export function emitKeypressEvents(stream: ReadableInput, _iface?: unknown): void {
-    if (stream === tty.stdin || (stream as any)[KEYPRESS_DECODER]) return;
+    if (stream instanceof tty.ReadStream || (stream as any)[KEYPRESS_DECODER]) return;
     let decoder = (data: string | Uint8Array) => {
         if (stream.listenerCount('keypress') === 0) return;
         let text = typeof data === 'string' ? data : String.fromCharCode.apply(null, Array.prototype.slice.call(data));

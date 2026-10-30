@@ -19,6 +19,8 @@ interface TtyStdin extends TtyReadStream {
     setFlowing(value: boolean | null): void;
     /** Drop what was typed but not read yet. */
     discard(): void;
+    /** Wait until input is available and return it, or `undefined` at end of input (used by Term). */
+    readSync(): string | undefined;
     /** Remove the stream listeners added by `owner`. */
     removeListenersOf(owner: number): void;
 }
@@ -103,3 +105,8 @@ declare module "node:tty" { const tty: TtyModule; export = tty; }
 
 declare module "internal/pty" { const pty: PtyAPI; export = pty; }
 declare module "internal/pty/promises" { const ptyPromises: PtyAPIPromises; export = ptyPromises; }
+
+interface CustomEventMap {
+    /** The last program running on a TTY ended (emitted by the ROM's job control; `tty` is the native TTY id). */
+    tty_released: [tty: number];
+}
