@@ -30,7 +30,9 @@ public class JSMachine implements IMachine {
      * compiler / scope internals. The interpreter itself does not need these globals: it creates continuations, with
      * and activation objects directly. {@code CallSite} stays, as {@code Error.prepareStackTrace} looks it up by name.
      */
-    private static final List<String> REMOVED_GLOBALS = List.of("Continuation", "Script", "With", "Call");
+    // __GeneratorFunction: Rhino stores the GeneratorFunction constructor under this name; the TopLevel scope caches
+    // it, and scripts reach it the standard way, through Object.getPrototypeOf(function* () {}).constructor.
+    private static final List<String> REMOVED_GLOBALS = List.of("Continuation", "Script", "With", "Call", "__GeneratorFunction");
 
     /**
      * JS bootstrap that installs the global {@code require()} function using the {@code __cc_loader__}
@@ -121,8 +123,10 @@ public class JSMachine implements IMachine {
         cx = factory.enterContext();
         try {
             // The "safe" standard objects never install LiveConnect (Packages, java, JavaImporter, getClass, …);
-            // the deny-all ClassShutter in CCContextFactory stays as a second layer.
-            var globals = cx.initSafeStandardObjects();
+            // the deny-all ClassShutter in CCContextFactory stays as a second layer. A TopLevel scope caches the
+            // built-in constructors/prototypes; without it Rhino never creates the hidden GeneratorFunction, and
+            // generator functions get a null prototype (no call/apply/bind).
+            var globals = (ScriptableObject) cx.initSafeStandardObjects(new TopLevel());
             scope = globals;
             for (var name : REMOVED_GLOBALS) ScriptableObject.deleteProperty(globals, name);
             JSLimits.install(globals);

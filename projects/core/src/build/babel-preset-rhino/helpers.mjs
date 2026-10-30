@@ -84,17 +84,6 @@ babelHelpers.get = function (target, property, receiver) {
   return descriptor.get ? descriptor.get.call(arguments.length < 3 ? target : receiver) : descriptor.value;
 };
 
-// Rhino's generator functions do not inherit from Function.prototype, but asyncToGenerator and wrapAsyncGenerator call
-// \`fn.apply(this, arguments)\` on the generator function they get: hand them a plain function that borrows apply.
-var apply = Function.prototype.apply;
-function applyGenerator(wrap) {
-  return function (fn) {
-    return wrap(function () { return apply.call(fn, this, arguments); });
-  };
-}
-babelHelpers.asyncToGenerator = applyGenerator(babelHelpers.asyncToGenerator);
-babelHelpers.wrapAsyncGenerator = applyGenerator(babelHelpers.wrapAsyncGenerator);
-
 // The namespace of a CommonJS module (a native module, a ROM module, anything without __esModule) for
 // \`import * as m from "m"\` (and for \`import m, { a } from "m"\`, which Babel compiles to \`ns.default\` / \`ns.a\`): an
 // object whose prototype is the module object, with \`default\` (the module object) as its only own member. Babel's

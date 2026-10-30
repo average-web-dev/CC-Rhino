@@ -28,8 +28,7 @@
 //   generator's `finally` does not run (own plugin, ./for-of.mjs, with an index-loop fast path for arrays)
 // - async functions, async generators and `for await` (Rhino has none of them): lowered to native generators driven by
 //   the asyncToGenerator / wrapAsyncGenerator helpers (never regenerator: Rhino's continuations need real generators,
-//   and generator functions lack Function.prototype, which the helpers work around, see ./helpers.mjs). `for await`
-//   closes its iterator when left early.
+//   generators). `for await` closes its iterator when left early.
 // - ES module syntax (import/export): CommonJS, see ./modules.mjs for the interop rules.
 //
 // Worked around in the helpers module instead (see RHINO_OVERRIDES in ./helpers.mjs): Reflect.get ignores its receiver

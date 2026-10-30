@@ -214,8 +214,9 @@ part of `assemble`.
   `require('async')` has `run(function* () {…})` (yield = await) and `unwrap(p)` (block until settled);
   TS `async` functions, async generators and `for await` work: Babel lowers them to generators driven by the
   `babel-helpers` module (`Symbol.asyncIterator` is polyfilled); `require('tslib')` is native too, for TS compiled
-  elsewhere (`importHelpers`; it also has the `#private` helpers). Rhino has no `async`/`await` syntax, and Rhino's
-  generator functions lack `Function.prototype` (the helpers use `Function.prototype.apply.call`).
+  elsewhere (`importHelpers`; it also has the `#private` helpers). Rhino has no `async`/`await` syntax. Generator functions inherit
+  from `Function.prototype` only because the global scope is a `TopLevel` (`JSMachine`; without it Rhino never creates
+  the hidden `GeneratorFunction`).
 - Promise reactions belong to the thread that registered them (`Promise.prototype.then` is wrapped, see `JSPromises`):
   a stopped thread's reactions never run. A pending `/promises` operation of a stopped thread is discarded and its
   promise rejected with `Error("Terminated")`, so other threads awaiting it don't hang. Aborts inside promise code are
@@ -240,7 +241,7 @@ part of `assemble`.
   Leaving a `for-of` early closes the iterator (a generator's
   `finally` runs). What is left: decorators and `using` are unsupported (a missing
   helper fails the build). Hand-written JS that bypasses the pipeline (Java text blocks, engine-test snippets) still
-  has to respect Rhino: no `class`, no spread in calls, no `const` in loops, `for-of` never closes its iterator, `function*` lacks `Function.prototype`,
+  has to respect Rhino: no `class`, no spread in calls, no `const` in loops, `for-of` never closes its iterator,
   rest parameters break through `apply`, parenthesize `yield` inside expressions (`f((yield p))`).
 - Programs in `rom/bin` / `rom/os/bin` export `main(args, cwd)` (`export function main…`; same as
   `process.argv.slice(2)` / `process.cwd()`); bash calls it, or just runs the module's top-level code (Node style).

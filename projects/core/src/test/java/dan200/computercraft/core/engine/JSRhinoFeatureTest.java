@@ -141,6 +141,12 @@ class JSRhinoFeatureTest {
             function g() { for (var i = 0; i < 1; i++) { let toString = 6; return toString; } }
             return [f()(), g()].join();
             """),
+        new Feature("generator functions inherit from Function.prototype", NATIVE, "true,function,1,2", """
+            function* g(a) { yield a; }
+            var GeneratorFunction = Object.getPrototypeOf(g);
+            return [Object.getPrototypeOf(GeneratorFunction) === Function.prototype, typeof g.apply,
+                g.call(null, 1).next().value, GeneratorFunction.constructor("yield 2")().next().value].join();
+            """),
 
         // Broken: transformed by babel-preset-rhino.
         new Feature("class", BROKEN, "2", """
@@ -214,10 +220,6 @@ class JSRhinoFeatureTest {
         new Feature("yield operand followed by a comma", BROKEN, "0", """
             function* g() { var x = 0, r; r = yield x, x = 5; return x; }
             return g().next().value;
-            """),
-        new Feature("generator functions inherit from Function.prototype", BROKEN, "function", """
-            function* g() {}
-            return typeof g.apply;
             """),
         new Feature("stack of an Error whose prototype changed (class E extends Error)", BROKEN, "string", """
             function E() {}
