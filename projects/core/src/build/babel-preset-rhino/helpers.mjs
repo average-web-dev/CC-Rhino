@@ -26,9 +26,9 @@ const USED_HELPERS = [
     "defineAccessor", "setFunctionName", "assertClassBrand", "classPrivateFieldGet2", "classPrivateFieldSet2",
     "classPrivateFieldInitSpec", "classPrivateMethodInitSpec", "classPrivateGetter", "classPrivateSetter",
     "checkPrivateRedeclaration", "checkInRHS", "toSetter", "identity", "readOnlyError", "writeOnlyError",
-    // spread, destructuring, parameters, object rest
+    // spread, destructuring (incl. object rest), parameters
     "toConsumableArray", "slicedToArray", "toArray", "maybeArrayLike", "objectDestructuringEmpty",
-    "objectWithoutProperties", "objectWithoutPropertiesLoose", "extends", "objectSpread2",
+    "objectWithoutProperties", "objectWithoutPropertiesLoose", "extends",
     // block scoping
     "tdz", "temporalRef", "temporalUndefined",
     // async functions, async generators, for await
@@ -64,26 +64,6 @@ export const HELPERS = new Set([...BABEL_HELPERS, ...RHINO_HELPER_NAMES]);
  * through it, so replacing a member replaces it everywhere.
  */
 const RHINO_OVERRIDES = `
-// Rhino computes an Error's \`stack\` lazily and casts its prototype to a native Error when it does (a Java
-// ClassCastException otherwise). Babel's wrapNativeSuper creates subclass instances (\`class E extends Error\`) as a
-// plain native object whose prototype is then changed, so compute the stack first.
-var construct = babelHelpers.construct;
-babelHelpers.construct = function (Parent, args, Class) {
-  var instance = construct(Parent, args);
-  if (instance instanceof Error) void instance.stack;
-  if (Class) babelHelpers.setPrototypeOf(instance, Class.prototype);
-  return instance;
-};
-
-// Rhino's Reflect.get ignores the receiver, so a getter read through \`super.x\` would see the prototype as \`this\`.
-// Use Babel's own fallback for environments without Reflect.
-babelHelpers.get = function (target, property, receiver) {
-  var base = babelHelpers.superPropBase(target, property);
-  if (!base) return undefined;
-  var descriptor = Object.getOwnPropertyDescriptor(base, property);
-  return descriptor.get ? descriptor.get.call(arguments.length < 3 ? target : receiver) : descriptor.value;
-};
-
 // The namespace of a CommonJS module (a native module, a ROM module, anything without __esModule) for
 // \`import * as m from "m"\` (and for \`import m, { a } from "m"\`, which Babel compiles to \`ns.default\` / \`ns.a\`): an
 // object whose prototype is the module object, with \`default\` (the module object) as its only own member. Babel's

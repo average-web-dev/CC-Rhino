@@ -24,7 +24,7 @@ Users write JavaScript (ES6 subset) instead of Lua inside the mod.
 - `ILuaMachine` / `MachineEnvironment` interface surface stays unchanged
 - All Java API implementations (turtle, fs, peripheral, …) kept as-is
 
-**Modern syntax on Rhino (#47):** Rhino 1.9.1 lacks or breaks part of ES2015+ (no `class` syntax, `const` in loops
+**Modern syntax on Rhino (#47):** Rhino (1.9.x with the backports of `average-web-dev/rhino`) lacks or breaks part of ES2015+ (no `class` syntax, `const` in loops
 keeps its first value, no spread in calls, rest parameters wrong through `apply`, array destructuring ignores
 iterators, no `new.target`, unparenthesized `yield` rejected, no `async`, …). TypeScript is therefore compiled by
 `projects/core/src/build/compile-ts.mjs`: tsc only type-checks, then Babel strips the types and `babel-preset-rhino`

@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-// Destructuring on Rhino: array patterns ignore the iterator protocol and rest elements are a syntax error
-// (transform-destructuring); object rest by transform-object-rest-spread.
+// Destructuring on Rhino: array patterns ignore the iterator protocol (transform-destructuring, which lowers object
+// rest as well).
 
 let [a, b] = new Set([1, 2]);
 check("array pattern over an iterable", a + b, 3);

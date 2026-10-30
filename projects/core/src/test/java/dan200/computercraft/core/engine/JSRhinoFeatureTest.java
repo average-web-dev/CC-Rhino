@@ -22,7 +22,7 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Issue #47 — the ES2015+ feature matrix of Rhino 1.9.1, and the transforms of {@code babel-preset-rhino}
+ * Issue #47 — the ES2015+ feature matrix of Rhino (1.9.x with the backports of average-web-dev/rhino), and the transforms of {@code babel-preset-rhino}
  * ({@code src/build/babel-preset-rhino}) that make the broken features work.
  *
  * <p>{@link #nativeSupport()} runs plain JS snippets on the machine, without any compiler, and pins what Rhino supports
@@ -147,6 +147,25 @@ class JSRhinoFeatureTest {
             return [Object.getPrototypeOf(GeneratorFunction) === Function.prototype, typeof g.apply,
                 g.call(null, 1).next().value, GeneratorFunction.constructor("yield 2")().next().value].join();
             """),
+        new Feature("array destructuring with a rest element", NATIVE, "2", """
+            var [a, ...rest] = [1, 2, 3];
+            return rest.length;
+            """),
+        new Feature("object rest", NATIVE, "2", """
+            var { a, ...rest } = { a: 1, b: 2 };
+            return rest.b;
+            """),
+        new Feature("stack of an Error whose prototype changed (class E extends Error)", NATIVE, "string", """
+            function E() {}
+            E.prototype = Object.create(Error.prototype);
+            var e = new Error("m");
+            Object.setPrototypeOf(e, E.prototype);
+            return typeof e.stack;
+            """),
+        new Feature("Reflect.get with a receiver (super.getter)", NATIVE, "1", """
+            var p = { get x() { return this.v; } };
+            return Reflect.get(p, "x", { v: 1 });
+            """),
 
         // Broken: transformed by babel-preset-rhino.
         new Feature("class", BROKEN, "2", """
@@ -201,14 +220,6 @@ class JSRhinoFeatureTest {
             var [a, b] = new Set([1, 2]);
             return a + b;
             """),
-        new Feature("array destructuring with a rest element", BROKEN, "2", """
-            var [a, ...rest] = [1, 2, 3];
-            return rest.length;
-            """),
-        new Feature("object rest", BROKEN, "2", """
-            var { a, ...rest } = { a: 1, b: 2 };
-            return rest.b;
-            """),
         new Feature("new.target", BROKEN, "true", """
             function F() { this.ok = new.target === F; }
             return new F().ok;
@@ -220,19 +231,6 @@ class JSRhinoFeatureTest {
         new Feature("yield operand followed by a comma", BROKEN, "0", """
             function* g() { var x = 0, r; r = yield x, x = 5; return x; }
             return g().next().value;
-            """),
-        new Feature("stack of an Error whose prototype changed (class E extends Error)", BROKEN, "string", """
-            function E() {}
-            E.prototype = Object.create(Error.prototype);
-            var e = new Error("m");
-            Object.setPrototypeOf(e, E.prototype);
-            return typeof e.stack;
-            """),
-
-        // Broken: worked around in the babel-helpers module.
-        new Feature("Reflect.get with a receiver (super.getter)", BROKEN, "1", """
-            var p = { get x() { return this.v; } };
-            return Reflect.get(p, "x", { v: 1 });
             """),
 
         // Broken: babel-preset-rhino's for-of plugin (for-of.mjs) closes the iterator (#41).

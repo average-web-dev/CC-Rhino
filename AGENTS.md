@@ -45,6 +45,10 @@ CI (`.github/workflows/main-ci.yml`) runs `assemble`, `test` and `runGametest` o
 The docs website, Lua lint and the TeaVM web emulator are disabled (`TODO(rhino)`, #17); `:web:docWebsite` is not
 part of `assemble`.
 
+- Rhino is built from the Git branch `average-web-dev/rhino@rhino_1_9_backports` (1.9.x plus backported fixes),
+  not the Maven artifact: `rhinoGit`/`rhinoBranch` in `gradle.properties` (Gradle source dependency, cloned into
+  `.gradle/vcs-1`; fetch new commits with `--refresh-dependencies`). `-PrhinoDir=<path>` uses a local checkout instead.
+  The engine's workarounds (`babel-preset-rhino`, `JSRhinoFeatureTest`) are tuned to that branch.
 - Gradle builds and especially `runGametest` are memory-hungry. Don't run several in parallel (e.g. from multiple
   agents/worktrees at once), and stop daemons when done (`./gradlew --stop`).
 - New `@cc.*` / `@cc-r.*` javadoc tags used by the TypeScript doclet must be added to the hidden-tag list in
@@ -66,9 +70,9 @@ part of `assemble`.
   --project <tsconfig>` (#47, #49): tsc **only type-checks** (the ROM tsconfig sets `noEmit`, `module: preserve`,
   `esModuleInterop`, `isolatedModules`, `useDefineForClassFields`), then Babel compiles each file on its own:
   `@babel/preset-typescript` strips the types (type-only imports are elided), then **`babel-preset-rhino`**
-  (`src/build/babel-preset-rhino/`) applies exactly the transforms Rhino 1.9.1 needs (`async` functions, async
+  (`src/build/babel-preset-rhino/`) applies exactly the transforms Rhino needs (`async` functions, async
   generators and `for await` → native generators driven by `asyncToGenerator`/`wrapAsyncGenerator` — never
-  regenerator; class fields/`#private`/static blocks, classes, object rest, block scoping in
+  regenerator; class fields/`#private`/static blocks, classes, block scoping in
   loops, spread in calls/`new`, rest/default parameters, destructuring, `new.target`, ES modules → CommonJS
   (`modules.mjs`), plus its own plugins that
   parenthesize every `yield` and make leaving a `for-of` early close the iterator (`for-of.mjs`: the loop stays
@@ -236,7 +240,7 @@ part of `assemble`.
 
 - **Writing ROM/test TS:** modern syntax works (#47): `class` (fields, `#private`, static blocks, `extends Error`/`Map`),
   `const`/`let` anywhere, spread, rest/default parameters (also in functions called through `apply`), destructuring,
-  `new.target`, `async`/`await` — Babel (`babel-preset-rhino`) rewrites what Rhino 1.9.1 gets wrong. ES module syntax
+  `new.target`, `async`/`await` — Babel (`babel-preset-rhino`) rewrites what Rhino gets wrong. ES module syntax
   (`import fs from 'fs'`, named exports; see "Module syntax" above). Type-only imports may use `import type`.
   Leaving a `for-of` early closes the iterator (a generator's
   `finally` runs). What is left: decorators and `using` are unsupported (a missing
