@@ -73,7 +73,7 @@ part of `assemble`.
   (`src/build/babel-preset-rhino/`) applies exactly the transforms Rhino needs (`async` functions, async
   generators and `for await` → native generators driven by `asyncToGenerator`/`wrapAsyncGenerator` — never
   regenerator; class fields/`#private`/static blocks, classes, block scoping in
-  loops, spread in calls/`new`, rest/default parameters, destructuring, `new.target`, ES modules → CommonJS
+  loops, spread in calls/`new`, destructuring, `new.target`, ES modules → CommonJS
   (`modules.mjs`), plus its own plugins that
   parenthesize every `yield` and make leaving a `for-of` early close the iterator (`for-of.mjs`: the loop stays
   native over an iterator obtained by the `rhinoForOf` helper, wrapped in `try`/`finally` — never `catch`, which
@@ -239,14 +239,14 @@ part of `assemble`.
 ## Conventions
 
 - **Writing ROM/test TS:** modern syntax works (#47): `class` (fields, `#private`, static blocks, `extends Error`/`Map`),
-  `const`/`let` anywhere, spread, rest/default parameters (also in functions called through `apply`), destructuring,
+  `const`/`let` anywhere, spread, rest/default parameters (native), destructuring,
   `new.target`, `async`/`await` — Babel (`babel-preset-rhino`) rewrites what Rhino gets wrong. ES module syntax
   (`import fs from 'fs'`, named exports; see "Module syntax" above). Type-only imports may use `import type`.
   Leaving a `for-of` early closes the iterator (a generator's
   `finally` runs). What is left: decorators and `using` are unsupported (a missing
   helper fails the build). Hand-written JS that bypasses the pipeline (Java text blocks, engine-test snippets) still
   has to respect Rhino: no `class`, no spread in calls, no `const` in loops, `for-of` never closes its iterator,
-  rest parameters break through `apply`, parenthesize `yield` inside expressions (`f((yield p))`).
+  parenthesize `yield` inside expressions (`f((yield p))`).
 - Programs in `rom/bin` / `rom/os/bin` export `main(args, cwd)` (`export function main…`; same as
   `process.argv.slice(2)` / `process.cwd()`); bash calls it, or just runs the module's top-level code (Node style).
   `main` may be `async`

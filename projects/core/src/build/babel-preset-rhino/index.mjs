@@ -12,7 +12,7 @@
 // syntax is stripped beforehand by @babel/preset-typescript (see ../compile-ts.mjs).
 //
 // Natively supported (not transformed): arrow functions, template literals (also tagged), let/const outside loops,
-// default parameters, object spread, array spread, optional chaining, `??`, `**`, logical assignment, numeric
+// default and rest parameters (also through Function.prototype.apply), object spread, array spread, optional chaining, `??`, `**`, logical assignment, numeric
 // separators, computed/shorthand properties and methods, Symbol, generators, optional catch binding, BigInt.
 // Destructuring, also with rest elements and object rest, works as well, but is lowered anyway (see below).
 //
@@ -21,7 +21,6 @@
 // - `const` inside loops (keeps the value of the first iteration), `const` in for-of heads (syntax error), and `let`
 //   in loop heads captured by closures (one binding for all iterations)
 // - spread in calls and `new` (syntax error)
-// - rest parameters (wrong when the function is called through Function.prototype.apply: [thisArg, argsArray])
 // - array destructuring (ignores the iterator protocol); the destructuring plugin lowers all patterns, so object rest
 //   needs no plugin of its own
 // - `new.target` (syntax error)
@@ -41,7 +40,6 @@ import classStaticBlock from "@babel/plugin-transform-class-static-block";
 import privatePropertyInObject from "@babel/plugin-transform-private-property-in-object";
 import classProperties from "@babel/plugin-transform-class-properties";
 import privateMethods from "@babel/plugin-transform-private-methods";
-import parameters from "@babel/plugin-transform-parameters";
 import classes from "@babel/plugin-transform-classes";
 import spread from "@babel/plugin-transform-spread";
 import destructuring from "@babel/plugin-transform-destructuring";
@@ -72,7 +70,6 @@ export default function babelPresetRhino(api, options = {}) {
             classProperties,
             privateMethods,
             asyncToGenerator,
-            parameters,
             classes,
             spread,
             // Before destructuring and block scoping: the loop variable becomes a declaration in the loop body, which

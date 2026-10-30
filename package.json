@@ -24,7 +24,6 @@
     "@babel/plugin-transform-destructuring": "^8.0.5",
     "@babel/plugin-transform-modules-commonjs": "^8.0.1",
     "@babel/plugin-transform-new-target": "^8.0.1",
-    "@babel/plugin-transform-parameters": "^8.0.5",
     "@babel/plugin-transform-private-methods": "^8.0.1",
     "@babel/plugin-transform-private-property-in-object": "^8.0.5",
     "@babel/plugin-transform-spread": "^8.0.8",

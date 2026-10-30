@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-// Parameters on Rhino: rest parameters are wrong when the function is called through Function.prototype.apply (#41);
-// transform-parameters reads `arguments` instead.
+// Parameters on Rhino: all native since the Rhino fork fixed rest parameters through Function.prototype.apply (#41).
+// Destructured parameters are lowered by transform-destructuring (array patterns ignore the iterator protocol).
 
 function rest(...args: unknown[]): string {
     return JSON.stringify(args);
@@ -30,6 +30,16 @@ function destructured({ x, y }: { x: number; y: number }, [first, second]: numbe
     return x + y + first + second;
 }
 check("destructured parameters", destructured({ x: 1, y: 2 }, [3, 4]), 10);
+
+function iterableParameter([first, second]: Iterable<number>): number {
+    return first + second;
+}
+check("array pattern parameter over an iterable", iterableParameter(new Set([1, 2])), 3);
+
+function* generatorRest(...xs: number[]): Generator<number> {
+    yield xs.length;
+}
+check("generator rest parameters via apply", generatorRest.apply(null, [1, 2, 3]).next().value, 3);
 
 function usesArguments(this: unknown, ...xs: number[]): number {
     return arguments.length + xs.length;

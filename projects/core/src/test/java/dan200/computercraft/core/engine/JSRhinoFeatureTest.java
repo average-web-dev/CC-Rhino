@@ -166,6 +166,10 @@ class JSRhinoFeatureTest {
             var p = { get x() { return this.v; } };
             return Reflect.get(p, "x", { v: 1 });
             """),
+        new Feature("rest parameters, called through apply (#41)", NATIVE, "[1,2,3]", """
+            function f(...rest) { return JSON.stringify(rest); }
+            return f.apply(null, [1, 2, 3]);
+            """),
 
         // Broken: transformed by babel-preset-rhino.
         new Feature("class", BROKEN, "2", """
@@ -211,10 +215,6 @@ class JSRhinoFeatureTest {
         new Feature("spread in new", BROKEN, "3", """
             function F(a, b) { this.s = a + b; }
             return new F(...[1, 2]).s;
-            """),
-        new Feature("rest parameters, called through apply (#41)", BROKEN, "[1,2,3]", """
-            function f(...rest) { return JSON.stringify(rest); }
-            return f.apply(null, [1, 2, 3]);
             """),
         new Feature("array destructuring of iterables", BROKEN, "3", """
             var [a, b] = new Set([1, 2]);
