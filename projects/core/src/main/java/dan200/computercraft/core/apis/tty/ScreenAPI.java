@@ -50,7 +50,7 @@ public class ScreenAPI implements IComputerAPI {
 
     private TtyHandle handle(Screen.Console console) {
         synchronized (handles) {
-            return handles.computeIfAbsent(console, c -> new TtyHandle(environment, c.tty(), false));
+            return handles.computeIfAbsent(console, c -> new TtyHandle(environment::queueEvent, c.tty(), false));
         }
     }
 

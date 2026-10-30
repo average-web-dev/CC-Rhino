@@ -479,6 +479,7 @@ public class MonitorBlockEntity extends BlockEntity {
         var yCharPos = (int) Math.min(originTerminal.getHeight(), Math.max((pair.y() - RENDER_BORDER - RENDER_MARGIN) / yCharHeight + 1.0, 1.0));
 
         eachComputer(c -> c.queueEvent(new PeripheralEvents.MonitorTouch(c.getAttachmentName(), xCharPos, yCharPos)));
+        serverTerminal.touch(xCharPos, yCharPos);
     }
 
     private void eachComputer(Consumer<IComputerAccess> fun) {

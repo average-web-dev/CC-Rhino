@@ -48,6 +48,6 @@ public class PtyAPI implements IComputerAPI {
         var width = columns.orElse(DEFAULT_COLUMNS);
         var height = rows.orElse(DEFAULT_ROWS);
         if (width < 1 || height < 1) throw new ScriptException("Size must be positive");
-        return new TtyHandle(environment, new Tty(width, height), true);
+        return new TtyHandle(environment::queueEvent, new Tty(width, height), true);
     }
 }

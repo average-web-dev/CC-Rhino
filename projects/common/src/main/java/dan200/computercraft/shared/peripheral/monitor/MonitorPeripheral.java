@@ -10,6 +10,7 @@ import dan200.computercraft.api.scripting.ScriptValues;
 import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.core.apis.TermMethods;
+import dan200.computercraft.core.apis.tty.TtyHandle;
 import dan200.computercraft.core.terminal.Terminal;
 import org.jspecify.annotations.Nullable;
 
@@ -80,6 +81,20 @@ public class MonitorPeripheral extends TermMethods implements IPeripheral {
     @ScriptFunction
     public final double getTextScale() throws ScriptException {
         return getMonitor().getTextScale() / 2.0;
+    }
+
+    /**
+     * The TTY of this monitor: text and ANSI escape sequences written to its {@code stdout} appear on the monitor, and
+     * touches arrive in its {@code stdin} as mouse input once a program asks for it ({@code ESC [ ? 1000 h}). A program
+     * runs on the monitor when it is started with this TTY.
+     *
+     * @param computer The computer calling this method.
+     * @return The monitor's TTY.
+     * @throws ScriptException If the monitor cannot be found.
+     */
+    @ScriptFunction
+    public final TtyHandle getTty(IComputerAccess computer) throws ScriptException {
+        return new TtyHandle(computer::queueEvent, getMonitor().getTty(), false);
     }
 
     @Override

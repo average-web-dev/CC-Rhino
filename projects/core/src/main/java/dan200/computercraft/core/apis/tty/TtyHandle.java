@@ -6,8 +6,9 @@ package dan200.computercraft.core.apis.tty;
 
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.scripting.ScriptFunction;
-import dan200.computercraft.core.apis.IAPIEnvironment;
 import dan200.computercraft.core.tty.Tty;
+
+import java.util.function.Consumer;
 
 /**
  * A TTY as seen by scripts: its three pipes, its mode and its size.
@@ -24,16 +25,16 @@ public final class TtyHandle {
     private final boolean resizable;
 
     /**
-     * @param environment The computer using this TTY.
-     * @param tty         The TTY.
-     * @param resizable   Whether scripts may change the size (a virtual TTY), or the device decides it.
+     * @param queue     Queues an event on the computer using this TTY (to wake blocked reads).
+     * @param tty       The TTY.
+     * @param resizable Whether scripts may change the size (a virtual TTY), or the device decides it.
      */
-    public TtyHandle(IAPIEnvironment environment, Tty tty, boolean resizable) {
+    public TtyHandle(Consumer<Record> queue, Tty tty, boolean resizable) {
         this.tty = tty;
         this.resizable = resizable;
-        stdin = new PipeHandle(environment, tty.stdin(), tty::input);
-        stdout = new PipeHandle(environment, tty.stdout(), tty.stdout()::write);
-        stderr = new PipeHandle(environment, tty.stderr(), tty.stderr()::write);
+        stdin = new PipeHandle(queue, tty.stdin(), tty::input);
+        stdout = new PipeHandle(queue, tty.stdout(), tty.stdout()::write);
+        stderr = new PipeHandle(queue, tty.stderr(), tty.stderr()::write);
     }
 
     public Tty tty() {

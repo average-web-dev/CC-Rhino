@@ -6,6 +6,9 @@ package dan200.computercraft.shared.peripheral.monitor;
 
 import com.google.common.annotations.VisibleForTesting;
 import dan200.computercraft.core.terminal.Terminal;
+import dan200.computercraft.core.tty.InputEncoder;
+import dan200.computercraft.core.tty.TerminalEmulator;
+import dan200.computercraft.core.tty.Tty;
 import dan200.computercraft.shared.computer.terminal.NetworkedTerminal;
 import dan200.computercraft.shared.util.TickScheduler;
 import org.jspecify.annotations.Nullable;
@@ -18,6 +21,10 @@ public class ServerMonitor {
     private final boolean colour;
     private int textScale = 2;
     private @Nullable NetworkedTerminal terminal;
+    /** The TTY of this monitor: what programs write to it is rendered on the terminal; touches arrive as mouse input. */
+    private final Tty tty = new Tty(1, 1);
+    private final InputEncoder encoder = new InputEncoder();
+    private @Nullable TerminalEmulator emulator;
     private final AtomicBoolean resized = new AtomicBoolean(false);
     private final AtomicBoolean changed = new AtomicBoolean(false);
 
@@ -43,10 +50,13 @@ public class ServerMonitor {
 
         if (terminal == null) {
             terminal = new NetworkedTerminal(termWidth, termHeight, colour, this::markChanged);
+            emulator = new TerminalEmulator(terminal);
+            emulator.attach(tty);
             markChanged();
         } else {
             terminal.resize(termWidth, termHeight);
         }
+        tty.resize(termWidth, termHeight);
 
         if (oldWidth != termWidth || oldHeight != termHeight) {
             terminal.clear();
@@ -58,7 +68,34 @@ public class ServerMonitor {
     synchronized void reset() {
         if (terminal == null) return;
         terminal = null;
+        emulator = null;
+        tty.detach();
         markChanged();
+    }
+
+    /** The TTY of this monitor. */
+    public Tty getTty() {
+        return tty;
+    }
+
+    /**
+     * The monitor was touched: report a click to the TTY, if a program asked for mouse input.
+     *
+     * @param x The column, starting at 1.
+     * @param y The row, starting at 1.
+     */
+    void touch(int x, int y) {
+        String press, release;
+        synchronized (this) {
+            var emulator = this.emulator;
+            if (emulator == null) return;
+            var mode = emulator.mouseMode();
+            var sgr = emulator.sgrMouse();
+            press = encoder.mouse(InputEncoder.Mouse.PRESS, 1, x, y, mode, sgr);
+            release = encoder.mouse(InputEncoder.Mouse.RELEASE, 1, x, y, mode, sgr);
+        }
+        if (press != null) tty.input(press);
+        if (release != null) tty.input(release);
     }
 
     private void markChanged() {

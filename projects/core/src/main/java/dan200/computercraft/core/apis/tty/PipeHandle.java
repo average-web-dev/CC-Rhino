@@ -7,7 +7,6 @@ package dan200.computercraft.core.apis.tty;
 import dan200.computercraft.api.scripting.ICallback;
 import dan200.computercraft.api.scripting.MethodResult;
 import dan200.computercraft.api.scripting.ScriptFunction;
-import dan200.computercraft.core.apis.IAPIEnvironment;
 import dan200.computercraft.core.apis.events.CoreEvents;
 import dan200.computercraft.core.tty.Pipe;
 import org.jspecify.annotations.Nullable;
@@ -23,17 +22,17 @@ import java.util.function.Consumer;
  * @cc.module internal/pty.Pipe
  */
 public final class PipeHandle {
-    private final IAPIEnvironment environment;
+    private final Consumer<Record> queue;
     private final Pipe pipe;
     private final Consumer<String> writer;
 
     /**
-     * @param environment The computer reading this pipe, which is woken when data arrives.
-     * @param pipe        The pipe.
-     * @param writer      Where writes go: the pipe itself, or the line discipline for a TTY's {@code stdin}.
+     * @param queue  Queues an event on the computer reading this pipe, to wake it when data arrives.
+     * @param pipe   The pipe.
+     * @param writer Where writes go: the pipe itself, or the line discipline for a TTY's {@code stdin}.
      */
-    PipeHandle(IAPIEnvironment environment, Pipe pipe, Consumer<String> writer) {
-        this.environment = environment;
+    PipeHandle(Consumer<Record> queue, Pipe pipe, Consumer<String> writer) {
+        this.queue = queue;
         this.pipe = pipe;
         this.writer = writer;
     }
@@ -113,7 +112,7 @@ public final class PipeHandle {
             while (true) {
                 var read = pipe.read();
                 if (!read.isEmpty()) return MethodResult.of(read.data());
-                if (pipe.await(() -> environment.queueEvent(new CoreEvents.PipeData(pipe.id())))) return pull;
+                if (pipe.await(() -> queue.accept(new CoreEvents.PipeData(pipe.id())))) return pull;
             }
         }
 
