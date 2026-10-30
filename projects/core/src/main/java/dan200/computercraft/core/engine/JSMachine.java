@@ -371,7 +371,7 @@ public class JSMachine implements IMachine {
         protected Context makeContext() {
             var cx = new CCContext(this);
             cx.setOptimizationLevel(-1);
-            cx.setLanguageVersion(Context.VERSION_ES6);
+            cx.setLanguageVersion(Context.VERSION_ECMASCRIPT);
             cx.setInstructionObserverThreshold(CoreConfig.jsInstructionThreshold);
             // Interpreter frames live on the heap, so unbounded recursion would otherwise eat memory until timeout.
             cx.setMaximumInterpreterStackDepth(CoreConfig.jsMaxStackDepth);

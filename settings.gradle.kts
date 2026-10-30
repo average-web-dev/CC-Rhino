@@ -51,3 +51,13 @@ include(":web")
 for (project in rootProject.children) {
     project.projectDir = file("projects/${project.name}")
 }
+
+// Opt-in: build Rhino from a local checkout instead of the Maven artifact, e.g. to test a Rhino fork/branch.
+// ./gradlew :core:test -PrhinoDir=../rhino   (or set rhinoDir in ~/.gradle/gradle.properties)
+providers.gradleProperty("rhinoDir").orNull?.let { dir ->
+    includeBuild(dir) {
+        dependencySubstitution {
+            substitute(module("org.mozilla:rhino")).using(project(":rhino"))
+        }
+    }
+}
