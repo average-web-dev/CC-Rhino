@@ -2,13 +2,13 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-// Generators stay native generators (Rhino's continuations depend on it); `yield` is parenthesized for Rhino's parser.
+// Generators stay native generators (Rhino's continuations depend on it); Rhino parses `yield` natively, unparenthesized.
 // Async functions and async generators are lowered to generators too (see async.ts and async-generators.ts).
 
 function* counter(limit: number): Generator<number, string, number | undefined> {
     let received: number[] = [];
     for (let i = 0; i < limit; i++) {
-        // An unparenthesized `yield` in an argument list is a syntax error on Rhino.
+        // An unparenthesized `yield` in an argument list.
         received.push(Number(yield i));
     }
     return received.join();

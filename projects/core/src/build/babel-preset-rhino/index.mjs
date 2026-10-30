@@ -13,7 +13,8 @@
 //
 // Natively supported (not transformed): arrow functions, template literals (also tagged), let/const outside loops,
 // default and rest parameters (also through Function.prototype.apply), object spread, array spread, optional chaining, `??`, `**`, logical assignment, numeric
-// separators, computed/shorthand properties and methods, Symbol, generators, optional catch binding, BigInt.
+// separators, computed/shorthand properties and methods, Symbol, generators (`yield` also unparenthesized in argument
+// lists and before a comma), optional catch binding, BigInt.
 // Destructuring, also with rest elements and object rest, works as well, but is lowered anyway (see below).
 //
 // Transformed, because Rhino lacks or breaks them:
@@ -24,7 +25,6 @@
 // - array destructuring (ignores the iterator protocol); the destructuring plugin lowers all patterns, so object rest
 //   needs no plugin of its own
 // - `new.target` (syntax error)
-// - unparenthesized `yield` in argument lists, and its operand being parsed as a comma expression (own plugin)
 // - for-of: leaving a loop early (break, return, labelled jumps, throw) does not call the iterator's return(), so a
 //   generator's `finally` does not run (own plugin, ./for-of.mjs, with an index-loop fast path for arrays)
 // - async functions, async generators and `for await` (Rhino has none of them): lowered to native generators driven by
@@ -50,7 +50,6 @@ import asyncToGenerator from "@babel/plugin-transform-async-to-generator";
 
 import externalHelpers from "./external-helpers.mjs";
 import forOf from "./for-of.mjs";
-import parenthesizeYield from "./parenthesize-yield.mjs";
 import modules from "./modules.mjs";
 import { HELPERS_MODULE } from "./helpers.mjs";
 
@@ -79,7 +78,6 @@ export default function babelPresetRhino(api, options = {}) {
             blockScoping,
             newTarget,
             ...modules,
-            parenthesizeYield,
             ...(helpersModule === false ? [] : [[externalHelpers, { moduleName: helpersModule }]]),
         ],
     };

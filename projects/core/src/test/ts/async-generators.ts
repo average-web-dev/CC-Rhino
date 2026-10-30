@@ -28,8 +28,7 @@ async function collect(): Promise<string> {
     let out: string[] = [];
     for await (let value of values()) out.push(value);
     for await (let value of [Promise.resolve("p"), "q"]) out.push(value);
-    // `f(await x)` compiles to `f(yield x)`, which Rhino only accepts parenthesized (see
-    // src/build/babel-preset-rhino/parenthesize-yield.mjs).
+    // `f(await x)` compiles to an unparenthesized `f(yield x)`.
     out.push(await Promise.resolve("r"));
     return out.join(",");
 }

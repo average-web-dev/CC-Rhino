@@ -26,7 +26,7 @@ Users write JavaScript (ES6 subset) instead of Lua inside the mod.
 
 **Modern syntax on Rhino (#47):** Rhino (1.9.x with the backports of `average-web-dev/rhino`) lacks or breaks part of ES2015+ (no `class` syntax, `const` in loops
 keeps its first value, no spread in calls, array destructuring ignores
-iterators, no `new.target`, unparenthesized `yield` rejected, no `async`, …). TypeScript is therefore compiled by
+iterators, no `new.target`, no `async`, …). TypeScript is therefore compiled by
 `projects/core/src/build/compile-ts.mjs`: tsc only type-checks, then Babel strips the types and `babel-preset-rhino`
 (`src/build/babel-preset-rhino/`) transforms exactly the features Rhino gets wrong (since #49 also `async` functions,
 async generators and `for await`, to native generators) and turns ES modules into CommonJS; its runtime helpers come

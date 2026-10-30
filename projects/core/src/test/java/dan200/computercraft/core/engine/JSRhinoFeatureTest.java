@@ -170,6 +170,14 @@ class JSRhinoFeatureTest {
             function f(...rest) { return JSON.stringify(rest); }
             return f.apply(null, [1, 2, 3]);
             """),
+        new Feature("unparenthesized yield in arguments", NATIVE, "1", """
+            function* g() { return String(yield 1); }
+            return g().next().value;
+            """),
+        new Feature("yield operand followed by a comma", NATIVE, "0", """
+            function* g() { var x = 0, r; r = yield x, x = 5; return x; }
+            return g().next().value;
+            """),
 
         // Broken: transformed by babel-preset-rhino.
         new Feature("class", BROKEN, "2", """
@@ -223,14 +231,6 @@ class JSRhinoFeatureTest {
         new Feature("new.target", BROKEN, "true", """
             function F() { this.ok = new.target === F; }
             return new F().ok;
-            """),
-        new Feature("unparenthesized yield in arguments", BROKEN, "1", """
-            function* g() { return String(yield 1); }
-            return g().next().value;
-            """),
-        new Feature("yield operand followed by a comma", BROKEN, "0", """
-            function* g() { var x = 0, r; r = yield x, x = 5; return x; }
-            return g().next().value;
             """),
 
         // Broken: babel-preset-rhino's for-of plugin (for-of.mjs) closes the iterator (#41).

@@ -604,11 +604,9 @@ promises keeps working if Rhino ever gains `async`/`await`.
 - **TypeScript:** `src/build/compile-ts.mjs` type-checks with tsc and compiles with Babel (#49):
   `babel-preset-rhino` lowers `async` functions, async generators and `for await` to native generators driven by the
   `asyncToGenerator` / `wrapAsyncGenerator` / `asyncIterator` helpers of the engine's native `babel-helpers` module
-  (`Symbol.asyncIterator` is polyfilled — Rhino lacks it), and parenthesizes every `yield`: Rhino rejects `f(yield x)`
-  (from `f(await x)`) and parses `yield a, b` as `yield (a, b)`. `tslib` stays a native module for TypeScript compiled
+  (`Symbol.asyncIterator` is polyfilled — Rhino lacks it). `tslib` stays a native module for TypeScript compiled
   elsewhere (`importHelpers`): `__awaiter`, `__assign`, `__rest`, `__await`, `__asyncGenerator`, `__asyncDelegator`,
-  `__asyncValues` and the `#private` helpers, declared in `types/tslib.d.ts`; such code needs its `yield`s
-  parenthesized too, as do plain-JS generators.
+  `__asyncValues` and the `#private` helpers, declared in `types/tslib.d.ts`.
 
 ```js
 var turtleP = require('turtle/promises');
