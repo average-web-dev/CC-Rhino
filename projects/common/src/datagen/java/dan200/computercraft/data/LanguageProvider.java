@@ -267,8 +267,12 @@ public final class LanguageProvider implements DataProvider {
 
         addConfigGroup(ConfigSpec.serverSpec, "turtle", "Turtles");
         addConfigEntry(ConfigSpec.turtlesNeedFuel, "Enable fuel");
-        addConfigEntry(ConfigSpec.turtleFuelLimit, "Turtle fuel limit");
-        addConfigEntry(ConfigSpec.advancedTurtleFuelLimit, "Advanced Turtle fuel limit");
+        addConfigEntry(ConfigSpec.turtleEnergieLimit, "Turtle energy capacity");
+        addConfigEntry(ConfigSpec.advancedTurtleEnergieLimit, "Advanced Turtle energy capacity");
+        addConfigEntry(ConfigSpec.turtleEnergyPerMovement, "Energy per movement");
+        addConfigEntry(ConfigSpec.turtleFuelToEnergyFactor, "Fuel to energy factor");
+        addConfigEntry(ConfigSpec.turtleMaxChargeRate, "Maximum charge rate");
+        addConfigEntry(ConfigSpec.turtleMaxDischargeRate, "Maximum discharge rate");
         addConfigEntry(ConfigSpec.turtlesCanPush, "Turtles can push entities");
 
         addConfigGroup(ConfigSpec.serverSpec, "term_sizes", "Terminal sizes");
