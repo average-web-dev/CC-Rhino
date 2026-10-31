@@ -7,7 +7,7 @@
 import * as prelude from './prelude';
 import asyncMod from 'async';
 import { CSI, TTY, ReadStream, WriteStream, isatty, decodeInput, InputType, MouseAction, MouseButton } from 'tty';
-import { Term, KeyName, ColorIndex } from 'term';
+import { Term, Key, ColorIndex } from 'term';
 
 const eq = prelude.eq, throws = prelude.throws;
 
@@ -77,30 +77,92 @@ same(ended, [true], 'Ctrl+D on an empty line ends the input');
 const keys: string[] = [];
 t.setRawMode(true);
 eq(t.isRaw, true);
-t.stdin.on('keypress', (_s: string | undefined, key: Key) => { keys.push(`${key.ctrl ? 'C-' : ''}${key.name}`); });
+t.stdin.on('keypress', (_s: string | undefined, key: KeypressKey) => { keys.push(`${key.ctrl ? 'C-' : ''}${key.name}`); });
 t.input('\x1b[A\x03x\x1b[<0;3;4M');
 asyncMod.unwrap(new Promise<void>((resolve) => setTimeout(resolve, 1)));
 same(keys, ['up', 'C-c', 'x'], 'mouse reports are not keys');
+// Kitty-encoded keys give the same keypress events; releases give none.
+keys.length = 0;
+t.input('\x1b[99;5u\x1b[13u\x1b[13;1:3u\x1b[1;1:2A');
+asyncMod.unwrap(new Promise<void>((resolve) => setTimeout(resolve, 1)));
+same(keys, ['C-c', 'return', 'up']);
 t.setRawMode(false);
 t.stdin.pause();
 t.readOutput();
 
+// 'keydown' / 'keyup' (like the browser's), in the order typed across listeners, even within one chunk of input.
+// (A TTY shown on a device asks its terminal for the kitty protocol in raw mode; a virtual one gets what is typed.)
+const keyEvents: string[] = [];
+const onKeyUp = (e: TtyKeyInput) => { keyEvents.push(`up ${e.code}`); };
+t.stdin.on('keyup', onKeyUp);
+t.stdin.on('keydown', (e: TtyKeyInput) => { keyEvents.push(`down ${e.code} ${e.key}${e.repeat ? ' repeat' : ''}`); });
+t.stdin.on('keypress', (s: string | undefined) => { keyEvents.push(`press ${JSON.stringify(s)}`); });
+const dataSeen: string[] = [];
+t.stdin.on('data', (chunk: string) => { dataSeen.push(chunk); });
+t.stdin.resume(); // paused above
+eq(t.stdin.getKeyboardProtocol(), 'kitty', 'the default');
+t.setRawMode(true);
+t.input('\x1b[97;2;65u\x1b[97;2:2;65u\x1b[97;2:3u\x1b[57441;2:3u\x1b[99;5u\x1b[1;1:3A');
+asyncMod.unwrap(new Promise<void>((resolve) => setTimeout(resolve, 1)));
+same(keyEvents, ['down KeyA A', 'press "A"', 'down KeyA A repeat', 'press "A"', 'up KeyA', 'up ShiftLeft',
+    'down KeyC c', 'press "\\u0003"', 'up ArrowUp']);
+same(dataSeen, ['AA\x03'], "'data' gets the keys as a terminal traditionally sends them: presses, as text");
+t.stdin.removeAllListeners('keydown');
+t.stdin.removeAllListeners('keypress');
+t.stdin.removeAllListeners('data');
+t.stdin.off('keyup', onKeyUp);
+t.stdin.pause(); // so the input stays in the TTY for readSync
+t.input('\x1b[98u\x1b[98;1:3u\x1b[1;5A');
+eq(t.stdin.readSync(), 'b\x1b[1;5A', 'readSync too');
+throws(() => t.stdin.setKeyboardProtocol('vt' as any), 'ERR_INVALID_ARG_VALUE');
+t.stdin.setKeyboardProtocol('legacy');
+eq(t.stdin.getKeyboardProtocol(), 'legacy');
+t.stdin.setKeyboardProtocol('kitty');
+t.setRawMode(false);
+t.stdin.pause();
+
 // ── decodeInput: the other direction of CSI ─────────────────────────────────────────────────────────────────────
 
 const decoded = decodeInput('a\x1b[A\x1b[<4;3;2M\x1b[<0;3;2m\x1b[<32;4;2M\x1b[<65;1;1M\x1b[M#!!');
-same(decoded.map((i) => i.type), [InputType.KEY, InputType.KEY, InputType.MOUSE, InputType.MOUSE, InputType.MOUSE,
-    InputType.MOUSE, InputType.MOUSE]);
+same(decoded.map((i) => i.type), [InputType.KEY_DOWN, InputType.KEY_DOWN, InputType.MOUSE, InputType.MOUSE,
+    InputType.MOUSE, InputType.MOUSE, InputType.MOUSE]);
 const [plain, up, press, release, drag, wheel, x10] = decoded;
-same(plain.type === InputType.KEY && [plain.name, plain.sequence], ['a', 'a']);
-same(up.type === InputType.KEY && up.name, KeyName.UP);
-same(press.type === InputType.MOUSE && [press.action, press.button, press.x, press.y, press.shift, press.ctrl],
+same(plain.type === InputType.KEY_DOWN && [plain.key, plain.code, plain.sequence], ['a', Key.KEY_A, 'a']);
+same(up.type === InputType.KEY_DOWN && [up.key, up.code], ['ArrowUp', Key.ARROW_UP]);
+same(press.type === InputType.MOUSE && [press.action, press.button, press.x, press.y, press.shiftKey, press.ctrlKey],
     [MouseAction.PRESS, MouseButton.LEFT, 2, 1, true, false], 'Shift+click at column 3, row 2 (0-based 2, 1)');
-same(release.type === InputType.MOUSE && [release.action, release.button, release.shift], [MouseAction.RELEASE, MouseButton.LEFT, false]);
+same(release.type === InputType.MOUSE && [release.action, release.button, release.shiftKey],
+    [MouseAction.RELEASE, MouseButton.LEFT, false]);
 same(drag.type === InputType.MOUSE && [drag.action, drag.button, drag.x], [MouseAction.DRAG, MouseButton.LEFT, 3]);
 same(wheel.type === InputType.MOUSE && [wheel.action, wheel.button, wheel.direction], [MouseAction.SCROLL, null, 1]);
 same(x10.type === InputType.MOUSE && [x10.action, x10.button, x10.x, x10.y], [MouseAction.RELEASE, null, 0, 0],
     'an X10 release names no button');
 eq(press.sequence, '\x1b[<4;3;2M');
+
+/** A decoded key as `type code key modifiers`, for compact checks. */
+function keyOf(input: TtyInput): string {
+    if (input.type === InputType.MOUSE) return 'mouse';
+    let mods = (input.ctrlKey ? 'C' : '') + (input.altKey ? 'A' : '') + (input.shiftKey ? 'S' : '')
+        + (input.metaKey ? 'M' : '') + (input.repeat ? 'R' : '');
+    return `${input.type} ${input.code} ${JSON.stringify(input.key)}${mods === '' ? '' : ' ' + mods}`;
+}
+
+// Legacy input: the physical key is guessed from a US keyboard.
+same(decodeInput('A!\x1bx\x03\r\x7f\x1b[1;5C\x1b[3~\x1bOP\x1b[Zé').map(keyOf), [
+    'keydown KeyA "A" S', 'keydown Digit1 "!" S', 'keydown KeyX "x" A', 'keydown KeyC "c" C', 'keydown Enter "Enter"',
+    'keydown Backspace "Backspace"', 'keydown ArrowRight "ArrowRight" C', 'keydown Delete "Delete"', 'keydown F1 "F1"',
+    'keydown Tab "Tab" S', 'keydown Unidentified "é"',
+]);
+// Kitty keyboard protocol: presses, repeats and releases of every key, with the text it types.
+same(decodeInput('\x1b[97;1;97u\x1b[97;2:2;65u\x1b[97;5:3u\x1b[49:33;2;33u\x1b[57399u\x1b[57414;1:3u'
+    + '\x1b[57447;2u\x1b[57444;9u\x1b[27u\x1b[1;1:3A\x1b[13~\x1b[57376u\x1b[59;1;228u').map(keyOf), [
+    'keydown KeyA "a"', 'keydown KeyA "A" SR', 'keyup KeyA "a" C', 'keydown Digit1 "!" S', 'keydown Numpad0 "0"',
+    'keyup NumpadEnter "Enter"', 'keydown ShiftRight "Shift" S', 'keydown MetaLeft "Meta" M', 'keydown Escape "Escape"',
+    'keyup ArrowUp "ArrowUp"', 'keydown F3 "F3"', 'keydown F13 "F13"', 'keydown Semicolon "ä"',
+]);
+eq(Object.isFrozen(Key), true);
+eq(CSI.pushKeyboardFlags(27), '\x1b[>27u');
+eq(CSI.popKeyboardFlags(2), '\x1b[<2u');
 
 // ── Term on a virtual TTY ────────────────────────────────────────────────────────────────────────────────────────
 
@@ -155,15 +217,15 @@ eq(v.readOutput(), '\x1b[?25h');
 // Input: keys, characters and lines; mouse reports are dropped.
 v.setRawMode(true);
 v.input('\x1b[<0;1;1Mq\x1b[Bz');
-eq(term.readKey()!.name, 'q');
-eq(term.readKey()!.name, 'down');
+eq(term.readKey()!.key, 'q');
+eq(term.readKey()!.code, Key.ARROW_DOWN);
 eq(term.readChar(), 'z');
 // readInput returns mouse events too; readChar skips them.
 v.input('\x1b[<2;5;4Mk\x1b[<0;1;1Mw');
 const click = term.readInput()!;
 same(click.type === InputType.MOUSE && [click.action, click.button, click.x, click.y],
     [MouseAction.PRESS, MouseButton.RIGHT, 4, 3]);
-same(term.readInput()!.type, InputType.KEY);
+same(term.readInput()!.type, InputType.KEY_DOWN);
 eq(term.readChar(), 'w');
 v.setRawMode(false);
 v.input('first\rsecond\r');

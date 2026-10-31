@@ -47,12 +47,13 @@ interface Term {
     /** Scroll the contents up by `n` rows (down if negative). */
     scroll(n: number): void;
     /**
-     * Wait for the next input: a key or (after `CSI.mouse(true)`) a mouse event, or `undefined` at end of input.
-     * Compare `type` against InputType, `action` against MouseAction, `button` against MouseButton.
+     * Wait for the next input: a keyboard event ('keydown' / 'keyup') or (after `CSI.mouse(true)`) a mouse event, or
+     * `undefined` at end of input. Compare `type` against InputType, `code` against Key, `action` against MouseAction,
+     * `button` against MouseButton.
      */
     readInput(): TtyInput | undefined;
-    /** Wait for a key (a Node key object), or `undefined` at end of input. Mouse reports are skipped. */
-    readKey(): Key | undefined;
+    /** Wait for a key press (a 'keydown' event), or `undefined` at end of input. Releases and mouse are skipped. */
+    readKey(): TtyKeyInput | undefined;
     /** Wait for one character of input, or `undefined` at end of input. */
     readChar(): string | undefined;
     /** Wait for a line of input (without its line ending), or `undefined` at end of input. */
@@ -79,22 +80,11 @@ interface TermConstructor {
     readonly prototype: Term;
 }
 
-/** The names of the keys Term.readKey() returns (`key.name`): compare against these instead of strings. */
-interface KeyNames {
-    readonly UP: "up"; readonly DOWN: "down"; readonly LEFT: "left"; readonly RIGHT: "right";
-    readonly HOME: "home"; readonly END: "end"; readonly PAGE_UP: "pageup"; readonly PAGE_DOWN: "pagedown";
-    readonly INSERT: "insert"; readonly DELETE: "delete"; readonly CLEAR: "clear"; readonly RETURN: "return";
-    readonly ENTER: "enter"; readonly TAB: "tab"; readonly BACKSPACE: "backspace"; readonly ESCAPE: "escape";
-    readonly SPACE: "space";
-    readonly F1: "f1"; readonly F2: "f2"; readonly F3: "f3"; readonly F4: "f4"; readonly F5: "f5"; readonly F6: "f6";
-    readonly F7: "f7"; readonly F8: "f8"; readonly F9: "f9"; readonly F10: "f10"; readonly F11: "f11";
-    readonly F12: "f12";
-}
-
 interface TermModule {
     Term: TermConstructor;
     ColorIndex: ColorIndexMap;
-    KeyName: KeyNames;
+    /** The physical keys: compare `event.code` against these. */
+    Key: TtyKeyCodes;
     InputType: TtyInputTypes;
     MouseAction: TtyMouseActions;
     MouseButton: TtyMouseButtons;

@@ -24,15 +24,37 @@
 import events from 'events';
 import loop from 'internal/loop';
 import pty from 'internal/pty';
-import { decodeKeys } from '/rom/lib/internal/keys';
+import { decodeInput, InputType, toKeypress, toLegacy } from '/rom/lib/internal/keys';
 import { ERR_INVALID_ARG_TYPE } from '/rom/lib/internal/errors';
-import { validateFunction, validateInteger } from '/rom/lib/internal/validators';
+import { validateFunction, validateInteger, validateOneOf } from '/rom/lib/internal/validators';
 
 /**
- * The other direction of CSI: decodeInput(data) splits what a TTY delivers into keys (Node key objects) and mouse
- * events, compared against InputType / MouseAction / MouseButton instead of strings.
+ * The other direction of CSI: decodeInput(data) splits what a TTY delivers into keyboard events (`keydown` / `keyup`,
+ * like the browser's: `key`, `code`, `repeat`, `ctrlKey` …) and mouse events, compared against InputType / Key /
+ * MouseAction / MouseButton instead of strings.
  */
-export { decodeInput, InputType, MouseAction, MouseButton } from '/rom/lib/internal/keys';
+export { decodeInput, InputType, Key, MouseAction, MouseButton } from '/rom/lib/internal/keys';
+
+/** The flags of the kitty keyboard protocol, for CSI.pushKeyboardFlags (combined with `|`). */
+export const KeyboardFlag = Object.freeze({
+    /** Escape codes for keys that are ambiguous otherwise: Esc, Alt/Ctrl+key, the keypad. */
+    DISAMBIGUATE: 1,
+    /** Report repeats and releases. */
+    REPORT_EVENT_TYPES: 2,
+    /** Report the shifted key too. */
+    REPORT_ALTERNATE_KEYS: 4,
+    /** Every key as an escape code, also text keys, Enter, Tab, Backspace and modifier keys. */
+    REPORT_ALL_KEYS: 8,
+    /** With REPORT_ALL_KEYS: the text a key types, as part of its escape code. */
+    REPORT_TEXT: 16,
+} as const);
+
+/**
+ * What a stream in raw mode asks a terminal with a keyboard for (the 'kitty' protocol): every key, with its events and
+ * text.
+ */
+const KITTY_FLAGS = KeyboardFlag.DISAMBIGUATE | KeyboardFlag.REPORT_EVENT_TYPES | KeyboardFlag.REPORT_ALL_KEYS
+    | KeyboardFlag.REPORT_TEXT;
 
 const ESC = '\x1b';
 
@@ -92,6 +114,19 @@ export const CSI = {
     /** Ask for mouse reports in stdin (SGR encoding, presses, releases and drags), or stop them. */
     mouse(on: boolean): string {
         return on ? `${ESC}[?1002;1006h` : `${ESC}[?1002;1006l`;
+    },
+    /**
+     * Ask for the kitty keyboard protocol with these flags (KeyboardFlag, combined with `|`); the terminal keeps a
+     * stack, so popKeyboardFlags() restores what was asked for before.
+     */
+    pushKeyboardFlags(flags: number): string {
+        validateInteger(flags, 'flags', 0, 31);
+        return `${ESC}[>${flags}u`;
+    },
+    /** Undo the last `n` (default 1) pushKeyboardFlags. */
+    popKeyboardFlags(n = 1): string {
+        validateInteger(n, 'n', 1);
+        return `${ESC}[<${n}u`;
     },
     cursorTo(x: number, y?: number): string {
         return typeof y !== 'number' ? `${ESC}[${x + 1}G` : `${ESC}[${y + 1};${x + 1}H`;
@@ -272,7 +307,15 @@ export class WriteStream implements TtyWriteStream {
     }
 }
 
-const STREAM_EVENTS: Record<string, true> = { data: true, keypress: true, end: true };
+const STREAM_EVENTS: Record<string, true> = { data: true, keypress: true, keydown: true, keyup: true, end: true };
+/** The stream events about keys: delivered key by key, in order, across listeners (see ReadStream.#deliverKeys). */
+const KEY_EVENTS: Record<string, true> = { keypress: true, keydown: true, keyup: true };
+
+/**
+ * How a terminal reports keys in raw mode: 'kitty' (the default) reports every key with its presses, repeats and
+ * releases; 'legacy' only sends what a key types (as terminals traditionally do).
+ */
+export type KeyboardProtocol = 'kitty' | 'legacy';
 
 /** A listener added with stream.on(...) for a stream event. */
 interface Subscription {
@@ -316,6 +359,9 @@ export class ReadStream implements TtyReadStream {
     #refd = true;
     #subscriptions: Subscription[] = [];
     #local = new LocalListeners();
+    #protocol: KeyboardProtocol = 'kitty';
+    /** Whether this stream asked the terminal for the kitty keyboard protocol. */
+    #keyboardPushed = false;
 
     constructor(tty: TtyHandle, options: ReadStreamOptions = {}) {
         this.#tty = tty;
@@ -339,8 +385,23 @@ export class ReadStream implements TtyReadStream {
 
     setRawMode(mode: boolean): this {
         this.#tty.setRaw(!!mode);
+        this.#syncKeyboard();
         return this;
     }
+
+    /**
+     * CC extension: how the terminal reports keys in raw mode. 'kitty' (the default) reports every key with its
+     * releases and repeats (so there are 'keyup' events), 'legacy' only key presses. Either way 'data', readSync and
+     * 'keypress' look the same (keys as a terminal traditionally sends them).
+     */
+    setKeyboardProtocol(protocol: KeyboardProtocol): this {
+        validateOneOf(protocol, 'protocol', ['kitty', 'legacy']);
+        this.#protocol = protocol;
+        this.#syncKeyboard();
+        return this;
+    }
+
+    getKeyboardProtocol(): KeyboardProtocol { return this.#protocol; }
 
     pause(): this {
         if (this.#flowing !== false) {
@@ -364,10 +425,21 @@ export class ReadStream implements TtyReadStream {
     unref(): this { this.#refd = false; this.#syncHandles(); return this; }
 
     /**
-     * CC extension: wait until input is available and return it (in cooked mode a line, in raw mode what was typed),
-     * or `undefined` at end of input. For programs that read input step by step rather than with listeners.
+     * CC extension: wait until input is available and return it (in cooked mode a line, in raw mode what was typed, as
+     * with 'data'), or `undefined` at end of input. For programs that read input step by step rather than with
+     * listeners.
      */
     readSync(): string | undefined {
+        while (true) {
+            let data = this.#pipe.read();
+            if (data === undefined) return undefined;
+            data = toLegacy(data);
+            if (data !== '') return data;
+        }
+    }
+
+    /** Like readSync, but keys as the terminal reported them (kitty sequences included), for decoders like Term. */
+    readRawSync(): string | undefined {
         return this.#pipe.read();
     }
 
@@ -381,6 +453,19 @@ export class ReadStream implements TtyReadStream {
 
     #owner(): number {
         return this.#options.owner ? this.#options.owner() : 0;
+    }
+
+    /**
+     * In raw mode with the 'kitty' protocol, ask the terminal for it, and undo that otherwise (the terminal keeps a
+     * stack of these requests). Only for a TTY shown on a device (which may have a keyboard), not a virtual one or a
+     * child's output.
+     */
+    #syncKeyboard(): void {
+        if (this.#options.pipe !== undefined || this.#tty.getCursorColumn() === undefined) return;
+        let want = this.#tty.isRaw() && this.#protocol === 'kitty';
+        if (want === this.#keyboardPushed) return;
+        this.#keyboardPushed = want;
+        this.#tty.getStdout().write(want ? CSI.pushKeyboardFlags(KITTY_FLAGS) : CSI.popKeyboardFlags());
     }
 
     /** A program reading a TTY stays alive while the stream flows (is not paused) and is ref'd. */
@@ -418,14 +503,47 @@ export class ReadStream implements TtyReadStream {
             sub.fn.call(this);
         } else if (sub.event === 'data') {
             if (data == null) return;
+            let text = toLegacy(data);
+            if (text === '') return; // only key releases
             if (sub.once) this.#unsubscribe(sub);
-            sub.fn.call(this, data);
-        } else if (data != null) {
-            decodeKeys(data, (s, key) => {
-                if (!sub.active) return;
-                if (sub.once) this.#unsubscribe(sub);
-                sub.fn.call(this, s, key);
-            });
+            sub.fn.call(this, text);
+        } else if (data != null && this.#keyLead(sub.owner) === sub) {
+            this.#deliverKeys(sub.owner, data);
+        }
+    }
+
+    /** Whether the thread that added `sub` is still running (a stopped thread's listeners are discarded). */
+    #alive(sub: Subscription): boolean {
+        return sub.active && events.listenerCount(sub.probe) > 0;
+    }
+
+    /** The key subscription of `owner` that delivers the keys to all of them (the oldest one still alive). */
+    #keyLead(owner: number): Subscription | undefined {
+        for (let sub of this.#subscriptions) {
+            if (sub.owner === owner && KEY_EVENTS[sub.event] && this.#alive(sub)) return sub;
+        }
+        return undefined;
+    }
+
+    /**
+     * Deliver the keys in `data` to the 'keypress' / 'keydown' / 'keyup' listeners of `owner`, key by key, so separate
+     * listeners see them in the order they were typed (each pipe_data listener would otherwise get the whole chunk in
+     * turn). The keys are delivered from the thread of the oldest such listener.
+     */
+    #deliverKeys(owner: number, data: string): void {
+        for (let input of decodeInput(data)) {
+            if (input.type === InputType.MOUSE) continue;
+            let keypress = toKeypress(input);
+            for (let sub of this.#subscriptions.slice()) {
+                if (sub.owner !== owner || !this.#alive(sub)) continue;
+                if (sub.event === 'keypress' && keypress !== undefined) {
+                    if (sub.once) this.#unsubscribe(sub);
+                    sub.fn.call(this, keypress[0], keypress[1]);
+                } else if (sub.event === input.type) {
+                    if (sub.once) this.#unsubscribe(sub);
+                    sub.fn.call(this, input);
+                }
+            }
         }
     }
 
@@ -445,8 +563,9 @@ export class ReadStream implements TtyReadStream {
         events.on('pipe_data', sub.wrapper);
         events.on(sub.probe, sub.noop);
         this.#subscriptions.push(sub);
-        // Like Node: adding a 'data' listener starts the flow, unless the stream was paused explicitly.
-        if (event === 'data' && this.#flowing === null) this.resume();
+        // Like Node: adding a 'data' listener starts the flow, unless the stream was paused explicitly (so do the
+        // browser-like 'keydown' / 'keyup').
+        if ((event === 'data' || event === 'keydown' || event === 'keyup') && this.#flowing === null) this.resume();
         this.#syncHandles();
     }
 
@@ -564,7 +683,7 @@ export class TTY {
     get isRaw(): boolean { return this.handle.isRaw(); }
 
     setRawMode(mode: boolean): this {
-        this.handle.setRaw(!!mode);
+        this.stdin.setRawMode(mode);
         return this;
     }
 

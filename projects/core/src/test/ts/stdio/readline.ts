@@ -220,7 +220,7 @@ eq(cursor.out, '\x1b[4;3H\x1b[1D\x1b[1B\x1b[2K\x1b[0J');
 const keyInput = source();
 readline.emitKeypressEvents(keyInput);
 const keys: string[] = [];
-keyInput.on('keypress', function (s: string | undefined, key: Key) {
+keyInput.on('keypress', function (s: string | undefined, key: KeypressKey) {
     keys.push((key.ctrl ? 'C-' : '') + (key.meta ? 'M-' : '') + (key.shift ? 'S-' : '') + key.name);
 });
 keyInput.emit('data', 'aB\r\x1b[A\x1b[1;5C\x03\x1bx\x1b[3~\t\x1b[Z');

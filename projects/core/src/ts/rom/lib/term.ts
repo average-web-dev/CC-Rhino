@@ -18,16 +18,21 @@
 //   cursor without it noticing, so setCursorPos before drawing is the safe pattern.
 // - write() cuts text off at the Term's width (the TTY's, unless set with setSize), so drawing never scrolls; print()
 //   wraps at the width and scrolls at the bottom, like console.log.
-// - Input reads the TTY's stdin: readInput returns keys and mouse events (after CSI.mouse(true)), readKey / readChar /
-//   readLine skip mouse reports. The mouse is also available as events (mouse_click, monitor_touch).
+// - Input reads the TTY's stdin: readInput returns keyboard events (like the browser's: `type` 'keydown' / 'keyup',
+//   `key`, `code` — compare against Key —, `repeat`, `ctrlKey` …) and mouse events (after CSI.mouse(true)); readKey
+//   returns the next key press; readChar / readLine return text (keys as a terminal traditionally sends them) and skip
+//   mouse reports. In raw mode the terminal reports releases, repeats, the keypad and modifier keys too, unless
+//   the stream's keyboard protocol is 'legacy' (stdin.setKeyboardProtocol). The mouse is also available as events
+//   (mouse_click, monitor_touch).
 
 import { TTY, CSI } from '/rom/lib/tty';
-import { decodeInput, stripMouse, KeyName, InputType, MouseAction, MouseButton } from '/rom/lib/internal/keys';
+import { decodeInput, stripMouse, toLegacy, Key, InputType, MouseAction, MouseButton } from '/rom/lib/internal/keys';
 import { ERR_INVALID_ARG_VALUE } from '/rom/lib/internal/errors';
 import { validateNumber, validateOneOf, validateString } from '/rom/lib/internal/validators';
 
-/** The names of the keys readKey() returns (`key.name`), and the constants for readInput()'s results. */
-export { KeyName, InputType, MouseAction, MouseButton };
+/** The physical keys (`event.code`), and the constants for readInput()'s results. */
+export { Key, InputType, MouseAction, MouseButton };
+
 
 /**
  * The 16 colors by name, with their index on the TTY (as CSI.color takes it). The TTY shows each index as one CC color;
@@ -227,21 +232,22 @@ export class Term {
 
     /** Read more input from the TTY (blocks); it keeps mouse reports for readInput(). */
     #fill(): boolean {
-        let data = this.#input.readSync();
+        let data = this.#input.readRawSync();
         if (data === undefined) return false;
         this.#text += data;
         return true;
     }
 
-    /** Drop the mouse reports from the buffered input (for the readers of text). */
+    /** Drop the mouse reports and key releases from the buffered input, keys as text (for the readers of text). */
     #textOnly(): void {
-        this.#text = stripMouse(this.#text);
+        this.#text = toLegacy(stripMouse(this.#text));
     }
 
     /**
-     * Wait for the next input: a key (`{ type: InputType.KEY, sequence, name, ctrl, meta, shift }`) or, once mouse
-     * reports are asked for (`CSI.mouse(true)`), a mouse event (`{ type: InputType.MOUSE, action, button, direction,
-     * x, y, ctrl, meta, shift }`, coordinates from 0); `undefined` at end of input. Use raw mode for single keys.
+     * Wait for the next input: a keyboard event (`{ type: 'keydown' | 'keyup', key, code, repeat, ctrlKey, shiftKey,
+     * altKey, metaKey, sequence }`) or, once mouse reports are asked for (`CSI.mouse(true)`), a mouse event (`{ type:
+     * 'mouse', action, button, direction, x, y, ctrlKey, … }`, coordinates from 0); `undefined` at end of input. Use raw
+     * mode for single keys.
      */
     readInput(): TtyInput | undefined {
         while (this.#text.length === 0) {
@@ -253,18 +259,15 @@ export class Term {
     }
 
     /**
-     * Wait for a key and return it as a Node key object (`{ sequence, name, ctrl, meta, shift }`), or `undefined` at
-     * end of input. Mouse reports are skipped. Use raw mode (`process.stdin.setRawMode(true)`) to get every key as it
+     * Wait for a key press (a 'keydown' event: `key`, `code`, `repeat`, `ctrlKey` …), or `undefined` at end of input.
+     * Releases and mouse reports are skipped. Use raw mode (`process.stdin.setRawMode(true)`) to get every key as it
      * is pressed.
      */
-    readKey(): Key | undefined {
+    readKey(): TtyKeyInput | undefined {
         while (true) {
             let input = this.readInput();
             if (input === undefined) return undefined;
-            if (input.type === InputType.KEY) {
-                let { sequence, name, ctrl, meta, shift } = input;
-                return { sequence, name, ctrl, meta, shift };
-            }
+            if (input.type === InputType.KEY_DOWN) return input;
         }
     }
 

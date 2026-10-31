@@ -79,7 +79,7 @@ interface InterfaceBase extends ReadlineEventEmitter, AsyncIterable<string> {
     pause(): this;
     resume(): this;
     /** Insert `data` as if typed, or simulate a key (`rl.write(null, { ctrl: true, name: "u" })`). */
-    write(data: string | null | undefined, key?: Partial<Key>): void;
+    write(data: string | null | undefined, key?: Partial<KeypressKey>): void;
     getCursorPos(): CursorPos;
     /** Move below the line being edited and start a new, empty one (without emitting 'line'). */
     clearLine(): void;

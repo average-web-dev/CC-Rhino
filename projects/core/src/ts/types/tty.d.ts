@@ -19,8 +19,16 @@ interface TtyStdin extends TtyReadStream {
     setFlowing(value: boolean | null): void;
     /** Drop what was typed but not read yet. */
     discard(): void;
-    /** Wait until input is available and return it, or `undefined` at end of input (used by Term). */
+    /** Wait until input is available and return it (keys as with 'data'), or `undefined` at end of input. */
     readSync(): string | undefined;
+    /** Like readSync, but keys as the terminal reported them (kitty sequences included), for decoders like Term. */
+    readRawSync(): string | undefined;
+    /**
+     * How the terminal reports keys in raw mode: 'kitty' (the default) every key with its presses, repeats and
+     * releases, 'legacy' only presses. 'data', readSync and 'keypress' look the same either way.
+     */
+    setKeyboardProtocol(protocol: "kitty" | "legacy"): this;
+    getKeyboardProtocol(): "kitty" | "legacy";
     /** Remove the stream listeners added by `owner`. */
     removeListenersOf(owner: number): void;
 }
@@ -83,6 +91,13 @@ interface TtyEscapes {
     blit(text: string, fg: string, bg: string): string;
     /** Ask for mouse reports in stdin (SGR encoding, presses, releases and drags), or stop them. */
     mouse(on: boolean): string;
+    /**
+     * Ask for the kitty keyboard protocol with these flags (KeyboardFlag, combined with `|`); the terminal keeps a
+     * stack, so popKeyboardFlags() restores what was asked for before.
+     */
+    pushKeyboardFlags(flags: number): string;
+    /** Undo the last `n` (default 1) pushKeyboardFlags. */
+    popKeyboardFlags(n?: number): string;
     cursorTo(x: number, y?: number): string;
     moveCursor(dx: number, dy: number): string;
     /** -1: left of the cursor, 1: right of it, 0: the whole line. */
@@ -90,9 +105,25 @@ interface TtyEscapes {
     readonly clearScreenDown: string;
 }
 
-/** A key from tty.decodeInput() / Term.readInput(): a Node key object. */
-interface TtyKeyInput extends Key {
-    type: "key";
+/**
+ * A key from tty.decodeInput(), Term.readKey() / readInput() and the stdin events 'keydown' / 'keyup', like the
+ * browser's KeyboardEvent.
+ */
+interface TtyKeyInput {
+    type: "keydown" | "keyup";
+    /** What the key types (`"a"`, `"A"`, `"ä"`), or its name (`"Enter"`, `"ArrowUp"`, `"Shift"`, `"F1"`, …). */
+    key: string;
+    /** The physical key, as KeyboardEvent.code: compare against Key (`Key.KEY_A`, `Key.ARROW_UP`, …). */
+    code: string;
+    /** Whether the key is held and repeats. */
+    repeat: boolean;
+    ctrlKey: boolean;
+    shiftKey: boolean;
+    altKey: boolean;
+    /** The Super (Windows / Command) key. */
+    metaKey: boolean;
+    /** The characters the terminal sent for the key. */
+    sequence: string;
 }
 
 type TtyMouseAction = "press" | "release" | "drag" | "move" | "scroll";
@@ -110,10 +141,11 @@ interface TtyMouseInput {
     x: number;
     /** Row, starting at 0. */
     y: number;
-    ctrl: boolean;
-    /** Alt was held (named as in Node key objects). */
-    meta: boolean;
-    shift: boolean;
+    ctrlKey: boolean;
+    shiftKey: boolean;
+    altKey: boolean;
+    /** Never reported by terminals; false. */
+    metaKey: boolean;
     /** The characters of the report. */
     sequence: string;
 }
@@ -121,7 +153,61 @@ interface TtyMouseInput {
 /** What a TTY delivers, decoded: compare `type` against InputType. */
 type TtyInput = TtyKeyInput | TtyMouseInput;
 
-interface TtyInputTypes { readonly KEY: "key"; readonly MOUSE: "mouse"; }
+interface TtyInputTypes { readonly KEY_DOWN: "keydown"; readonly KEY_UP: "keyup"; readonly MOUSE: "mouse"; }
+
+/** The flags of the kitty keyboard protocol (CSI.pushKeyboardFlags). */
+interface TtyKeyboardFlags {
+    /** Escape codes for keys that are ambiguous otherwise: Esc, Alt/Ctrl+key, the keypad. */
+    readonly DISAMBIGUATE: 1;
+    /** Report repeats and releases. */
+    readonly REPORT_EVENT_TYPES: 2;
+    /** Report the shifted key too. */
+    readonly REPORT_ALTERNATE_KEYS: 4;
+    /** Every key as an escape code, also text keys, Enter, Tab, Backspace and modifier keys. */
+    readonly REPORT_ALL_KEYS: 8;
+    /** With REPORT_ALL_KEYS: the text a key types, as part of its escape code. */
+    readonly REPORT_TEXT: 16;
+}
+
+/** The physical keys (`event.code`, as KeyboardEvent.code). */
+interface TtyKeyCodes {
+    readonly KEY_A: "KeyA"; readonly KEY_B: "KeyB"; readonly KEY_C: "KeyC"; readonly KEY_D: "KeyD";
+    readonly KEY_E: "KeyE"; readonly KEY_F: "KeyF"; readonly KEY_G: "KeyG"; readonly KEY_H: "KeyH";
+    readonly KEY_I: "KeyI"; readonly KEY_J: "KeyJ"; readonly KEY_K: "KeyK"; readonly KEY_L: "KeyL";
+    readonly KEY_M: "KeyM"; readonly KEY_N: "KeyN"; readonly KEY_O: "KeyO"; readonly KEY_P: "KeyP";
+    readonly KEY_Q: "KeyQ"; readonly KEY_R: "KeyR"; readonly KEY_S: "KeyS"; readonly KEY_T: "KeyT";
+    readonly KEY_U: "KeyU"; readonly KEY_V: "KeyV"; readonly KEY_W: "KeyW"; readonly KEY_X: "KeyX";
+    readonly KEY_Y: "KeyY"; readonly KEY_Z: "KeyZ";
+    readonly DIGIT_0: "Digit0"; readonly DIGIT_1: "Digit1"; readonly DIGIT_2: "Digit2"; readonly DIGIT_3: "Digit3";
+    readonly DIGIT_4: "Digit4"; readonly DIGIT_5: "Digit5"; readonly DIGIT_6: "Digit6"; readonly DIGIT_7: "Digit7";
+    readonly DIGIT_8: "Digit8"; readonly DIGIT_9: "Digit9";
+    readonly MINUS: "Minus"; readonly EQUAL: "Equal"; readonly BRACKET_LEFT: "BracketLeft";
+    readonly BRACKET_RIGHT: "BracketRight"; readonly BACKSLASH: "Backslash"; readonly SEMICOLON: "Semicolon";
+    readonly QUOTE: "Quote"; readonly BACKQUOTE: "Backquote"; readonly COMMA: "Comma"; readonly PERIOD: "Period";
+    readonly SLASH: "Slash"; readonly SPACE: "Space";
+    readonly ENTER: "Enter"; readonly TAB: "Tab"; readonly BACKSPACE: "Backspace"; readonly ESCAPE: "Escape";
+    readonly ARROW_UP: "ArrowUp"; readonly ARROW_DOWN: "ArrowDown"; readonly ARROW_LEFT: "ArrowLeft";
+    readonly ARROW_RIGHT: "ArrowRight"; readonly HOME: "Home"; readonly END: "End"; readonly PAGE_UP: "PageUp";
+    readonly PAGE_DOWN: "PageDown"; readonly INSERT: "Insert"; readonly DELETE: "Delete";
+    readonly F1: "F1"; readonly F2: "F2"; readonly F3: "F3"; readonly F4: "F4"; readonly F5: "F5"; readonly F6: "F6";
+    readonly F7: "F7"; readonly F8: "F8"; readonly F9: "F9"; readonly F10: "F10"; readonly F11: "F11";
+    readonly F12: "F12"; readonly F13: "F13"; readonly F14: "F14"; readonly F15: "F15"; readonly F16: "F16";
+    readonly F17: "F17"; readonly F18: "F18"; readonly F19: "F19"; readonly F20: "F20"; readonly F21: "F21";
+    readonly F22: "F22"; readonly F23: "F23"; readonly F24: "F24"; readonly F25: "F25";
+    readonly NUMPAD_0: "Numpad0"; readonly NUMPAD_1: "Numpad1"; readonly NUMPAD_2: "Numpad2";
+    readonly NUMPAD_3: "Numpad3"; readonly NUMPAD_4: "Numpad4"; readonly NUMPAD_5: "Numpad5";
+    readonly NUMPAD_6: "Numpad6"; readonly NUMPAD_7: "Numpad7"; readonly NUMPAD_8: "Numpad8";
+    readonly NUMPAD_9: "Numpad9"; readonly NUMPAD_DECIMAL: "NumpadDecimal"; readonly NUMPAD_DIVIDE: "NumpadDivide";
+    readonly NUMPAD_MULTIPLY: "NumpadMultiply"; readonly NUMPAD_SUBTRACT: "NumpadSubtract";
+    readonly NUMPAD_ADD: "NumpadAdd"; readonly NUMPAD_ENTER: "NumpadEnter"; readonly NUMPAD_EQUAL: "NumpadEqual";
+    readonly SHIFT_LEFT: "ShiftLeft"; readonly SHIFT_RIGHT: "ShiftRight"; readonly CONTROL_LEFT: "ControlLeft";
+    readonly CONTROL_RIGHT: "ControlRight"; readonly ALT_LEFT: "AltLeft"; readonly ALT_RIGHT: "AltRight";
+    readonly META_LEFT: "MetaLeft"; readonly META_RIGHT: "MetaRight";
+    readonly CAPS_LOCK: "CapsLock"; readonly SCROLL_LOCK: "ScrollLock"; readonly NUM_LOCK: "NumLock";
+    readonly PRINT_SCREEN: "PrintScreen"; readonly PAUSE: "Pause"; readonly CONTEXT_MENU: "ContextMenu";
+    /** A key whose physical position is not known (a character a US keyboard cannot type). */
+    readonly UNIDENTIFIED: "Unidentified";
+}
 interface TtyMouseActions {
     readonly PRESS: "press"; readonly RELEASE: "release"; readonly DRAG: "drag"; readonly MOVE: "move";
     readonly SCROLL: "scroll";
@@ -138,6 +224,9 @@ interface TtyModule {
     InputType: TtyInputTypes;
     MouseAction: TtyMouseActions;
     MouseButton: TtyMouseButtons;
+    /** The physical keys: compare `event.code` against these. */
+    Key: TtyKeyCodes;
+    KeyboardFlag: TtyKeyboardFlags;
     /** Whether `fd` is a TTY: process.stdin/stdout/stderr (0, 1, 2) always are. */
     isatty(fd: number): boolean;
 }

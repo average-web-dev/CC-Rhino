@@ -431,9 +431,9 @@ function tabCompleter(self: InterfaceImpl, lastKeypressWasTab: boolean, result: 
     refreshLine(self);
 }
 
-function ttyWrite(self: InterfaceImpl, s: string | undefined, key: Key | undefined): void {
+function ttyWrite(self: InterfaceImpl, s: string | undefined, key: KeypressKey | undefined): void {
     let previousKey = self._previousKey;
-    key = key || ({} as Key);
+    key = key || ({} as KeypressKey);
     self._previousKey = key;
 
     if ((key.name === 'up' || key.name === 'down') && !key.ctrl && !key.meta && !key.shift) {
@@ -564,7 +564,7 @@ class Interface extends EventEmitter {
     declare _questionCallback: ((answer: string) => void) | null;
     declare _questionCancel: ((reason: Error) => void) | null;
     declare _substringSearch: string | null;
-    declare _previousKey: Key | null;
+    declare _previousKey: KeypressKey | null;
     declare _sawReturnAt: number;
     declare _lineBuffer: string;
     declare _listeners: { event: string; fn: (...args: any[]) => void; target: 'input' | 'output' }[];
@@ -652,7 +652,7 @@ class Interface extends EventEmitter {
             });
         } else {
             emitKeypressEvents(inputStream, this);
-            listen('input', 'keypress', (s: string | undefined, key: Key) => {
+            listen('input', 'keypress', (s: string | undefined, key: KeypressKey) => {
                 // process.stdin is shared with the shell: an interface that is paused does not take part.
                 if (self.paused || self.closed) return;
                 ttyWrite(self, s, key);
@@ -713,10 +713,10 @@ class Interface extends EventEmitter {
         return this;
     }
 
-    write(data: string | null | undefined, key?: Partial<Key>): void {
+    write(data: string | null | undefined, key?: Partial<KeypressKey>): void {
         if (this.closed) throw useAfterClose();
         if (this.paused) this.resume();
-        if (this.terminal) ttyWrite(this, data === null ? undefined : data, key as Key | undefined);
+        if (this.terminal) ttyWrite(this, data === null ? undefined : data, key as KeypressKey | undefined);
         else if (typeof data === 'string') normalWrite(this, data);
     }
 

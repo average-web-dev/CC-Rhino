@@ -14,10 +14,10 @@
 // (JS_MIGRATION Phase 11.28).
 
 import fs     from 'fs';
-import { Term, KeyName } from '/rom/lib/term';
+import { Term, Key } from '/rom/lib/term';
 
-/** Shortcuts: the letter pressed with Ctrl (Node key names of letters are the lower-case letter). */
-const SHORTCUT_SAVE = 's', SHORTCUT_QUIT = 'q';
+/** Shortcuts: the key pressed with Ctrl. */
+const SHORTCUT_SAVE = Key.KEY_S, SHORTCUT_QUIT = Key.KEY_Q;
 
 /** Normalise `p` to an absolute path, resolving against `cwd` and collapsing `.`/`..`. */
 function resolve(p: string, cwd: string): string {
@@ -224,45 +224,45 @@ export function main(args: string[], cwd: string): void {
 
     // ── Input ───────────────────────────────────────────────────────────────────
 
-    function onMenuKey(key: Key): void {
-        switch (key.name) {
-            case KeyName.LEFT:  menuSel = (menuSel - 1 + MENU.length) % MENU.length; draw(); break;
-            case KeyName.RIGHT: menuSel = (menuSel + 1) % MENU.length; draw(); break;
-            case KeyName.RETURN: case KeyName.ENTER:
+    function onMenuKey(key: TtyKeyInput): void {
+        switch (key.code) {
+            case Key.ARROW_LEFT:  menuSel = (menuSel - 1 + MENU.length) % MENU.length; draw(); break;
+            case Key.ARROW_RIGHT: menuSel = (menuSel + 1) % MENU.length; draw(); break;
+            case Key.ENTER: case Key.NUMPAD_ENTER:
                 menuOpen = false;
                 MENU[menuSel].action();
                 if (running) draw();
                 break;
-            case KeyName.ESCAPE:
+            case Key.ESCAPE:
                 menuOpen = false; status = ''; draw();
                 break;
         }
     }
 
-    function onKey(key: Key): void {
-        if (key.name === KeyName.ESCAPE) { menuOpen = !menuOpen; menuSel = 0; status = ''; draw(); return; }
+    function onKey(key: TtyKeyInput): void {
+        if (key.code === Key.ESCAPE) { menuOpen = !menuOpen; menuSel = 0; status = ''; draw(); return; }
         if (menuOpen) { onMenuKey(key); return; }
 
         status = '';
-        if (key.ctrl && key.name === SHORTCUT_SAVE) { save(); draw(); return; }
-        if (key.ctrl && key.name === SHORTCUT_QUIT) { running = false; return; }
-        switch (key.name) {
-            case KeyName.UP:        moveVertical(-1); return;
-            case KeyName.DOWN:      moveVertical(1); return;
-            case KeyName.LEFT:      moveLeft(); return;
-            case KeyName.RIGHT:     moveRight(); return;
-            case KeyName.HOME:      cx = 0; refresh(); return;
-            case KeyName.END:       cx = lines[cy].length; refresh(); return;
-            case KeyName.PAGE_UP:   pageMove(-1); return;
-            case KeyName.PAGE_DOWN: pageMove(1); return;
-            case KeyName.BACKSPACE: backspace(); return;
-            case KeyName.DELETE:    del(); return;
-            case KeyName.RETURN: case KeyName.ENTER: enter(); return;
-            case KeyName.TAB:       insertText('  '); return;
+        if (key.ctrlKey && key.code === SHORTCUT_SAVE) { save(); draw(); return; }
+        if (key.ctrlKey && key.code === SHORTCUT_QUIT) { running = false; return; }
+        switch (key.code) {
+            case Key.ARROW_UP:    moveVertical(-1); return;
+            case Key.ARROW_DOWN:  moveVertical(1); return;
+            case Key.ARROW_LEFT:  moveLeft(); return;
+            case Key.ARROW_RIGHT: moveRight(); return;
+            case Key.HOME:        cx = 0; refresh(); return;
+            case Key.END:         cx = lines[cy].length; refresh(); return;
+            case Key.PAGE_UP:     pageMove(-1); return;
+            case Key.PAGE_DOWN:   pageMove(1); return;
+            case Key.BACKSPACE:   backspace(); return;
+            case Key.DELETE:      del(); return;
+            case Key.ENTER: case Key.NUMPAD_ENTER: enter(); return;
+            case Key.TAB:         insertText('  '); return;
         }
         // A printable character (typed or pasted).
-        let ch = key.sequence;
-        if (!key.ctrl && !key.meta && ch.length === 1 && ch >= ' ' && ch !== '\x7f') insertText(ch);
+        let ch = key.key;
+        if (!key.ctrlKey && !key.altKey && ch.length === 1 && ch >= ' ' && ch !== '\x7f') insertText(ch);
     }
 
     // ── Lifecycle ───────────────────────────────────────────────────────────────

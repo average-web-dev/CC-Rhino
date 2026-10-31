@@ -218,9 +218,11 @@ export function run(job: Job, resolved: string, args: string[], options: RunOpti
     let tty = job.tty;
     let id = tty.handle.getId();
     let savedRaw = tty.isRaw;
+    let savedProtocol = tty.stdin.getKeyboardProtocol();
     let savedFlowing = tty.stdin.readableFlowing;
     users[id] = (users[id] ?? 0) + 1;
     tty.setRawMode(false);
+    tty.stdin.setKeyboardProtocol('kitty');
     tty.stdin.setFlowing(null);
     try {
         let body = () => {
@@ -252,6 +254,7 @@ export function run(job: Job, resolved: string, args: string[], options: RunOpti
         return { code: 1, error };
     } finally {
         tty.stdin.removeListenersOf(job.id);
+        tty.stdin.setKeyboardProtocol(savedProtocol);
         tty.setRawMode(savedRaw);
         tty.stdin.setFlowing(savedFlowing);
         users[id] -= 1;

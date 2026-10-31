@@ -8,7 +8,7 @@
 declare function BigInt(value: number | string): bigint;
 
 /** A key as reported by `'keypress'` events (Node's readline key object). */
-interface Key {
+interface KeypressKey {
     /** The characters the terminal sends for the key (`"\r"`, `"\x1b[A"`, `"a"`, …). */
     sequence: string;
     /** Key name: `"a"`–`"z"`, `"0"`–`"9"`, `"return"`, `"enter"`, `"backspace"`, `"tab"`, `"up"`, `"f1"`, …. */
@@ -84,8 +84,12 @@ interface TtyWriteStream extends Writable {
  * - `'data'`: in cooked mode (the default) the TTY's line discipline echoes what is typed, handles Backspace / Ctrl+U
  *   and delivers whole lines including `"\n"`; Ctrl+D on an empty line emits `'end'` (the stream stays usable, like a
  *   terminal). In raw mode (`setRawMode(true)`) every key is delivered as the characters a VT terminal sends.
- * - `'keypress'`: `(sequence, key)` for each key in the delivered input (as with Node's emitKeypressEvents), so in
- *   cooked mode only for what the line discipline passes on.
+ * - `'keypress'`: `(sequence, key)` for each key press in the delivered input (as with Node's emitKeypressEvents), so
+ *   in cooked mode only for what the line discipline passes on.
+ * - `'keydown'` / `'keyup'` (CC extension, like the browser's): a TtyKeyInput for each key, in the order typed across
+ *   listeners. In raw mode the terminal reports every key with its releases and repeats (the kitty keyboard protocol;
+ *   `setKeyboardProtocol('legacy')` turns that off), while `'data'` still gets keys as a terminal traditionally sends
+ *   them.
  * - Nothing is delivered until the stream flows: adding a `'data'` listener or calling `resume()` starts it, `pause()`
  *   stops it. Input typed meanwhile stays in the TTY (type ahead) and is delivered when it flows again.
  * - Listeners belong to the thread that adds them: they may block, and are dropped when the program is stopped. A
@@ -108,7 +112,8 @@ interface TtyReadStream extends ReadableInput {
     ref(): this;
     unref(): this;
     on(event: "data", listener: (chunk: string) => void): this;
-    on(event: "keypress", listener: (sequence: string | undefined, key: Key) => void): this;
+    on(event: "keypress", listener: (sequence: string | undefined, key: KeypressKey) => void): this;
+    on(event: "keydown" | "keyup", listener: (event: TtyKeyInput) => void): this;
     on(event: "end", listener: () => void): this;
     on(event: string, listener: (...args: any[]) => void): this;
     addListener(event: string, listener: (...args: any[]) => void): this;
