@@ -421,8 +421,8 @@ Implement in strict dependency order. Each item is a separate file commit.
 Done in #2 on top of the TTY model (#50), differently from the Lua ROM:
 
 - [x] **11.3** Colours: no `colors` module. Colours are ANSI indices 0–15 (`CSI.color(fg, bg)`, mapped one-to-one onto
-  the CC colours); `term` has `ColorIndex` (name → index) and `Term.setTextColor('orange')` takes names. Palette
-  changes: #54; bundled cables (colour sets): #53
+  the CC colours); `term` has `ColorIndex` (`ColorIndex.ORANGE` → 14) and `Term.setTextColor` takes indices. Palette
+  (#54): OSC 4 / 104 per TTY, `Term.setPaletteColor` with a `Color` (module `color`); bundled cables (colour sets): #53
 - [x] **11.4** Keys: `Key` constants (`KeyboardEvent.code` strings, exported by `tty` and `term`) for the browser-like
   `'keydown'` / `'keyup'` events of `ReadStream` (kitty keyboard protocol in raw mode); the native `key` / `key_up` /
   `char` events are internal now, Node's `'keypress'` is gone
@@ -857,7 +857,10 @@ class that draws by writing ANSI. Branch `feature/tty-term`.
   colours (`ColorIndex`), `geometry`, internal validators; named constant groups instead of magic strings/numbers
   (#52: `CSI` in `internal/csi`, `GlfwKeys`)
 - [ ] **16.10** Follow-ups: `edit` like vi/vim (#10); `window` as a native display with a TTY (#3); docs on VitePress
-  (#51); bundled cables (#53); palette (#54); turtle facing (#55); `paste` / mouse through the TTY
+  (#51); bundled cables (#53); turtle facing (#55); `paste` / mouse through the TTY
+- [x] **16.11** Palette (#54): OSC 4 / OSC 104 in `TerminalEmulator` (per console, `ESC c` resets), read back through
+  `TtyHandle.getPaletteColor`; ROM `color` module (`Color`), `CSI.setPaletteColor` / `resetPalette`, Term colours by
+  index, `Term.setPaletteColor` / `getPaletteColor` / `resetPalette`
 
 ---
 

@@ -415,16 +415,21 @@ There is no native `term` module and monitors no longer have drawing methods. Ou
   in the TTY's stdin as mouse input (once enabled) and as `monitor_touch`.
 - `tty` (ROM, Node API): `ReadStream` / `WriteStream` (`process.stdin/stdout/stderr`), `TTY` (virtual or
   `TTY.from(handle)`), `CSI` (escape sequences: cursor, `color(fg, bg)` with ANSI indices 0–15, `sgr`, blit, mouse,
-  `pushKeyboardFlags`/`popKeyboardFlags`), `Key`, `KeyboardFlag`, `decodeInput` + `InputType` / `MouseAction` /
+  `pushKeyboardFlags`/`popKeyboardFlags`, `setPaletteColor`/`resetPalette`), `Key`, `KeyboardFlag`, `decodeInput` + `InputType` / `MouseAction` /
   `MouseButton`, `isatty`. `WriteStream` fires `'resize'` on the native
   `tty_resize(tty)` event (monitors, virtual TTYs; the screen's consoles never resize).
 - `term` (ROM): `new Term(tty?)` draws by writing ANSI — `write`/`print`, `blit`, `clear`/`clearLine`, `scroll`,
   `getCursorPos`/`setCursorPos` (`{x, y}`, **0-based**), `getCursorBlink`/`setCursorBlink`, `getSize`/`setSize`,
-  `getTextColor`/`setTextColor`, `getBackgroundColor`/`setBackgroundColor` (colour names: `'orange'`, `'lightGray'`
-  …; `ColorIndex` maps them to ANSI indices), `isColor`, `readKey`/`readInput`/`readChar`/`readLine`; `Key`
+  `getTextColor`/`setTextColor`, `getBackgroundColor`/`setBackgroundColor` (colour indices 0–15: `ColorIndex.ORANGE`
+  …), `setPaletteColor(index, color)`/`getPaletteColor(index)` (a `Color`)/`resetPalette(index?)`, `isColor`, `readKey`/`readInput`/`readChar`/`readLine`; `Key`
   constants for `event.code`.
 - `geometry` (ROM core module): immutable `Point` and `Vector` for world coordinates (see JS_ROM_FEATURES.md).
-- The palette functions (`getPaletteColor`, `setPaletteColor`, `nativePaletteColor`) are gone for now (#54).
+- `color` (ROM core module): immutable RGBA `Color` (`new Color(r, g, b, a = 1)`, alpha 0–1 as in CSS;
+  `Color.from('#rrggbb' | '#rrggbbaa' | 0xRRGGBB | {r, g, b, a?} | [r, g, b, a?])`, `add(other)` (additive, in
+  proportion to alpha), `lighten(amount)` / `darken(amount)` (0–1), `withAlpha(a)`, `equals`, `toNumber()` →
+  `0xRRGGBB`, `toString()`/`toJSON()` → `'#rrggbb'` or `'#rrggbbaa'`), what a palette entry shows; `setPaletteColor`
+  takes only a `Color` (a translucent one is taken over black: `#ff0000` with alpha 0.5 → `#7f0000`).
+  `nativePaletteColor` is gone: the defaults are what `getPaletteColor` returns before any change.
 
 ---
 

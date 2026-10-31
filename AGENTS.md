@@ -127,7 +127,7 @@ part of `assemble`.
 | Promises: `/promises` modules, promise jobs, `async`/`tslib` modules, async-code detection | `core/engine/JSPromises.java`, `Waiter.java`, `JSAPIBuilder.java` (+ `EventLoop`) |
 | Safepoint aborts, resource limits (Rhino `Context` limits for strings, `ArrayBuffer`s, `apply` arguments, stack depth, set in `CCContextFactory.makeContext`; native array loops reach the safepoint) | `core/engine/JSAbort.java`, `JSMachine.java`, `core/CoreConfig.java` (+ `ConfigSpec`) |
 | Node-style stdio: `process`, `console`, `util`, `readline` (+`/promises`), `tty` streams, `term` (Term), job control | `projects/core/src/ts/rom/lib/` (`tty.ts`, `term.ts`, `internal/tty.ts`, `internal/keys.ts`, `internal/globals.ts`, `internal/emitter.ts`); types in `src/ts/types/{process,console,util,readline,tty,term}.d.ts` |
-| ROM helpers: Node-style errors and argument validators (internal), escape sequences (`CSI`), `geometry` (`Point`, `Vector`) | `rom/lib/internal/errors.ts`, `internal/validators.ts`, `internal/csi.ts`, `rom/lib/geometry.ts`; types `src/ts/types/geometry.d.ts` |
+| ROM helpers: Node-style errors and argument validators (internal), escape sequences (`CSI`), `geometry` (`Point`, `Vector`), `color` (`Color`) | `rom/lib/internal/errors.ts`, `internal/validators.ts`, `internal/csi.ts`, `rom/lib/geometry.ts`, `rom/lib/color.ts`; types `src/ts/types/{geometry,color}.d.ts` |
 | Native TTYs: pipes, line discipline, terminal emulator, input encoder, screen consoles; `internal/pty`, `screen` modules | `core/tty/` (`Pipe`, `LineDiscipline`, `Tty`, `TerminalEmulator`, `InputEncoder`, `Screen`), `core/apis/tty/`, monitor: `common/.../peripheral/monitor/ServerMonitor.java` |
 | Event bus (`events.on/once/off/emit`, `fireNow`, native-name registry) | `core/engine/JSEventEmitter.java` (incl. the JS `emit`), `core/apis/EventsAPI.java`, `EventLoop.emitPlan`/`dispatchNow`, core-api `scripting/Events.java` |
 | Core APIs (`fs`, `system`, `http`, `peripheral`, `redstone`, `screen`) | `projects/core/src/main/java/dan200/computercraft/core/apis/` |
@@ -160,7 +160,10 @@ part of `assemble`.
   sends: legacy VT bytes, or the kitty keyboard protocol (`CSI code;mods:event;text u`: presses, repeats, releases)
   when a program pushed flags (`CSI.pushKeyboardFlags`; only in raw mode). GLFW key codes: `core/tty/GlfwKeys`. Colours
   are ANSI indices 0–15, mapped one-to-one onto the 16 CC colours (`TerminalEmulator.ANSI_COLOURS`, VGA order with
-  3 = brown, 14 = orange). Every computer has a
+  3 = brown, 14 = orange); the ANSI index is the `Palette` entry. Programs change what an index shows with xterm's
+  OSC 4 / OSC 104 (`CSI.setPaletteColor` / `resetPalette`; `ESC c` resets too); each console keeps its own palette
+  (`Screen.copyToDisplay` copies it), and the device reports it back through `Tty.setPaletteSource` →
+  `TtyHandle.getPaletteColor`. Every computer has a
   `Screen` (module `screen`) with virtual consoles (1 on normal, `advanced_consoles` on advanced computers; Alt+1…9);
   it stays inactive until a script activates it (the ROM's `internal/tty` does), then mirrors the visible console onto
   the computer's terminal; keys and typed characters reach it through `EventComputerInput` and are **not** queued as
@@ -171,7 +174,8 @@ part of `assemble`.
   draws by writing ANSI into a TTY, and `tty.CSI` (source: `internal/csi`, also used by `util`/`console`) holds the
   escape sequences (no raw `'\x1b[…'` in ROM code).
 - Node-style stdio (#34) is ROM TypeScript in `/rom/lib`: `process`, `console`, `util`, `readline`,
-  `readline/promises`, `tty`, `term`, plus `geometry` (immutable `Point` / `Vector`). These "ROM core modules" resolve before `require.paths` and with a `node:`
+  `readline/promises`, `tty`, `term`, plus `geometry` (immutable `Point` / `Vector`) and `color` (immutable RGBA
+  `Color`). These "ROM core modules" resolve before `require.paths` and with a `node:`
   prefix (`JSRequire.ROM_CORE_MODULES`). `tty` has Node's `ReadStream`/`WriteStream` over native TTYs plus the `TTY`
   class; `process.stdin/stdout/stderr` are those of the first screen console (`/rom/lib/internal/tty.ts`). While a
   ReadStream flows, the TTY pushes what can be read as `pipe_data` events; `stream.on(...)` registers native listeners
@@ -182,7 +186,7 @@ part of `assemble`.
   Node `'keypress'` / `emitKeypressEvents` (readline edits on `'keydown'` too). In raw mode on a device TTY the stream
   asks for the kitty protocol (`setKeyboardProtocol('kitty' | 'legacy')`, kitty by default, saved per job), while
   `'data'` / `readSync` still get keys as legacy bytes (`toLegacy`, so `data === '\u0003'` works). `process` follows
-  Node's API strictly; everything beyond it (cursor, colours by name via `ColorIndex`, blit, reading keys:
+  Node's API strictly; everything beyond it (cursor, colour indices — `ColorIndex.RED` … — and the palette, blit, reading keys:
   `readKey`/`readInput`) is on `Term` (`new Term()` uses `process.stdin/stdout`). Programs run as **jobs** (`/rom/lib/internal/tty`: `run`, `Job`): a job is the *context*
   of the program's thread (`internal/loop.setContext(job, ttyId)`, inherited by every descendant thread, timer and
   listener, also after a parent returns), so `process` (stdin/stdout/stderr, argv, cwd, exitCode, pid) always means

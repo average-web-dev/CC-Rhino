@@ -77,10 +77,14 @@ native `tty_resize` event of its TTY (monitors, virtual TTYs; the screen's conso
 
 ### colors / colours
 
-**Status**: not ported (#2). Colours are ANSI indices 0–15 (`tty.CSI.color(fg, bg)`, one-to-one onto the CC colours);
-`Term.setTextColor` / `setBackgroundColor` take names (`'orange'`, `'lightGray'`; `term.ColorIndex` maps them to
-indices); blit strings use the CC hex digits. Palette changes: #54. Colour sets for bundled cables: #53. The Lua
-contract below is kept for reference.
+**Status**: not ported (#2, #54). Colours are a TTY's indices 0–15 (`tty.CSI.color(fg, bg)`, one-to-one onto the CC
+colours by default); `Term.setTextColor` / `setBackgroundColor` take an index (`term.ColorIndex.ORANGE` …); blit
+strings use the CC hex digits. RGB values are immutable `Color` objects (ROM core module `color`: channels `r`, `g`,
+`b` 0–255 and alpha `a` 0–1; `Color.from('#rrggbb' | '#rrggbbaa' | 0xRRGGBB | {r, g, b, a?} | [r, g, b, a?])`, `add`,
+`lighten` / `darken(amount)`, `withAlpha`, `toString()` → `'#rrggbb'`); `Term.setPaletteColor(index, color)` (a
+`Color` only; a translucent one is taken over black) /
+`getPaletteColor(index)` / `resetPalette(index?)` replace `term.setPaletteColour` (OSC 4 / 104, per TTY). Colour sets
+for bundled cables: #53. The Lua contract below is kept for reference.
 
 **Summary**: Named colour constants and utility functions for combining, testing, and converting 16-terminal palette colours.
 
@@ -550,11 +554,13 @@ settings.save(path?: string): boolean   // default ".settings"; serialises curre
   into a TTY (the calling program's `process.stdout` by default, or e.g. `TTY.from(monitor.getTty())`).
   `write` (cuts off at the edge), `print` (wraps), `blit`, `clear` / `clearLine`, `scroll`, `getCursorPos` /
   `setCursorPos` (`{x, y}`, 0-based), `getCursorBlink` / `setCursorBlink`, `getSize` / `setSize`, text and background
-  colour by name (`ColorIndex`), `isColor`, `readKey` / `readInput` / `readChar` / `readLine`; constants `Key`,
+  colour as an index (`ColorIndex`), the palette (`setPaletteColor` / `getPaletteColor` / `resetPalette`), `isColor`, `readKey` / `readInput` / `readChar` / `readLine`; constants `Key`,
   `InputType`, `MouseAction`, `MouseButton`.
 - "Redirecting" means running a program on another TTY (`child_process.spawn(prog, args, { stdio: tty })`,
   `os.run(prog, args, { tty })`), not swapping a global terminal object.
-- The palette functions are gone for now (#54).
+- The palette is the TTY's (#54): `Term.setPaletteColor(index, color)` writes OSC 4, `getPaletteColor(index)` returns a
+  `Color` read from the device (`undefined` on a virtual TTY), `resetPalette(index?)` writes OSC 104. It stays after a
+  program ends, as on Linux.
 
 ### textutils
 
