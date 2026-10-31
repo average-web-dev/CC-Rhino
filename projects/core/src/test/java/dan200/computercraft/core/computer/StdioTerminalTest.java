@@ -4,6 +4,7 @@
 
 package dan200.computercraft.core.computer;
 
+import dan200.computercraft.core.apis.events.RedstoneEvent;
 import dan200.computercraft.core.filesystem.MemoryMount;
 import org.junit.jupiter.api.Test;
 
@@ -159,12 +160,12 @@ class StdioTerminalTest {
             var onData = function (d) { probe.record(d); };
             process.stdin.on('data', onData);
             process.stdin.pause();
-            require('events').on('paste', function () { process.stdin.resume(); probe.record('resumed'); });
+            require('events').on('redstone', function () { process.stdin.resume(); probe.record('resumed'); });
             """, 20, 5, true)) {
             h.waitForProbe(1);
             h.type("lost");
             h.key(KEY_ENTER);
-            h.paste("");
+            h.queueEvent(new RedstoneEvent("top", 15));
             h.waitForProbe(2);
             h.type("kept");
             h.key(KEY_ENTER);

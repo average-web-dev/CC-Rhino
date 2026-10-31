@@ -150,6 +150,11 @@ public final class TerminalHarness implements AutoCloseable {
         key(GlfwKeys.KEY_ENTER);
     }
 
+    /** Queue a native event on the computer (an {@code @Event} record). */
+    public void queueEvent(Record event) {
+        computer.queueEvent(event);
+    }
+
     /** The terminate button of the computer GUI. */
     public void terminate() {
         computer.terminate();

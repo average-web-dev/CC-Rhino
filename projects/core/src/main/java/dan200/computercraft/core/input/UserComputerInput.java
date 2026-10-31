@@ -107,7 +107,7 @@ public final class UserComputerInput implements ComputerInput {
     }
 
     /**
-     * Queue a {@code mouse_click} event on the computer. This behaves the same as {@link #mouseClick(int, int, int)},
+     * Press a mouse button on the computer. This behaves the same as {@link #mouseClick(int, int, int)},
      * but infers the mouse position from the last mouse position.
      *
      * @param button The mouse button pressed, between 1 and 3.
@@ -129,7 +129,7 @@ public final class UserComputerInput implements ComputerInput {
     }
 
     /**
-     * Queue a {@code mouse_scroll} event on the computer. This behaves the same as {@link #mouseUp(int, int, int)},
+     * Turn the mouse wheel on the computer. This behaves the same as {@link #mouseUp(int, int, int)},
      * but infers the mouse position from the last mouse position.
      *
      * @param button The mouse button released, between 1 and 3.
@@ -152,7 +152,7 @@ public final class UserComputerInput implements ComputerInput {
     }
 
     /**
-     * Update the mouse position, and optionally queue a {@code mouse_drag} event on the computer.
+     * Update the mouse position, and optionally report a drag to the computer.
      * <p>
      * This is similar to {@link #mouseDrag(int, int, int)}, but when the currently clicked button is not available.
      *
@@ -182,7 +182,7 @@ public final class UserComputerInput implements ComputerInput {
     }
 
     /**
-     * Queue a {@code mouse_scroll} event on the computer. This behaves the same as {@link #mouseScroll(int, int, int)},
+     * Turn the mouse wheel on the computer. This behaves the same as {@link #mouseScroll(int, int, int)},
      * but infers the mouse position from the last mouse position.
      *
      * @param direction The direction of the scroll.

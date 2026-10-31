@@ -47,31 +47,6 @@ public final class CoreEvents {
         }
     }
 
-    /** Text was pasted into the computer. */
-    @Event("paste")
-    public record Paste(ByteBuffer text) {
-    }
-
-    /** A mouse button was pressed (advanced computers only). */
-    @Event("mouse_click")
-    public record MouseClick(int button, int x, int y) {
-    }
-
-    /** A mouse button was released. */
-    @Event("mouse_up")
-    public record MouseUp(int button, int x, int y) {
-    }
-
-    /** The mouse was moved while a button was held. */
-    @Event("mouse_drag")
-    public record MouseDrag(int button, int x, int y) {
-    }
-
-    /** The mouse wheel was scrolled: {@code direction} is -1 (up) or 1 (down). */
-    @Event("mouse_scroll")
-    public record MouseScroll(int direction, int x, int y) {
-    }
-
     /** A peripheral was attached on a side (or a remote peripheral appeared on a wired network). */
     @Event("peripheral")
     public record PeripheralAttach(String side) {

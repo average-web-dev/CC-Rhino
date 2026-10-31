@@ -4,6 +4,7 @@
 
 package dan200.computercraft.core.computer;
 
+import dan200.computercraft.core.apis.events.RedstoneEvent;
 import dan200.computercraft.core.engine.JSSandboxTest;
 import dan200.computercraft.core.filesystem.MemoryMount;
 import org.junit.jupiter.api.Test;
@@ -110,7 +111,7 @@ class StdioShellTest {
                 console.log('unref started');
                 """)
             .addFile("listener.js", """
-                require('events').on('paste', function () { console.log('leftover listener'); });
+                require('events').on('redstone', function () { console.log('leftover listener'); });
                 require('events').on('timer', function () { console.log('leftover listener'); });
                 console.log('listening');
                 """)
@@ -296,10 +297,9 @@ class StdioShellTest {
             h.enter("/listener.js");
             h.waitForText("listening");
             waitForPrompt(h, "/");
-            h.paste("x");
+            h.queueEvent(new RedstoneEvent("top", 15));
             h.ticks(5);
             assertEquals(-1, h.rowOf("leftover"), h.dump());
-            h.ctrl('U');
 
             // Child threads keep it alive.
             h.enter("/children.js");

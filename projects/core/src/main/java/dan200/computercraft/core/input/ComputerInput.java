@@ -47,7 +47,7 @@ public interface ComputerInput {
     void paste(ByteBuffer contents);
 
     /**
-     * Queue a {@code mouse_click} event.
+     * A mouse button was pressed (sent to the TTY if a program asked for the mouse).
      *
      * @param button The mouse button that was pressed, between 1 and 3 (inclusive).
      * @param x      The x coordinate of the mouse, between 1 and the terminal width (inclusive).
@@ -56,7 +56,7 @@ public interface ComputerInput {
     void mouseClick(int button, int x, int y);
 
     /**
-     * Queue a {@code mouse_up} event.
+     * A mouse button was released.
      *
      * @param button The mouse button that was released, between 1 and 3 (inclusive).
      * @param x      The x coordinate of the mouse, between 1 and the terminal width (inclusive).
@@ -65,7 +65,7 @@ public interface ComputerInput {
     void mouseUp(int button, int x, int y);
 
     /**
-     * Queue a {@code mouse_drag} event.
+     * The mouse moved while a button was held.
      *
      * @param button The mouse button that is being pressed, between 1 and 3 (inclusive).
      * @param x      The x coordinate of the mouse, between 1 and the terminal width (inclusive).
@@ -74,7 +74,7 @@ public interface ComputerInput {
     void mouseDrag(int button, int x, int y);
 
     /**
-     * Queue a {@code mouse_scroll} event.
+     * The mouse wheel turned.
      *
      * @param direction The direction of the scroll, where negative values are up and positive ones are down.
      * @param x         The x coordinate of the mouse, between 1 and the terminal width (inclusive).
