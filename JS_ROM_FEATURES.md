@@ -627,12 +627,14 @@ All native turtle methods are exposed directly:
 // Movement (return { ok: boolean, reason?: string })
 turtle.forward(), turtle.back(), turtle.up(), turtle.down()
 turtle.turnLeft(), turtle.turnRight()
+turtle.getFacing(): { x, y, z }   // world direction, e.g. north = { x: 0, y: 0, z: -1 } (#55)
 
 // Digging
 turtle.dig(side?: "left"|"right"), turtle.digUp(), turtle.digDown()
 
 // Placing
-turtle.place(text?: string), turtle.placeUp(), turtle.placeDown()
+turtle.place(options?: { text?: string, look?: { x, y, z } }), turtle.placeUp(options?), turtle.placeDown(options?)
+// look: place as if the turtle looked that way (any non-zero vector, e.g. Vector.EAST), like a player (#55)
 
 // Interaction
 turtle.detect(), turtle.detectUp(), turtle.detectDown()

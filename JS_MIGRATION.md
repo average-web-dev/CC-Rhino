@@ -857,10 +857,12 @@ class that draws by writing ANSI. Branch `feature/tty-term`.
   colours (`ColorIndex`), `geometry`, internal validators; named constant groups instead of magic strings/numbers
   (#52: `CSI` in `internal/csi`, `GlfwKeys`)
 - [ ] **16.10** Follow-ups: `edit` like vi/vim (#10); `window` as a native display with a TTY (#3); docs on VitePress
-  (#51); bundled cables (#53); turtle facing (#55); `paste` / mouse through the TTY
+  (#51); bundled cables (#53); `paste` / mouse through the TTY
 - [x] **16.11** Palette (#54): OSC 4 / OSC 104 in `TerminalEmulator` (per console, `ESC c` resets), read back through
   `TtyHandle.getPaletteColor`; ROM `color` module (`Color`), `CSI.setPaletteColor` / `resetPalette`, Term colours by
   index, `Term.setPaletteColor` / `getPaletteColor` / `resetPalette`
+- [x] **16.12** Turtle facing (#55): `turtle.place*({ text?, look? })` places as if looking along any vector (the fake
+  player's yaw / pitch), `turtle.getFacing()` returns the world direction as `{x, y, z}`
 
 ---
 

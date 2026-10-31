@@ -474,8 +474,9 @@ All functions **block** (world interaction). "Can-fail" return → `{success: bo
 |---|---|---|
 | `forward` / `back` / `up` / `down` | – | `{success, reason?}` |
 | `turnLeft` / `turnRight` | – | `{success, reason?}` |
+| `getFacing` | – | `{x, y, z}`: the world direction the turtle faces (north = `{x: 0, y: 0, z: -1}`; `Vector.from(…)`) |
 | `dig` / `digUp` / `digDown` | `side?` | `{success, reason?}` |
-| `place` / `placeUp` / `placeDown` | `text?` | `{success, reason?}` |
+| `place` / `placeUp` / `placeDown` | `{ text?, look? }` (`look`: place as if looking that way, any non-zero vector, like a player) | `{success, reason?}` |
 | `drop` / `dropUp` / `dropDown` | `count?` | `{success, reason?}` |
 | `suck` / `suckUp` / `suckDown` | `count?` | `{success, reason?}` |
 | `attack` / `attackUp` / `attackDown` | `side?` | `{success, reason?}` |
