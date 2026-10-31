@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static dan200.computercraft.core.computer.TerminalHarness.*;
+import static dan200.computercraft.core.tty.GlfwKeys.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**

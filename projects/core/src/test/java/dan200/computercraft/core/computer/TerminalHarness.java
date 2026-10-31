@@ -14,6 +14,7 @@ import dan200.computercraft.core.computer.mainthread.MainThreadConfig;
 import dan200.computercraft.core.filesystem.MemoryMount;
 import dan200.computercraft.core.input.EventComputerInput;
 import dan200.computercraft.core.terminal.Terminal;
+import dan200.computercraft.core.tty.GlfwKeys;
 import dan200.computercraft.test.core.computer.BasicEnvironment;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
@@ -34,21 +35,6 @@ import java.util.function.Predicate;
  * ({@code require('probe').record(value)}).
  */
 public final class TerminalHarness implements AutoCloseable {
-    public static final int KEY_ENTER = 257;
-    public static final int KEY_TAB = 258;
-    public static final int KEY_BACKSPACE = 259;
-    public static final int KEY_DELETE = 261;
-    public static final int KEY_RIGHT = 262;
-    public static final int KEY_LEFT = 263;
-    public static final int KEY_DOWN = 264;
-    public static final int KEY_UP = 265;
-    public static final int KEY_HOME = 268;
-    public static final int KEY_END = 269;
-    public static final int KEY_LEFT_CONTROL = 341;
-    public static final int KEY_LEFT_ALT = 342;
-    public static final int KEY_ESCAPE = 256;
-    public static final int KEY_C = 67;
-
     private static final int TICK_MILLIS = 50;
 
     private final Terminal terminal;
@@ -144,24 +130,24 @@ public final class TerminalHarness implements AutoCloseable {
 
     /** Press a key while Ctrl is held. */
     public void ctrl(int key) {
-        input.keyDown(KEY_LEFT_CONTROL, false);
+        input.keyDown(GlfwKeys.KEY_LEFT_CONTROL, false);
         input.keyDown(key, false);
         input.keyUp(key);
-        input.keyUp(KEY_LEFT_CONTROL);
+        input.keyUp(GlfwKeys.KEY_LEFT_CONTROL);
     }
 
     /** Press a key while Alt is held (Alt+1 … Alt+9 switch consoles). */
     public void alt(int key) {
-        input.keyDown(KEY_LEFT_ALT, false);
+        input.keyDown(GlfwKeys.KEY_LEFT_ALT, false);
         input.keyDown(key, false);
         input.keyUp(key);
-        input.keyUp(KEY_LEFT_ALT);
+        input.keyUp(GlfwKeys.KEY_LEFT_ALT);
     }
 
     /** Type a line and press Enter. */
     public void enter(String line) {
         type(line);
-        key(KEY_ENTER);
+        key(GlfwKeys.KEY_ENTER);
     }
 
     /** The terminate button of the computer GUI. */

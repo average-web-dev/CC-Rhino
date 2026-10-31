@@ -39,6 +39,7 @@ const expected: Record<string, [string, string[]]> = {
         'cursorColumn', 'exitCodeOf', 'formatError', 'inUse', 'requestExit', 'root', 'run', 'terminal', 'ttyOf']],
     '/rom/lib/internal/keys': ['object', ['InputType', 'Key', 'MouseAction', 'MouseButton', 'decodeInput',
         'decodeKeys', 'mouseReportAt', 'stripMouse', 'toKeypress', 'toLegacy']],
+    '/rom/lib/internal/csi': ['object', ['CSI']],
     'tty': ['object', ['CSI', 'InputType', 'Key', 'KeyboardFlag', 'MouseAction', 'MouseButton', 'ReadStream', 'TTY',
         'WriteStream', 'decodeInput', 'isatty']],
     'term': ['object', ['ColorIndex', 'InputType', 'Key', 'MouseAction', 'MouseButton', 'Term']],

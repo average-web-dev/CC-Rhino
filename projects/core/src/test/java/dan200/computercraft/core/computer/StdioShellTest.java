@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Arrays;
 import java.util.TreeSet;
 
-import static dan200.computercraft.core.computer.TerminalHarness.*;
+import static dan200.computercraft.core.tty.GlfwKeys.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -323,7 +323,7 @@ class StdioShellTest {
             waitForPrompt(h, "/");
             h.enter("/ticker.js");
             h.waitForText("tick");
-            h.ctrl(KEY_C);
+            h.ctrl('C');
             h.waitForText("^C");
             h.waitForText("Terminated");
             waitForPrompt(h, "/");
@@ -358,7 +358,7 @@ class StdioShellTest {
             // Ctrl+C in a readline program (raw mode): as in Node, it closes the interface and the program ends.
             h.enter("/repl.js");
             h.waitFor("the program's prompt", x -> x.line(x.cursorY()).equals("r>"));
-            h.ctrl(KEY_C);
+            h.ctrl('C');
             waitForPrompt(h, "/");
 
             // The terminate button ends it while it waits for input.

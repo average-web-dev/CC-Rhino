@@ -13,6 +13,7 @@
 import * as util from '/rom/lib/util';
 import proc from 'process';
 import { callable } from '/rom/lib/internal/callable';
+import { CSI } from '/rom/lib/internal/csi';
 import { ERR_CONSOLE_WRITABLE_STREAM } from '/rom/lib/internal/errors';
 import { validateArray, validateInteger } from '/rom/lib/internal/validators';
 
@@ -200,7 +201,7 @@ class Console {
 
     clear(): void {
         let stream = this._stdout;
-        if (stream.isTTY) stream.write('\x1b[1;1H\x1b[0J');
+        if (stream.isTTY) stream.write(CSI.cursorTo(0, 0) + CSI.clearScreenDown);
     }
 
     count(label: unknown = 'default'): void {

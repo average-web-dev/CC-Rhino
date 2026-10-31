@@ -9,6 +9,7 @@
 // Differences from Node: no colours in inspect (`colors` is accepted and ignored — the terminal does understand the
 // ANSI colours styleText produces), no Proxy detection, and promise states cannot be inspected on Rhino.
 
+import { CSI } from '/rom/lib/internal/csi';
 import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE } from '/rom/lib/internal/errors';
 
 const customInspect: unique symbol = Symbol.for('nodejs.util.inspect.custom') as any;
@@ -789,8 +790,8 @@ export function styleText(format: string | string[], text: string): string {
         if (style === undefined) {
             throw new ERR_INVALID_ARG_VALUE('format', name, `must be one of: ${Object.keys(STYLES).join(', ')}`);
         }
-        left += `\x1b[${style[0]}m`;
-        right = `\x1b[${style[1]}m` + right;
+        left += CSI.sgr(style[0]);
+        right = CSI.sgr(style[1]) + right;
     }
     return `${left}${text}${right}`;
 }

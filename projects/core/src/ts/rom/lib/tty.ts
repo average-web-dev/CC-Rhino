@@ -24,9 +24,10 @@
 import events from 'events';
 import loop from 'internal/loop';
 import pty from 'internal/pty';
+import { CSI } from '/rom/lib/internal/csi';
 import { decodeInput, InputType, toKeypress, toLegacy } from '/rom/lib/internal/keys';
 import { ERR_INVALID_ARG_TYPE } from '/rom/lib/internal/errors';
-import { validateFunction, validateInteger, validateOneOf } from '/rom/lib/internal/validators';
+import { validateFunction, validateOneOf } from '/rom/lib/internal/validators';
 
 /**
  * The other direction of CSI: decodeInput(data) splits what a TTY delivers into keyboard events (`keydown` / `keyup`,
@@ -34,6 +35,12 @@ import { validateFunction, validateInteger, validateOneOf } from '/rom/lib/inter
  * MouseAction / MouseButton instead of strings.
  */
 export { decodeInput, InputType, Key, MouseAction, MouseButton } from '/rom/lib/internal/keys';
+
+/**
+ * The escape sequences a TTY understands, so programs (and the ROM) need not spell them out: cursor movement as
+ * readline and Node's tty.WriteStream write it, plus showing the cursor, clearing, colours, blit and mouse reports.
+ */
+export { CSI };
 
 /** The flags of the kitty keyboard protocol, for CSI.pushKeyboardFlags (combined with `|`). */
 export const KeyboardFlag = Object.freeze({
@@ -56,8 +63,6 @@ export const KeyboardFlag = Object.freeze({
 const KITTY_FLAGS = KeyboardFlag.DISAMBIGUATE | KeyboardFlag.REPORT_EVENT_TYPES | KeyboardFlag.REPORT_ALL_KEYS
     | KeyboardFlag.REPORT_TEXT;
 
-const ESC = '\x1b';
-
 /** Decode a chunk (string or bytes) to a string; bytes are taken as Latin-1, the terminal's character set. */
 function chunkToString(chunk: unknown): string {
     if (typeof chunk === 'string') return chunk;
@@ -73,75 +78,6 @@ function chunkToString(chunk: unknown): string {
 function later(callback: unknown): void {
     if (typeof callback === 'function') events.queueMicrotask(() => (callback as (err: Error | null) => void)(null));
 }
-
-/**
- * The escape sequences a TTY understands, so programs (and the ROM) need not spell them out: cursor movement as
- * readline and Node's tty.WriteStream write it, plus showing the cursor, clearing, colours, blit and mouse reports.
- */
-export const CSI = {
-    /** Show the (blinking) cursor. */
-    showCursor: `${ESC}[?25h`,
-    /** Hide the cursor. */
-    hideCursor: `${ESC}[?25l`,
-    /** Clear the whole screen (the cursor stays). */
-    clearScreen: `${ESC}[2J`,
-    /** Move the cursor to the top left. */
-    home: `${ESC}[H`,
-    /** Back to the default colours. */
-    reset: `${ESC}[0m`,
-    /**
-     * Select colours by their index (0–15, as on a Linux terminal: 0 black … 7 white, 8–15 bright): text, and
-     * optionally background.
-     */
-    color(fg: number, bg?: number): string {
-        validateInteger(fg, 'fg', 0, 15);
-        let out = `${ESC}[38;5;${fg}`;
-        if (bg !== undefined) {
-            validateInteger(bg, 'bg', 0, 15);
-            out += `;48;5;${bg}`;
-        }
-        return out + 'm';
-    },
-    /** Scroll the contents up by `n` rows (down if negative). */
-    scroll(n: number): string {
-        n = Math.trunc(n);
-        return n > 0 ? `${ESC}[${n}S` : n < 0 ? `${ESC}[${-n}T` : '';
-    },
-    /** Write `text` with one text and one background colour (blit digits) per character, without wrapping. */
-    blit(text: string, fg: string, bg: string): string {
-        return `${ESC}Pcc-blit;${fg};${bg};${text}${ESC}\\`;
-    },
-    /** Ask for mouse reports in stdin (SGR encoding, presses, releases and drags), or stop them. */
-    mouse(on: boolean): string {
-        return on ? `${ESC}[?1002;1006h` : `${ESC}[?1002;1006l`;
-    },
-    /**
-     * Ask for the kitty keyboard protocol with these flags (KeyboardFlag, combined with `|`); the terminal keeps a
-     * stack, so popKeyboardFlags() restores what was asked for before.
-     */
-    pushKeyboardFlags(flags: number): string {
-        validateInteger(flags, 'flags', 0, 31);
-        return `${ESC}[>${flags}u`;
-    },
-    /** Undo the last `n` (default 1) pushKeyboardFlags. */
-    popKeyboardFlags(n = 1): string {
-        validateInteger(n, 'n', 1);
-        return `${ESC}[<${n}u`;
-    },
-    cursorTo(x: number, y?: number): string {
-        return typeof y !== 'number' ? `${ESC}[${x + 1}G` : `${ESC}[${y + 1};${x + 1}H`;
-    },
-    moveCursor(dx: number, dy: number): string {
-        let data = '';
-        if (dx < 0) data += `${ESC}[${-dx}D`; else if (dx > 0) data += `${ESC}[${dx}C`;
-        if (dy < 0) data += `${ESC}[${-dy}A`; else if (dy > 0) data += `${ESC}[${dy}B`;
-        return data;
-    },
-    clearLine(dir: number): string {
-        return dir < 0 ? `${ESC}[1K` : dir > 0 ? `${ESC}[0K` : `${ESC}[2K`;
-    },
-    clearScreenDown: `${ESC}[0J`,
-};
 
 type Listener = (...args: any[]) => void;
 
