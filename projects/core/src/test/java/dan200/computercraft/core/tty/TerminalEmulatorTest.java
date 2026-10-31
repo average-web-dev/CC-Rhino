@@ -244,6 +244,24 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    void bracketed_paste_and_mouse_reporting_modes() {
+        assertFalse(emulator.bracketedPaste());
+        emulator.writeOut("\u001b[?2004h");
+        assertTrue(emulator.bracketedPaste());
+        emulator.writeOut("\u001b[?2004l");
+        assertFalse(emulator.bracketedPaste());
+
+        assertFalse(terminal.getMouseReporting());
+        emulator.writeOut("\u001b[?1002h");
+        assertTrue(terminal.getMouseReporting(), "the terminal tells the client that the program wants the mouse");
+        emulator.writeOut("\u001b[?1002l");
+        assertFalse(terminal.getMouseReporting());
+
+        emulator.writeOut("\u001b[?2004h\u001b[?1000h\u001bc");
+        assertFalse(emulator.bracketedPaste(), "ESC c resets both");
+        assertFalse(terminal.getMouseReporting());
+    }
+    @Test
     void unknown_osc_sequences_are_swallowed() {
         emulator.writeOut("a\u001b]0;window title\u0007b\u001b]52;c;Zm9v\u001b\\c");
         assertEquals("abc       ", line(0));

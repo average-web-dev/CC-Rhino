@@ -150,6 +150,14 @@ class InputEncoderTest {
         assertEquals("\u001b", encoder.keyDown(KEY_ESCAPE, false, 0));
     }
 
+    @Test
+    void paste_as_typed_or_bracketed() {
+        assertEquals("a\rb\rc", encoder.paste("a\r\nb\nc", false), "line endings as Enter sends them");
+        assertEquals("\u001b[200~a\rb\u001b[201~", encoder.paste("a\nb", true));
+        assertEquals("\u001b[200~x[201~y\u001b[201~", encoder.paste("x\u001b[201~y", true),
+            "the text cannot end the bracket early");
+    }
+
     private static String join(String a, String b) {
         return (a == null ? "" : a) + (b == null ? "" : b);
     }

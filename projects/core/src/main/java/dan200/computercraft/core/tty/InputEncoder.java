@@ -158,6 +158,21 @@ public final class InputEncoder {
     }
 
     /**
+     * Pasted text, as a terminal sends it: line endings as {@code \r} (what Enter sends) and, if the program asked for
+     * bracketed paste, wrapped in {@code ESC [ 200 ~} … {@code ESC [ 201 ~} (without any ESC of its own, so the text
+     * cannot end the bracket early).
+     *
+     * @param text      The pasted text.
+     * @param bracketed Whether the program asked for bracketed paste.
+     * @return What the terminal sends.
+     */
+    public @Nullable String paste(String text, boolean bracketed) {
+        var body = text.replace("\r\n", "\r").replace('\n', '\r');
+        if (bracketed) body = ESC + "[200~" + body.replace(ESC, "") + ESC + "[201~";
+        return join(flush(), body);
+    }
+
+    /**
      * A mouse event on the terminal.
      *
      * @param kind   What happened.

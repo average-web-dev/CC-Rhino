@@ -175,4 +175,27 @@ class ScreenTest {
         assertNotSame(before, screen.consoles().get(0));
         assertEquals(0, screen.visible().index());
     }
+
+    @Test
+    void paste_is_bracketed_only_when_asked() {
+        screen.activate();
+        var tty = screen.consoles().get(0).tty();
+        tty.setRaw(true);
+        screen.paste("a\nb");
+        assertEquals("a\rb", readAll(tty.stdin()), "as typed");
+        tty.stdout().write("\u001b[?2004h");
+        screen.paste("c");
+        assertEquals("\u001b[200~c\u001b[201~", readAll(tty.stdin()));
+    }
+
+    @Test
+    void mouse_reporting_is_shown_with_the_console() {
+        screen.activate();
+        screen.consoles().get(1).tty().stdout().write("\u001b[?1000h");
+        assertFalse(display.getMouseReporting(), "console 1 is not shown");
+        assertTrue(screen.show(1));
+        assertTrue(display.getMouseReporting());
+        assertTrue(screen.show(0));
+        assertFalse(display.getMouseReporting());
+    }
 }

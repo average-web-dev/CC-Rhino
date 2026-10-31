@@ -19,6 +19,8 @@ public class Terminal {
     protected int cursorX = 0;
     protected int cursorY = 0;
     protected boolean cursorBlink = false;
+    /** Whether a program on this terminal asked for mouse reports, so clicks belong to it (see TerminalEmulator). */
+    protected boolean mouseReporting = false;
     protected int cursorColour = 0;
     protected int cursorBackgroundColour = 15;
 
@@ -57,6 +59,7 @@ public class Terminal {
         cursorX = 0;
         cursorY = 0;
         cursorBlink = false;
+        mouseReporting = false;
         clear();
         setChanged();
         palette.resetColours();
@@ -116,6 +119,23 @@ public class Terminal {
         if (cursorX != x || cursorY != y) {
             cursorX = x;
             cursorY = y;
+            setChanged();
+        }
+    }
+
+    public boolean getMouseReporting() {
+        return mouseReporting;
+    }
+
+    /**
+     * Whether a program asked for mouse reports: the client then sends clicks to it and pastes with the middle button
+     * only together with Shift.
+     *
+     * @param reporting Whether the program wants the mouse.
+     */
+    public void setMouseReporting(boolean reporting) {
+        if (mouseReporting != reporting) {
+            mouseReporting = reporting;
             setChanged();
         }
     }

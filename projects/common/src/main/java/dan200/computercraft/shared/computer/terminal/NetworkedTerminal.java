@@ -38,7 +38,9 @@ public class NetworkedTerminal extends Terminal {
         }
 
         assert idx == contents.length;
-        return new TerminalState(colour, width, height, cursorX, cursorY, cursorBlink, cursorColour, cursorBackgroundColour, contents);
+        return new TerminalState(
+            colour, width, height, cursorX, cursorY, cursorBlink, mouseReporting, cursorColour, cursorBackgroundColour, contents
+        );
     }
 
     synchronized void read(TerminalState state) {
@@ -46,6 +48,7 @@ public class NetworkedTerminal extends Terminal {
         cursorX = state.cursorX;
         cursorY = state.cursorY;
         cursorBlink = state.cursorBlink;
+        mouseReporting = state.mouseReporting;
 
         cursorBackgroundColour = state.cursorBgColour;
         this.cursorColour = state.cursorFgColour;

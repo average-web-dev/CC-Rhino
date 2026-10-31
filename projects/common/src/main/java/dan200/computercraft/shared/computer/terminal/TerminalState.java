@@ -25,12 +25,14 @@ public class TerminalState {
     final int cursorX;
     final int cursorY;
     final boolean cursorBlink;
+    final boolean mouseReporting;
     final int cursorBgColour;
     final int cursorFgColour;
     final byte[] contents;
 
     TerminalState(
-        boolean colour, int width, int height, int cursorX, int cursorY, boolean cursorBlink, int cursorFgColour, int cursorBgColour, byte[] contents
+        boolean colour, int width, int height, int cursorX, int cursorY, boolean cursorBlink, boolean mouseReporting,
+        int cursorFgColour, int cursorBgColour, byte[] contents
     ) {
         this.colour = colour;
         this.width = width;
@@ -38,6 +40,7 @@ public class TerminalState {
         this.cursorX = cursorX;
         this.cursorY = cursorY;
         this.cursorBlink = cursorBlink;
+        this.mouseReporting = mouseReporting;
         this.cursorFgColour = cursorFgColour;
         this.cursorBgColour = cursorBgColour;
         this.contents = contents;
@@ -55,6 +58,7 @@ public class TerminalState {
         cursorX = buf.readVarInt();
         cursorY = buf.readVarInt();
         cursorBlink = buf.readBoolean();
+        mouseReporting = buf.readBoolean();
 
         var cursorColour = buf.readByte();
         this.cursorBgColour = (cursorColour >> 4) & 0xF;
@@ -70,6 +74,7 @@ public class TerminalState {
         buf.writeVarInt(cursorX);
         buf.writeVarInt(cursorY);
         buf.writeBoolean(cursorBlink);
+        buf.writeBoolean(mouseReporting);
         buf.writeByte(cursorBgColour << 4 | cursorFgColour);
 
         buf.writeByteArray(contents);

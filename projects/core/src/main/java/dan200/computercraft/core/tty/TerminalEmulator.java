@@ -27,7 +27,8 @@ import java.util.function.Consumer;
  *   CUP ({@code H f}), ED ({@code J}), EL ({@code K}), SU/SD ({@code S T}), save/restore ({@code s u}, {@code ESC 7},
  *   {@code ESC 8}), full reset ({@code ESC c});</li>
  *   <li>DEC private modes ({@code ESC [ ? n h/l}): 25 (cursor blink), 1000/1002/1003 (mouse reporting) and 1006 (SGR
- *   mouse encoding), which {@link #mouseMode()} reports to the input side;</li>
+ *   mouse encoding), which {@link #mouseMode()} reports to the input side (and {@link Terminal#getMouseReporting()} to
+ *   the client), and 2004 (bracketed paste, {@link #bracketedPaste()});</li>
  *   <li>the kitty keyboard protocol's flags ({@code CSI > flags u} push, {@code CSI < n u} pop, {@code CSI = flags ;
  *   mode u} change, {@code CSI ? u} query, answered in the TTY's input), which {@link #keyboardFlags()} reports to the
  *   input side (see {@link InputEncoder});</li>
@@ -87,6 +88,7 @@ public final class TerminalEmulator {
     private int savedY = -1;
     private MouseMode mouseMode = MouseMode.NONE;
     private boolean sgrMouse;
+    private boolean bracketedPaste;
     /** The kitty keyboard flags pushed by programs; the top one applies. */
     private final ArrayDeque<Integer> keyboardFlags = new ArrayDeque<>();
     /** Answers to queries, sent to {@link #replyTo} once the output is rendered. */
@@ -136,6 +138,11 @@ public final class TerminalEmulator {
     /** Whether mouse events should use the SGR encoding ({@code ESC [ < … M/m}) rather than the X10 one. */
     public synchronized boolean sgrMouse() {
         return sgrMouse;
+    }
+
+    /** Whether pasted text should be wrapped in {@code ESC [ 200 ~} … {@code ESC [ 201 ~} (the program asked for it). */
+    public synchronized boolean bracketedPaste() {
+        return bracketedPaste;
     }
 
     /**
@@ -384,8 +391,9 @@ public final class TerminalEmulator {
         setBg(DEFAULT_BG);
         terminal.clear();
         terminal.setCursorPos(0, 0);
-        mouseMode = MouseMode.NONE;
+        setMouseMode(MouseMode.NONE);
         sgrMouse = false;
+        bracketedPaste = false;
         keyboardFlags.clear();
         resetPalette(-1);
     }
@@ -540,14 +548,20 @@ public final class TerminalEmulator {
         for (var param : params) {
             switch (param) {
                 case 25 -> terminal.setCursorBlink(set);
-                case 1000 -> mouseMode = set ? MouseMode.CLICKS : MouseMode.NONE;
-                case 1002 -> mouseMode = set ? MouseMode.DRAG : MouseMode.NONE;
-                case 1003 -> mouseMode = set ? MouseMode.ANY : MouseMode.NONE;
+                case 1000 -> setMouseMode(set ? MouseMode.CLICKS : MouseMode.NONE);
+                case 1002 -> setMouseMode(set ? MouseMode.DRAG : MouseMode.NONE);
+                case 1003 -> setMouseMode(set ? MouseMode.ANY : MouseMode.NONE);
                 case 1006 -> sgrMouse = set;
+                case 2004 -> bracketedPaste = set;
                 default -> {
                 }
             }
         }
+    }
+
+    private void setMouseMode(MouseMode mode) {
+        mouseMode = mode;
+        terminal.setMouseReporting(mode != MouseMode.NONE);
     }
 
     /** {@code ESC P … ESC \}: only the CC blit sequence is understood. */

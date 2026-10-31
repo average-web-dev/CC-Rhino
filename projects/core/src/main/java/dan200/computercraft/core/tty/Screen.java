@@ -227,12 +227,15 @@ public final class Screen {
     }
 
     public void paste(String text) {
+        String data;
         Tty tty;
         synchronized (this) {
             if (!active) return;
-            tty = consoles.get(visible).tty;
+            var console = consoles.get(visible);
+            tty = console.tty;
+            data = encoder.paste(text, console.emulator.bracketedPaste());
         }
-        tty.input(text);
+        if (data != null) tty.input(data);
     }
 
     public void mouse(InputEncoder.Mouse kind, int button, int x, int y) {
@@ -265,6 +268,7 @@ public final class Screen {
             }
             display.setCursorPos(buffer.getCursorX(), buffer.getCursorY());
             display.setCursorBlink(buffer.getCursorBlink());
+            display.setMouseReporting(buffer.getMouseReporting());
             display.setTextColour(buffer.getTextColour());
             display.setBackgroundColour(buffer.getBackgroundColour());
             synchronized (display) {
