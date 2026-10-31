@@ -472,7 +472,7 @@ Done in #2 on top of the TTY model (#50), differently from the Lua ROM:
   - [ ] **11.28a** Syntax highlighting for `.ts`/`.js` — `term.blit` per line + a tokenizer in a shared `rom/lib/cc/syntax.ts` (keyword/string/template/number/comment/identifier → colour). Must thread a multiline carry state (block comments, template literals) from the top of the viewport down. Reused by `js.ts` (11.29).
   - [ ] **11.28b** Tab completion — `require('…')` module names (native + `require.paths`) and identifiers/keywords; reuse bash's `commonPrefix` + the `cc/shell/completion` factories (11.15).
   - [ ] **11.28c** Copy / cut / paste **selection** (shift+arrows), plus `Run`/`Print` menu items and an unsaved-changes prompt on Exit.
-  - [ ] **11.28d** Mouse support (`mouse_click` to position caret, `mouse_scroll` to scroll).
+  - [ ] **11.28d** Mouse support (`CSI.mouse(true)` + `Term.readInput` mouse events: click to position caret, wheel to scroll).
   - [ ] **11.28e** Depends on Tier-0 `keys.ts` (11.4) + `colors.ts` (11.3) — replace the inlined key codes / colour numbers once those land.
 - [ ] **11.29** `js.ts` — interactive JS REPL using `Function()`; print return values via `cc/pretty`; history, tab-completion
 - [ ] **11.30** `monitor.ts` — run a program redirecting its terminal output to an attached monitor peripheral
@@ -693,7 +693,7 @@ calls waiting for an event (Phase 1/2), which `fireNow` does not do.
 | `JSContext` main-thread task | `task_complete` | server thread (main-thread task) | cross-thread: must stay (wakes the `TaskCallback`, Phase 2) |
 | `TurtleBrain` command completion | `task_complete` | turtle update tick (server thread) | cross-thread: must stay (wakes `TaskCompletion.await`) |
 | `HttpRequest`, `CheckUrl`, `Websocket`, `WebsocketHandler` | `http_*`, `websocket_*` | Netty I/O threads | cross-thread: must stay |
-| `EventComputerInput` | `paste`, `mouse_*` (keys and chars only go to the `Screen`'s TTY since #2) | server network thread | cross-thread: must stay |
+| `EventComputerInput` | none any more: keys, chars, pastes and the mouse only go to the `Screen`'s TTY | server network thread | – |
 | `ComputerActionServerMessage` | `terminate` | server network thread | cross-thread: must stay |
 | `ServerInputState` | `file_transfer` | server network thread | cross-thread: must stay |
 | standalone `InputState` | `file_transfer`, `terminate` | emulator UI thread | cross-thread: must stay (now queues `CoreEvents` records instead of raw names) |
@@ -857,7 +857,7 @@ class that draws by writing ANSI. Branch `feature/tty-term`.
   colours (`ColorIndex`), `geometry`, internal validators; named constant groups instead of magic strings/numbers
   (#52: `CSI` in `internal/csi`, `GlfwKeys`)
 - [ ] **16.10** Follow-ups: `edit` like vi/vim (#10); `window` as a native display with a TTY (#3); docs on VitePress
-  (#51); `paste` / mouse through the TTY
+  (#51)
 - [x] **16.11** Palette (#54): OSC 4 / OSC 104 in `TerminalEmulator` (per console, `ESC c` resets), read back through
   `TtyHandle.getPaletteColor`; ROM `color` module (`Color`), `CSI.setPaletteColor` / `resetPalette`, Term colours by
   index, `Term.setPaletteColor` / `getPaletteColor` / `resetPalette`
@@ -867,6 +867,9 @@ class that draws by writing ANSI. Branch `feature/tty-term`.
   (`redstone.setBundledOutput(side, { [Dye.RED]: true })` changes only the named channels;
   `getBundledInput(side)[Dye.RED]`; `setAllBundledOutput(side, on)`; `testBundledInput` is gone); `Dye` (Minecraft dye
   ids 0–15) in `color`
+- [x] **16.14** Paste and mouse through the TTY: Ctrl+Shift+V / Shift+Insert / middle button paste (Ctrl+V is a key),
+  bracketed paste on request (mode 2004, readline asks), mouse reports only after `CSI.mouse`; stdin `'paste'` /
+  `'mouse'`; the native `paste` / `mouse_*` events are internal
 
 ---
 

@@ -2031,11 +2031,7 @@ Events that the ROM layer produces or consumes:
 | Event | Fields | Description |
 |-------|--------|-------------|
 | (`key`, `key_up`, `char`) | — | Internal since #2: keys reach programs through their TTY (`'keydown'` / `'keyup'`) |
-| `mouse_click` | `button: number, x: number, y: number` | Mouse button pressed (1-indexed coords) |
-| `mouse_up` | `button, x, y` | Mouse button released |
-| `mouse_scroll` | `direction: number, x, y` | Mouse wheel |
-| `mouse_drag` | `button, x, y` | Mouse dragged |
-| `paste` | `text: string` | Clipboard paste |
+| (`mouse_click`, `mouse_up`, `mouse_scroll`, `mouse_drag`, `paste`) | — | Internal: mouse reports and pastes reach programs through their TTY (`CSI.mouse(true)` → stdin `'mouse'`; `CSI.bracketedPaste(true)` → stdin `'paste'`, otherwise pasted text comes as typed) |
 | `terminate` | — | Ctrl+T: terminate current program |
 | `timer` | `id: number` | `setTimeout`-style timer fired |
 | `modem_message` | `side, channel, replyChannel, message, distance` | Raw modem packet |

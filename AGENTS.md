@@ -166,8 +166,12 @@ part of `assemble`.
   `TtyHandle.getPaletteColor`. Every computer has a
   `Screen` (module `screen`) with virtual consoles (1 on normal, `advanced_consoles` on advanced computers; Alt+1…9);
   it stays inactive until a script activates it (the ROM's `internal/tty` does), then mirrors the visible console onto
-  the computer's terminal; keys and typed characters reach it through `EventComputerInput` and are **not** queued as
-  events (there are no `key`/`key_up`/`char` events for scripts; `paste` and `mouse_*` still are). Monitors have
+  the computer's terminal; keys, typed characters, pastes and the mouse reach it through `EventComputerInput` and are
+  **not** queued as events (no `key`/`key_up`/`char`/`paste`/`mouse_*` events for scripts). As in a Linux terminal the
+  client pastes with Ctrl+Shift+V / Shift+Insert / the middle button (plain Ctrl+V is a key): as typed text, or
+  bracketed (`ESC[200~ … ESC[201~`) once a program asked (`CSI.bracketedPaste`, mode 2004; readline does). The mouse
+  belongs to the terminal until a program asks for it (`CSI.mouse`); then clicks are reports in its input and the
+  middle button pastes only with Shift (`Terminal.mouseReporting`, synced to the client). Monitors have
   a TTY too (`monitor.getTty()`; the peripheral itself only keeps the text scale — there are no drawing or palette
   methods on monitors any more). A TTY that changes size queues `tty_resize(tty)` (monitors, virtual TTYs), which
   `WriteStream` turns into `'resize'`. There is no native `term` module any more: the ROM module `term` (class `Term`)
