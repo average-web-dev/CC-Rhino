@@ -193,6 +193,21 @@ public final class EventLoop {
         return thread;
     }
 
+    /**
+     * End the calling program at once ({@code process.exit}): its thread — the nearest one, from the calling thread up,
+     * with a {@link JSThread#context} — fails with {@code error}, as if its main code had thrown it. So the program ends
+     * even when {@code process.exit} is called from a callback while its main code is blocked; its descendants and
+     * pending work are discarded, and whoever waits for it sees {@code error}. Without a context (the root) nothing
+     * happens.
+     */
+    void exitContext(Object error) {
+        for (var thread = currentThread(); thread != null; thread = thread.parent) {
+            if (thread.context == null) continue;
+            if (!thread.isRoot()) threadFailed(thread, error);
+            return;
+        }
+    }
+
     /** Stop a thread: it and its descendants are killed and all their pending work is discarded. */
     void stop(JSThread thread) {
         if (thread.state == JSThread.State.RUNNING && !thread.isRoot()) kill(thread);

@@ -193,10 +193,12 @@ part of `assemble`.
   pending work — blocked calls, pending `/promises` operations, queued immediates/microtasks, ref'd timers, ref'd
   keep-alive handles (`handle()`/`handleRef`/`handleClose`; tty holds one per `process.stdin` listener while stdin
   flows). Plain pending promises and `events.on` listeners don't count (Node semantics). If `main()` returned a
-  thenable (`async main`, #44), its rejection is the program's error (exit code 1). `process.exit()` wakes the wait
-  (`wakeIdle`). Then the job throws its end signal (`exitCodeOf` → `null` for a normal end), which
-  *stops* the job's thread: everything it left behind (listeners, unref'd timers, reactions, spawned threads) is
-  discarded and nothing runs after the prompt. Daemons that outlive their program are not supported yet.
+  thenable (`async main`, #44), its rejection is the program's error (exit code 1). `process.exit()` ends the
+  program at once, as in Node, also from a callback or another thread while its main code blocks
+  (`internal/loop.exitContext`: the job's thread fails with the end signal). Otherwise the job throws its end signal
+  (`exitCodeOf` → `null` for a normal end), which *stops* the job's thread: everything it left behind (listeners,
+  unref'd timers, reactions, spawned threads) is discarded and nothing runs after the prompt. Daemons that outlive
+  their program are not supported yet.
 - Blocking calls look synchronous. A Java method returns a `MethodResult` with a destination
   (`TIMER` / `IO` / `YIELD`); `JSMethodBridge` captures a Rhino continuation, `EventLoop` parks it in the matching
   bucket, and `JSMachine.handleEvent` resumes it when the event arrives. Other `events.on` listeners keep running

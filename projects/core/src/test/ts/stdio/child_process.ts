@@ -38,6 +38,18 @@ exports.main = function () {
     process.stdin.on('data', function (line) { process.stdout.write('got ' + line); process.exit(0); });
 };`);
 fs.writeFileSync('/progs/forever.js', `exports.main = function () { require('system').sleep(100000); };`);
+fs.writeFileSync('/progs/exitlater.js', `
+exports.main = function () {
+    setTimeout(function () { process.exit(5); }, 1);
+    require('system').sleep(100000);
+    console.log('not reached');
+};`);
+fs.writeFileSync('/progs/exitthread.js', `
+exports.main = function () {
+    var parallel = require('parallel');
+    parallel.spawn(function () { require('system').sleep(1); process.exit(6); });
+    require('system').sleep(100000);
+};`);
 
 // ── spawnSync ────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -50,6 +62,11 @@ eq(process.cwd(), '/', "a child's chdir does not move the parent");
 eq(r.pid > 0, true, 'pid');
 
 eq(spawnSync('/progs/exit.js', [], { stdio: 'pipe' }).status, 3, 'process.exit(3)');
+// process.exit ends the program at once, as in Node, also from a callback or another thread while main blocks.
+let later = spawnSync('/progs/exitlater.js', [], { stdio: 'pipe' });
+eq(later.status, 5, 'process.exit in a timer while main sleeps');
+eq(later.stdout, '');
+eq(spawnSync('/progs/exitthread.js', [], { stdio: 'pipe' }).status, 6, 'process.exit in a spawned thread');
 
 let failed = spawnSync('/progs/fail.js', [], { stdio: 'pipe' });
 eq(failed.status, 1, 'a failing program exits with 1');

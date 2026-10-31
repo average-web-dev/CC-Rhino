@@ -130,16 +130,17 @@ export function exitCodeOf(e: unknown): number | null | undefined {
 }
 
 /**
- * process.exit(): end the calling program with `code`. Returns the signal to throw, which unwinds the program's code;
- * the job also ends if the signal is caught (or thrown in a callback or another thread), as the job's wait checks the
- * flag.
+ * process.exit(): end the calling program with `code`, at once (as in Node): the program's thread fails with the end
+ * signal, also when process.exit is called from a callback or another thread while the main code is blocked. Returns
+ * the signal to throw, which unwinds the calling code.
  */
 export function requestExit(code: number): Error {
     let job = current();
     job.exiting = true;
     job.exitRequest = code;
-    loop.wakeIdle();
-    return exitSignal(code);
+    let signal = exitSignal(code);
+    loop.exitContext(signal);
+    return signal;
 }
 
 function isThenable(value: unknown): value is PromiseLike<unknown> {
