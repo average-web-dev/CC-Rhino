@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 
-import static dan200.computercraft.core.tty.InputEncoder.*;
+import static dan200.computercraft.core.tty.GlfwKeys.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ScreenTest {
@@ -59,7 +59,7 @@ class ScreenTest {
         screen.show(2);
         screen.charTyped('h');
         screen.charTyped('i');
-        screen.keyDown(KEY_ENTER);
+        screen.keyDown(KEY_ENTER, false);
         assertEquals("hi\n", readAll(screen.consoles().get(2).tty().stdin()));
         assertEquals("hi        ", line(0), "echo is shown");
         assertTrue(screen.consoles().get(0).tty().stdin().read().isEmpty());
@@ -69,21 +69,43 @@ class ScreenTest {
     }
 
     @Test
+    void kitty_keyboard_flags_apply_in_raw_mode() {
+        screen.activate();
+        var tty = screen.consoles().get(0).tty();
+        tty.stdout().write("\u001b[>11u"); // disambiguate, event types, all keys
+
+        screen.keyDown(KEY_A + 23, false);
+        screen.charTyped('x');
+        screen.keyUp(KEY_A + 23);
+        screen.keyDown(KEY_ENTER, false);
+        assertEquals("x\n", readAll(tty.stdin()), "cooked mode edits lines with the legacy encoding");
+
+        tty.setRaw(true);
+        screen.keyDown(KEY_UP, false);
+        screen.keyDown(KEY_UP, true);
+        screen.keyUp(KEY_UP);
+        assertEquals("\u001b[A\u001b[1;1:2A\u001b[1;1:3A", readAll(tty.stdin()), "raw mode: repeat and release");
+
+        tty.stdout().write("\u001b[?u");
+        assertEquals("\u001b[?11u", readAll(tty.stdin()), "the query is answered in the input");
+    }
+
+    @Test
     void ctrl_c_interrupts_the_visible_console() {
         var interrupted = new ArrayList<Integer>();
         screen.setOnInterrupt(interrupted::add);
         screen.activate();
         screen.show(1);
-        screen.keyDown(KEY_LEFT_CONTROL);
-        screen.keyDown(KEY_A + 2); // Ctrl+C
+        screen.keyDown(KEY_LEFT_CONTROL, false);
+        screen.keyDown(KEY_A + 2, false); // Ctrl+C
         screen.keyUp(KEY_A + 2);
         screen.keyUp(KEY_LEFT_CONTROL);
         assertEquals(List.of(screen.consoles().get(1).tty().id()), interrupted);
 
         // In raw mode it is just a key.
         screen.consoles().get(1).tty().setRaw(true);
-        screen.keyDown(KEY_LEFT_CONTROL);
-        screen.keyDown(KEY_A + 2);
+        screen.keyDown(KEY_LEFT_CONTROL, false);
+        screen.keyDown(KEY_A + 2, false);
         screen.keyUp(KEY_LEFT_CONTROL);
         assertEquals(1, interrupted.size());
         assertEquals("\u0003", readAll(screen.consoles().get(1).tty().stdin()));
@@ -92,15 +114,15 @@ class ScreenTest {
     @Test
     void alt_digit_switches_consoles() {
         screen.activate();
-        screen.keyDown(KEY_LEFT_ALT);
-        screen.keyDown(49 + 1); // Alt+2
+        screen.keyDown(KEY_LEFT_ALT, false);
+        screen.keyDown(KEY_1 + 1, false); // Alt+2
         screen.charTyped('2');
         screen.keyUp(KEY_LEFT_ALT);
         assertEquals(1, screen.visible().index());
         assertTrue(screen.consoles().get(1).tty().stdin().read().isEmpty(), "the digit is not typed");
 
-        screen.keyDown(KEY_LEFT_ALT);
-        screen.keyDown(49 + 8); // Alt+9: no such console
+        screen.keyDown(KEY_LEFT_ALT, false);
+        screen.keyDown(KEY_1 + 8, false); // Alt+9: no such console
         screen.keyUp(KEY_LEFT_ALT);
         assertEquals(1, screen.visible().index());
     }
@@ -110,8 +132,8 @@ class ScreenTest {
         var single = new Screen(new Terminal(10, 3, false), 1);
         single.activate();
         single.consoles().get(0).tty().setRaw(true);
-        single.keyDown(KEY_LEFT_ALT);
-        single.keyDown(49);
+        single.keyDown(KEY_LEFT_ALT, false);
+        single.keyDown(KEY_1, false);
         single.charTyped('1');
         single.keyUp(KEY_LEFT_ALT);
         assertEquals("\u001b1", readAll(single.consoles().get(0).tty().stdin()), "Alt+1 is typed, not a switch");
@@ -122,10 +144,10 @@ class ScreenTest {
         screen.activate();
         var console = screen.consoles().get(0);
         console.tty().setRaw(true);
-        screen.mouse(Mouse.PRESS, 1, 2, 3);
+        screen.mouse(InputEncoder.Mouse.PRESS, 1, 2, 3);
         assertTrue(console.tty().stdin().read().isEmpty(), "not requested");
         console.tty().stdout().write("\u001b[?1000;1006h");
-        screen.mouse(Mouse.PRESS, 1, 2, 3);
+        screen.mouse(InputEncoder.Mouse.PRESS, 1, 2, 3);
         assertEquals("\u001b[<0;2;3M", readAll(console.tty().stdin()));
     }
 

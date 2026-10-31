@@ -40,7 +40,7 @@ public final class EventComputerInput implements ComputerInput {
     @Override
     public void keyDown(int key, boolean repeat) {
         receiver.queueEvent(new KeyEvent(key, repeat));
-        if (screen != null) screen.keyDown(key);
+        if (screen != null) screen.keyDown(key, repeat);
     }
 
     @Override

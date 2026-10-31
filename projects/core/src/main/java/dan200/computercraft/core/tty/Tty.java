@@ -84,7 +84,11 @@ public final class Tty {
         discipline.input(data);
     }
 
-    public synchronized boolean isRaw() {
+    /**
+     * Whether input passes the line discipline unchanged. Lock-free, so input devices may ask while holding their own
+     * lock.
+     */
+    public boolean isRaw() {
         return discipline.isRaw();
     }
 

@@ -5,9 +5,12 @@
 package dan200.computercraft.core.tty;
 
 import dan200.computercraft.core.terminal.Terminal;
+import org.jspecify.annotations.Nullable;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
+import java.util.function.Consumer;
 
 /**
  * Renders the output of a {@link Tty} onto a {@link Terminal} grid (a computer screen or a monitor), like a VT100-style
@@ -25,6 +28,9 @@ import java.nio.charset.StandardCharsets;
  *   {@code ESC 8}), full reset ({@code ESC c});</li>
  *   <li>DEC private modes ({@code ESC [ ? n h/l}): 25 (cursor blink), 1000/1002/1003 (mouse reporting) and 1006 (SGR
  *   mouse encoding), which {@link #mouseMode()} reports to the input side;</li>
+ *   <li>the kitty keyboard protocol's flags ({@code CSI > flags u} push, {@code CSI < n u} pop, {@code CSI = flags ;
+ *   mode u} change, {@code CSI ? u} query, answered in the TTY's input), which {@link #keyboardFlags()} reports to the
+ *   input side (see {@link InputEncoder});</li>
  *   <li>the CC blit sequence {@code ESC P cc-blit ; <text colours> ; <background colours> ; <text> ESC \}: writes
  *   {@code text} at the cursor with one colour per character ({@code 0}–{@code f}, as {@code term.blit}), without
  *   wrapping, and moves the cursor behind it.</li>
@@ -74,6 +80,11 @@ public final class TerminalEmulator {
     private int savedY = -1;
     private MouseMode mouseMode = MouseMode.NONE;
     private boolean sgrMouse;
+    /** The kitty keyboard flags pushed by programs; the top one applies. */
+    private final ArrayDeque<Integer> keyboardFlags = new ArrayDeque<>();
+    /** Answers to queries, sent to {@link #replyTo} once the output is rendered. */
+    private final StringBuilder replies = new StringBuilder();
+    private @Nullable Consumer<String> replyTo;
 
     /** Per-stream state: the default text colour and any escape sequence split across writes. */
     private static final class Stream {
@@ -93,9 +104,21 @@ public final class TerminalEmulator {
         return terminal;
     }
 
-    /** Attach this emulator to a TTY: its {@code stdout} and {@code stderr} are rendered here. */
+    /** Attach this emulator to a TTY: its {@code stdout} and {@code stderr} are rendered here, answers go to its input. */
     public void attach(Tty tty) {
+        setReplyTo(tty::input);
         tty.attach(this::writeOut, this::writeErr);
+    }
+
+    /** Where answers to queries in the output go: the input of the TTY this emulator shows. */
+    public synchronized void setReplyTo(@Nullable Consumer<String> replyTo) {
+        this.replyTo = replyTo;
+    }
+
+    /** The kitty keyboard flags the program asked for (see {@link InputEncoder}), 0 for the legacy encoding. */
+    public synchronized int keyboardFlags() {
+        var flags = keyboardFlags.peek();
+        return flags == null ? 0 : flags;
     }
 
     /** The mouse events the program asked for. */
@@ -109,23 +132,42 @@ public final class TerminalEmulator {
     }
 
     /** Render text written to {@code stdout}. */
-    public synchronized void writeOut(String text) {
-        write(text, out);
+    public void writeOut(String text) {
+        synchronized (this) {
+            write(text, out);
+        }
+        sendReplies();
     }
 
     /** Render text written to {@code stderr}, in red. */
-    public synchronized void writeErr(String text) {
-        if (!terminal.isColour()) {
-            write(text, err);
-            return;
+    public void writeErr(String text) {
+        synchronized (this) {
+            if (!terminal.isColour()) {
+                write(text, err);
+            } else {
+                var previous = terminal.getTextColour();
+                terminal.setTextColour(ERROR_FG);
+                try {
+                    write(text, err);
+                } finally {
+                    terminal.setTextColour(previous);
+                }
+            }
         }
-        var previous = terminal.getTextColour();
-        terminal.setTextColour(ERROR_FG);
-        try {
-            write(text, err);
-        } finally {
-            terminal.setTextColour(previous);
+        sendReplies();
+    }
+
+    /** Send the answers to queries, outside this emulator's lock (the TTY's input may echo into it). */
+    private void sendReplies() {
+        String reply;
+        Consumer<String> target;
+        synchronized (this) {
+            if (replies.isEmpty()) return;
+            reply = replies.toString();
+            replies.setLength(0);
+            target = replyTo;
         }
+        if (target != null) target.accept(reply);
     }
 
     private void write(String input, Stream stream) {
@@ -224,8 +266,9 @@ public final class TerminalEmulator {
         }
     }
 
+    /** The parameter bytes of ECMA-48 (0x30–0x3F): digits and {@code : ; < = > ?}. */
     private static boolean isCsiParameter(char ch) {
-        return (ch >= '0' && ch <= '9') || ch == ';' || ch == '?' || ch == '<';
+        return ch >= '0' && ch <= '?';
     }
 
     // ── Printing ─────────────────────────────────────────────────────────────────
@@ -303,6 +346,7 @@ public final class TerminalEmulator {
         terminal.setCursorPos(0, 0);
         mouseMode = MouseMode.NONE;
         sgrMouse = false;
+        keyboardFlags.clear();
     }
 
     // ── Colours ──────────────────────────────────────────────────────────────────
@@ -361,6 +405,10 @@ public final class TerminalEmulator {
 
     /** Execute a CSI sequence with the given parameters and final character. */
     private void csi(String paramText, char finalChar, Stream stream) {
+        if (finalChar == 'u' && !paramText.isEmpty() && "<>=?".indexOf(paramText.charAt(0)) >= 0) {
+            keyboard(paramText.charAt(0), parseParams(paramText.substring(1)));
+            return;
+        }
         var priv = paramText.startsWith("?");
         if (paramText.startsWith("<")) return; // SGR mouse reports belong to input, not output
         var params = parseParams(priv ? paramText.substring(1) : paramText);
@@ -419,6 +467,31 @@ public final class TerminalEmulator {
             default -> {
                 // Any other sequence is consumed without effect.
             }
+        }
+    }
+
+    /** The kitty keyboard protocol's flag stack (at most 16 entries; pushing more drops the oldest). */
+    private void keyboard(char kind, int[] params) {
+        var first = params.length > 0 ? params[0] : 0;
+        switch (kind) {
+            case '>' -> {
+                if (keyboardFlags.size() >= 16) keyboardFlags.removeLast();
+                keyboardFlags.push(first & InputEncoder.ALL_FLAGS);
+            }
+            case '<' -> {
+                for (var i = Math.max(first, 1); i > 0 && !keyboardFlags.isEmpty(); i--) keyboardFlags.pop();
+            }
+            case '=' -> {
+                var flags = first & InputEncoder.ALL_FLAGS;
+                var current = keyboardFlags.isEmpty() ? 0 : keyboardFlags.pop();
+                var mode = params.length > 1 ? params[1] : 1;
+                keyboardFlags.push(switch (mode) {
+                    case 2 -> current | flags;
+                    case 3 -> current & ~flags;
+                    default -> flags;
+                });
+            }
+            default -> replies.append("\u001b[?").append(keyboardFlags()).append('u');
         }
     }
 

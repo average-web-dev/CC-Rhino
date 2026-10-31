@@ -76,6 +76,30 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    void kitty_keyboard_flags() {
+        var replies = new StringBuilder();
+        emulator.setReplyTo(replies::append);
+        assertEquals(0, emulator.keyboardFlags());
+        emulator.writeOut("\u001b[>1u\u001b[>11u");
+        assertEquals(11, emulator.keyboardFlags(), "the last push applies");
+        emulator.writeOut("\u001b[?u");
+        assertEquals("\u001b[?11u", replies.toString(), "the query is answered in the input");
+        emulator.writeOut("\u001b[=4;2u");
+        assertEquals(15, emulator.keyboardFlags(), "mode 2 sets bits");
+        emulator.writeOut("\u001b[=1;3u");
+        assertEquals(14, emulator.keyboardFlags(), "mode 3 clears bits");
+        emulator.writeOut("\u001b[=2u");
+        assertEquals(2, emulator.keyboardFlags(), "mode 1 replaces");
+        emulator.writeOut("\u001b[<u");
+        assertEquals(1, emulator.keyboardFlags(), "pop");
+        emulator.writeOut("\u001b[<5u");
+        assertEquals(0, emulator.keyboardFlags(), "popping too many empties the stack");
+        emulator.writeOut("\u001b[>31u\u001bc");
+        assertEquals(0, emulator.keyboardFlags(), "a reset clears the flags");
+        assertEquals("", line(0).trim(), "nothing is printed");
+    }
+
+    @Test
     void cc_colour_extension() {
         emulator.writeOut("\u001b[38;6;12;48;6;4ma\u001b[38;6;16mb");
         assertEquals("cc", fg(0).substring(0, 2), "brown; 16 is ignored");

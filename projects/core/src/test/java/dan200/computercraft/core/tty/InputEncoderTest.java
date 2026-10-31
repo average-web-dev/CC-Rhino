@@ -6,6 +6,7 @@ package dan200.computercraft.core.tty;
 
 import org.junit.jupiter.api.Test;
 
+import static dan200.computercraft.core.tty.GlfwKeys.*;
 import static dan200.computercraft.core.tty.InputEncoder.*;
 import static dan200.computercraft.core.tty.TerminalEmulator.MouseMode;
 import static org.junit.jupiter.api.Assertions.*;
@@ -65,5 +66,91 @@ class InputEncoderTest {
     void x10_mouse() {
         assertEquals("\u001b[M" + (char) 32 + (char) 35 + (char) 36, encoder.mouse(Mouse.PRESS, 1, 3, 4, MouseMode.CLICKS, false));
         assertEquals("\u001b[M" + (char) 35 + (char) 35 + (char) 36, encoder.mouse(Mouse.RELEASE, 1, 3, 4, MouseMode.CLICKS, false));
+    }
+
+    // ── Kitty keyboard protocol ──────────────────────────────────────────────────
+
+    private static final int FULL = DISAMBIGUATE | REPORT_EVENT_TYPES | REPORT_ALL_KEYS | REPORT_TEXT;
+
+    @Test
+    void kitty_disambiguate() {
+        assertEquals("\u001b[27u", encoder.keyDown(KEY_ESCAPE, false, DISAMBIGUATE));
+        assertEquals("\r", encoder.keyDown(KEY_ENTER, false, DISAMBIGUATE), "Enter stays as it is");
+        assertNull(encoder.keyDown(KEY_A, false, DISAMBIGUATE), "plain text keys type their character");
+        assertEquals("a", encoder.charTyped('a', DISAMBIGUATE));
+        assertNull(encoder.keyUp(KEY_A, DISAMBIGUATE), "no releases without event types");
+
+        encoder.keyDown(KEY_LEFT_CONTROL, false, DISAMBIGUATE);
+        assertEquals("\u001b[99;5u", encoder.keyDown(KEY_A + 2, false, DISAMBIGUATE), "Ctrl+C");
+        assertEquals("\u001b[13;5u", encoder.keyDown(KEY_ENTER, false, DISAMBIGUATE), "Ctrl+Enter");
+        encoder.keyUp(KEY_LEFT_CONTROL, DISAMBIGUATE);
+
+        encoder.keyDown(KEY_LEFT_ALT, false, DISAMBIGUATE);
+        assertEquals("\u001b[120;3u", encoder.keyDown(KEY_A + 23, false, DISAMBIGUATE), "Alt+X");
+        assertNull(encoder.charTyped('x', DISAMBIGUATE), "the character is part of the report");
+        encoder.keyUp(KEY_LEFT_ALT, DISAMBIGUATE);
+
+        assertEquals("\u001b[57399u", encoder.keyDown(KEY_KP_0, false, DISAMBIGUATE), "keypad 0");
+        assertNull(encoder.charTyped('0', DISAMBIGUATE));
+        assertEquals("\u001b[57414u", encoder.keyDown(KEY_KP_ENTER, false, DISAMBIGUATE));
+        assertEquals("\u001b[A", encoder.keyDown(KEY_UP, false, DISAMBIGUATE));
+        assertEquals("\u001b[P", encoder.keyDown(KEY_F1, false, DISAMBIGUATE));
+        assertEquals("\u001b[13~", encoder.keyDown(KEY_F1 + 2, false, DISAMBIGUATE), "F3");
+        assertNull(encoder.keyDown(KEY_LEFT_SHIFT, false, DISAMBIGUATE), "modifier keys need REPORT_ALL_KEYS");
+    }
+
+    @Test
+    void kitty_event_types() {
+        var flags = DISAMBIGUATE | REPORT_EVENT_TYPES;
+        assertEquals("\u001b[A", encoder.keyDown(KEY_UP, false, flags));
+        assertEquals("\u001b[1;1:2A", encoder.keyDown(KEY_UP, true, flags), "repeat");
+        assertEquals("\u001b[1;1:3A", encoder.keyUp(KEY_UP, flags), "release");
+        assertEquals("\u001b[27;1:3u", encoder.keyUp(KEY_ESCAPE, flags));
+        assertNull(encoder.keyUp(KEY_A, flags), "text keys are only released with REPORT_ALL_KEYS");
+        assertNull(encoder.keyUp(KEY_ENTER, flags));
+        assertEquals("\u001b[A", encoder.keyDown(KEY_UP, true, DISAMBIGUATE), "without event types a repeat is a press");
+    }
+
+    @Test
+    void kitty_all_keys_with_text() {
+        assertNull(encoder.keyDown(KEY_A, false, FULL), "waits for the character");
+        assertEquals("\u001b[97;1;97u", encoder.charTyped('a', FULL));
+        assertEquals("\u001b[97;1:3u", encoder.keyUp(KEY_A, FULL));
+
+        assertEquals("\u001b[57441;2u", encoder.keyDown(KEY_LEFT_SHIFT, false, FULL), "left shift");
+        assertNull(encoder.keyDown(KEY_A, false, FULL));
+        assertEquals("\u001b[97;2;65u", encoder.charTyped('A', FULL), "the key is 'a', the text 'A'");
+        assertEquals("\u001b[97;2:2;65u", join(encoder.keyDown(KEY_A, true, FULL), encoder.charTyped('A', FULL)),
+            "repeat");
+        assertEquals("\u001b[97;2:3u", encoder.keyUp(KEY_A, FULL));
+        assertEquals("\u001b[57441;2:3u", encoder.keyUp(KEY_LEFT_SHIFT, FULL));
+        assertEquals("\u001b[57447;2u", encoder.keyDown(KEY_RIGHT_SHIFT, false, FULL), "right shift");
+        encoder.keyUp(KEY_RIGHT_SHIFT, FULL);
+
+        assertEquals("\u001b[13u", encoder.keyDown(KEY_ENTER, false, FULL));
+        assertEquals("\u001b[13;1:3u", encoder.keyUp(KEY_ENTER, FULL));
+        assertEquals("\u001b[127u", encoder.keyDown(KEY_BACKSPACE, false, FULL));
+
+        // A key whose character never comes (a dead key) is reported without text by the next key event.
+        assertNull(encoder.keyDown(KEY_GRAVE_ACCENT, false, FULL));
+        assertEquals("\u001b[96u\u001b[96;1:3u", encoder.keyUp(KEY_GRAVE_ACCENT, FULL));
+    }
+
+    @Test
+    void kitty_alternate_keys() {
+        var flags = FULL | REPORT_ALTERNATE_KEYS;
+        encoder.keyDown(KEY_LEFT_SHIFT, false, flags);
+        encoder.keyDown(KEY_1, false, flags);
+        assertEquals("\u001b[49:33;2;33u", encoder.charTyped('!', flags), "Shift+1 types '!'");
+    }
+
+    @Test
+    void kitty_flags_need_a_program() {
+        assertNull(encoder.keyUp(KEY_UP, 0), "the legacy encoding reports no releases");
+        assertEquals("\u001b", encoder.keyDown(KEY_ESCAPE, false, 0));
+    }
+
+    private static String join(String a, String b) {
+        return (a == null ? "" : a) + (b == null ? "" : b);
     }
 }

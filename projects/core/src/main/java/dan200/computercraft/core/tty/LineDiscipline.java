@@ -30,7 +30,7 @@ final class LineDiscipline {
     private final Runnable interrupt;
 
     private final StringBuilder line = new StringBuilder();
-    private boolean raw;
+    private volatile boolean raw;
     private EscapeState escape = EscapeState.NONE;
     private boolean lastWasCr;
 

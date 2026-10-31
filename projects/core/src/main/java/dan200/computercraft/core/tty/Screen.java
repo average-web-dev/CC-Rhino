@@ -12,6 +12,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.IntConsumer;
 
+import static dan200.computercraft.core.tty.GlfwKeys.KEY_1;
+
 /**
  * The screen and keyboard of a computer, as a set of virtual consoles.
  * <p>
@@ -25,8 +27,6 @@ import java.util.function.IntConsumer;
  * output on the computer thread.
  */
 public final class Screen {
-    private static final int KEY_1 = 49;
-
     private final Terminal display;
     private final int consoleCount;
     private final InputEncoder encoder = new InputEncoder();
@@ -48,6 +48,7 @@ public final class Screen {
             tty = new Tty(display.getWidth(), display.getHeight(), display.isColour());
             buffer = new Terminal(display.getWidth(), display.getHeight(), display.isColour());
             emulator = new TerminalEmulator(buffer);
+            emulator.setReplyTo(tty::input);
             tty.setColumnSource(buffer::getCursorX);
             tty.setOnInterrupt(() -> interrupted(tty.id()));
             tty.attach(text -> {
@@ -161,29 +162,47 @@ public final class Screen {
 
     // ── Input ────────────────────────────────────────────────────────────────────
 
-    public void keyDown(int key) {
+    /**
+     * A key was pressed (or repeats).
+     *
+     * @param key    The GLFW key code.
+     * @param repeat Whether the key is held and repeats.
+     */
+    public void keyDown(int key, boolean repeat) {
         var switchTo = -1;
         String data = null;
         Tty tty = null;
         synchronized (this) {
             if (!active) {
-                encoder.keyDown(key);
+                encoder.keyDown(key, repeat, 0);
                 return;
             }
             // Alt+1 … Alt+9 switch consoles, even while the program on the visible one hangs.
             if (encoder.isAlt() && !encoder.isCtrl() && key >= KEY_1 && key < KEY_1 + 9 && consoles.size() > 1) {
                 switchTo = key - KEY_1;
             } else {
-                data = encoder.keyDown(key);
-                tty = consoles.get(visible).tty;
+                var console = consoles.get(visible);
+                tty = console.tty;
+                data = encoder.keyDown(key, repeat, keyboardFlags(console));
             }
         }
         if (switchTo >= 0) show(switchTo);
         if (data != null && tty != null) tty.input(data);
     }
 
-    public synchronized void keyUp(int key) {
-        encoder.keyUp(key);
+    public void keyUp(int key) {
+        String data;
+        Tty tty = null;
+        synchronized (this) {
+            if (!active) {
+                encoder.keyUp(key, 0);
+                return;
+            }
+            var console = consoles.get(visible);
+            tty = console.tty;
+            data = encoder.keyUp(key, keyboardFlags(console));
+        }
+        if (data != null) tty.input(data);
     }
 
     public void charTyped(char ch) {
@@ -193,10 +212,16 @@ public final class Screen {
             if (!active) return;
             // The digit of an Alt+digit switch also arrives as a character.
             if (encoder.isAlt() && !encoder.isCtrl() && ch >= '1' && ch <= '9' && consoles.size() > 1) return;
-            data = encoder.charTyped(ch);
-            tty = consoles.get(visible).tty;
+            var console = consoles.get(visible);
+            tty = console.tty;
+            data = encoder.charTyped(ch, keyboardFlags(console));
         }
         if (data != null) tty.input(data);
+    }
+
+    /** The kitty keyboard flags of a console's program; they only apply in raw mode (cooked mode edits lines). */
+    private static int keyboardFlags(Console console) {
+        return console.tty.isRaw() ? console.emulator.keyboardFlags() : 0;
     }
 
     public void paste(String text) {
