@@ -13,12 +13,12 @@ interface TermSize {
 /**
  * A drawing and input API over a TTY: it writes ANSI escape sequences into the TTY (and reads from it), so it works
  * on any TTY (a console of the screen, a monitor, a virtual TTY). Colours apply to what is written through this Term
- * only; text wraps at the Term's width; the Term tracks its cursor itself.
+ * only; write() cuts text off at the Term's width, print() wraps; the Term tracks its cursor itself.
  */
 interface Term {
     /** The TTY this Term draws on, if it was given one (otherwise it uses process.stdin / process.stdout). */
     readonly tty: TTY | undefined;
-    /** The size text wraps at: the TTY's, unless set with setSize. */
+    /** The size print() wraps and write() cuts off at: the TTY's, unless set with setSize. */
     getSize(): TermSize;
     /** Wrap text at `width` and treat `height` as the last row. */
     setSize(width: number, height: number): void;
@@ -32,9 +32,12 @@ interface Term {
     setTextColor(colour: number): void;
     getBackgroundColor(): number;
     setBackgroundColor(colour: number): void;
-    /** Write text at the cursor in this Term's colours, wrapping at its width; `\n` starts a new row. */
+    /**
+     * Write text at the cursor in this Term's colours, cut off at the right edge (never wraps, so drawing on the last row
+     * does not scroll); `\n` starts a new row. The cursor moves behind the text, also past the edge.
+     */
     write(text: string): void;
-    /** write(text) followed by a new row. */
+    /** Write text and start a new row, wrapping at the Term's width (scrolling at the bottom), like console.log. */
     print(text?: string): void;
     /** Write `text` with one colour per character (blit digits `0` … `f`), without wrapping. */
     blit(text: string, textColour: string, backgroundColour: string): void;
@@ -44,7 +47,12 @@ interface Term {
     clearLine(): void;
     /** Scroll the contents up by `n` rows (down if negative). */
     scroll(n: number): void;
-    /** Wait for a key (a Node key object), or `undefined` at end of input. Mouse reports are ignored. */
+    /**
+     * Wait for the next input: a key or (after `CSI.mouse(true)`) a mouse event, or `undefined` at end of input.
+     * Compare `type` against InputType, `action` against MouseAction, `button` against MouseButton.
+     */
+    readInput(): TtyInput | undefined;
+    /** Wait for a key (a Node key object), or `undefined` at end of input. Mouse reports are skipped. */
     readKey(): Key | undefined;
     /** Wait for one character of input, or `undefined` at end of input. */
     readChar(): string | undefined;
@@ -73,6 +81,9 @@ interface KeyNames {
 interface TermModule {
     Term: TermConstructor;
     KeyName: KeyNames;
+    InputType: TtyInputTypes;
+    MouseAction: TtyMouseActions;
+    MouseButton: TtyMouseButtons;
 }
 
 declare function require(id: "term"): TermModule;

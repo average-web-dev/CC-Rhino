@@ -87,11 +87,54 @@ interface TtyEscapes {
     readonly clearScreenDown: string;
 }
 
+/** A key from tty.decodeInput() / Term.readInput(): a Node key object. */
+interface TtyKeyInput extends Key {
+    type: "key";
+}
+
+type TtyMouseAction = "press" | "release" | "drag" | "move" | "scroll";
+type TtyMouseButton = "left" | "middle" | "right";
+
+/** A mouse report from tty.decodeInput() / Term.readInput() (only sent after `CSI.mouse(true)`). */
+interface TtyMouseInput {
+    type: "mouse";
+    action: TtyMouseAction;
+    /** The button pressed, released or dragged with (undefined for scroll, move and an X10 release). */
+    button: TtyMouseButton | undefined;
+    /** For scroll: -1 up, 1 down; otherwise 0. */
+    direction: -1 | 0 | 1;
+    /** Column, starting at 0 (as Term's cursor). */
+    x: number;
+    /** Row, starting at 0. */
+    y: number;
+    ctrl: boolean;
+    /** Alt was held (named as in Node key objects). */
+    meta: boolean;
+    shift: boolean;
+    /** The characters of the report. */
+    sequence: string;
+}
+
+/** What a TTY delivers, decoded: compare `type` against InputType. */
+type TtyInput = TtyKeyInput | TtyMouseInput;
+
+interface TtyInputTypes { readonly KEY: "key"; readonly MOUSE: "mouse"; }
+interface TtyMouseActions {
+    readonly PRESS: "press"; readonly RELEASE: "release"; readonly DRAG: "drag"; readonly MOVE: "move";
+    readonly SCROLL: "scroll";
+}
+interface TtyMouseButtons { readonly LEFT: "left"; readonly MIDDLE: "middle"; readonly RIGHT: "right"; }
+
 interface TtyModule {
     TTY: TTYConstructor;
     ReadStream: { new (tty: TtyHandle, options?: TtyReadStreamOptions): TtyStdin; readonly prototype: TtyStdin };
     WriteStream: { new (tty: TtyHandle, pipe: PipeHandle, fd: number): TtyWriteStream; readonly prototype: TtyWriteStream };
     CSI: TtyEscapes;
+    /** The other direction of CSI: split terminal input into keys and mouse events, in order. */
+    decodeInput(data: string): TtyInput[];
+    InputType: TtyInputTypes;
+    MouseAction: TtyMouseActions;
+    MouseButton: TtyMouseButtons;
     /** A CC colour (a power of two, 1 … 32768) as its blit index (0 = white … 15 = black); RangeError otherwise. */
     colourIndex(colour: number, argument?: string): number;
     /** Whether `fd` is a TTY: process.stdin/stdout/stderr (0, 1, 2) always are. */

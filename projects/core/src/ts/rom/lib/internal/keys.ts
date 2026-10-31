@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 // /rom/lib/internal/keys.ts — decoding terminal input (the characters and VT sequences a TTY delivers) into Node
-// keypress events. Used by the tty streams (process.stdin emits 'keypress') and by readline.emitKeypressEvents.
+// keypress events and mouse events. Used by the tty streams (process.stdin emits 'keypress'),
+// readline.emitKeypressEvents, tty.decodeInput and Term.
 
 /** The names of the keys in Node key objects (`key.name`), so code compares against constants, not strings. */
 export const KeyName = {
@@ -14,6 +15,17 @@ export const KeyName = {
     F1: 'f1', F2: 'f2', F3: 'f3', F4: 'f4', F5: 'f5', F6: 'f6', F7: 'f7', F8: 'f8', F9: 'f9', F10: 'f10', F11: 'f11',
     F12: 'f12',
 } as const;
+
+/** The kinds of input tty.decodeInput() returns (`input.type`). */
+export const InputType = { KEY: 'key', MOUSE: 'mouse' } as const;
+
+/** What a mouse report says happened (`input.action`). */
+export const MouseAction = {
+    PRESS: 'press', RELEASE: 'release', DRAG: 'drag', MOVE: 'move', SCROLL: 'scroll',
+} as const;
+
+/** The mouse buttons (`input.button`). */
+export const MouseButton = { LEFT: 'left', MIDDLE: 'middle', RIGHT: 'right' } as const;
 
 function keyFor(name: string | undefined, sequence: string, ctrl = false, meta = false, shift = false): Key {
     return { sequence, name, ctrl, meta, shift };
@@ -30,7 +42,10 @@ const CSI_KEYS: Record<string, string> = {
 
 /** A mouse report from the TTY (see the xterm mouse protocols). */
 export interface MouseReport {
-    /** The xterm button code: 0 left, 1 middle, 2 right, +32 motion, 64/65 scroll; modifiers +4 shift, +8 alt, +16 ctrl. */
+    /**
+     * The xterm button code: 0 left, 1 middle, 2 right (3 none: an X10 release or plain motion), +32 motion, 64/65
+     * scroll; modifiers +4 shift, +8 alt, +16 ctrl.
+     */
     code: number;
     /** Column, starting at 1. */
     x: number;
@@ -64,8 +79,7 @@ export function mouseReportAt(data: string, i: number, report?: (mouse: MouseRep
         let code = data.charCodeAt(i + 3) - 32;
         if (report !== undefined) {
             report({
-                code: (code & 3) === 3 ? code & ~3 : code, x: data.charCodeAt(i + 4) - 32, y: data.charCodeAt(i + 5) - 32,
-                release: (code & 3) === 3,
+                code, x: data.charCodeAt(i + 4) - 32, y: data.charCodeAt(i + 5) - 32, release: (code & 3) === 3,
             });
         }
         return 6;
@@ -73,17 +87,52 @@ export function mouseReportAt(data: string, i: number, report?: (mouse: MouseRep
     return 0;
 }
 
+const BUTTONS: (TtyMouseButton | undefined)[] = [MouseButton.LEFT, MouseButton.MIDDLE, MouseButton.RIGHT, undefined];
+const MOUSE_SHIFT = 4;
+const MOUSE_ALT = 8;
+const MOUSE_CTRL = 16;
+const MOUSE_MOTION = 32;
+const MOUSE_WHEEL = 64;
+
+/** A mouse report as a mouse event (coordinates from 0, like Term's cursor). */
+function mouseInput(report: MouseReport, sequence: string): TtyMouseInput {
+    let code = report.code;
+    let button = BUTTONS[code & 3];
+    let action: TtyMouseAction;
+    let direction: -1 | 0 | 1 = 0;
+    if ((code & MOUSE_WHEEL) !== 0) {
+        action = MouseAction.SCROLL;
+        direction = (code & 1) === 0 ? -1 : 1;
+        button = undefined;
+    } else if (report.release) {
+        action = MouseAction.RELEASE;
+    } else if ((code & MOUSE_MOTION) !== 0) {
+        action = button === undefined ? MouseAction.MOVE : MouseAction.DRAG;
+    } else {
+        action = MouseAction.PRESS;
+    }
+    return {
+        type: InputType.MOUSE, action, button, direction, x: report.x - 1, y: report.y - 1,
+        shift: (code & MOUSE_SHIFT) !== 0, meta: (code & MOUSE_ALT) !== 0, ctrl: (code & MOUSE_CTRL) !== 0, sequence,
+    };
+}
+
 /**
- * Split terminal input into Node keypress events: emit(sequenceOrUndefined, key). Mouse reports are skipped (they are
- * not keys).
+ * Split terminal input into keys and mouse reports: onKey(sequenceOrUndefined, key) gets Node keypress arguments,
+ * onMouse the mouse events.
  */
-export function decodeKeys(data: string, emit: (s: string | undefined, key: Key) => void): void {
+function decode(data: string, onKey: (s: string | undefined, key: Key) => void, onMouse: (mouse: TtyMouseInput) => void): void {
     let i = 0;
     while (i < data.length) {
         let ch = data.charAt(i);
         if (ch === '\x1b') {
-            let mouse = mouseReportAt(data, i);
-            if (mouse > 0) { i += mouse; continue; }
+            let report: MouseReport | undefined;
+            let length = mouseReportAt(data, i, (r) => { report = r; });
+            if (length > 0) {
+                onMouse(mouseInput(report!, data.slice(i, i + length)));
+                i += length;
+                continue;
+            }
             let next = data.charAt(i + 1);
             if (next === '[' || next === 'O') {
                 let j = i + 2;
@@ -103,25 +152,37 @@ export function decodeKeys(data: string, emit: (s: string | undefined, key: Key)
                 }
                 let m = modifier - 1;
                 if (final === 'Z') {
-                    emit(undefined, keyFor(KeyName.TAB, sequence, false, false, true));
+                    onKey(undefined, keyFor(KeyName.TAB, sequence, false, false, true));
                 } else {
-                    emit(undefined, keyFor(CSI_KEYS[code], sequence, (m & 4) !== 0, (m & 2) !== 0, (m & 1) !== 0));
+                    onKey(undefined, keyFor(CSI_KEYS[code], sequence, (m & 4) !== 0, (m & 2) !== 0, (m & 1) !== 0));
                 }
                 i = j + 1;
                 continue;
             }
-            if (next === '') { emit('\x1b', keyFor(KeyName.ESCAPE, '\x1b')); i++; continue; }
+            if (next === '') { onKey('\x1b', keyFor(KeyName.ESCAPE, '\x1b')); i++; continue; }
             // ESC + key: the key with meta.
             let key = decodeSingle(next);
             key.meta = true;
             key.sequence = '\x1b' + next;
-            emit(key.sequence, key);
+            onKey(key.sequence, key);
             i += 2;
             continue;
         }
-        emit(ch, decodeSingle(ch));
+        onKey(ch, decodeSingle(ch));
         i++;
     }
+}
+
+/** Split terminal input into Node keypress events: emit(sequenceOrUndefined, key). Mouse reports are skipped. */
+export function decodeKeys(data: string, emit: (s: string | undefined, key: Key) => void): void {
+    decode(data, emit, () => {});
+}
+
+/** Decode terminal input into keys and mouse events, in order (the counterpart of tty.CSI). */
+export function decodeInput(data: string): TtyInput[] {
+    let out: TtyInput[] = [];
+    decode(data, (_s, key) => { out.push({ type: InputType.KEY, ...key }); }, (mouse) => { out.push(mouse); });
+    return out;
 }
 
 function decodeSingle(ch: string): Key {

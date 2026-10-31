@@ -15,15 +15,16 @@
 //   selects its colours and resets them afterwards (other output, e.g. console.log, keeps the default colours).
 // - The Term keeps track of its cursor itself (it knows what it wrote); others writing to the same TTY move the real
 //   cursor without it noticing, so setCursorPos before drawing is the safe pattern.
-// - Text wraps at the Term's width (the TTY's, unless set with setSize) and scrolls at the bottom.
-// - Input (readKey / readChar / readLine) reads the TTY's stdin and ignores mouse reports; use events (mouse_click,
-//   monitor_touch) for the mouse.
+// - write() cuts text off at the Term's width (the TTY's, unless set with setSize), so drawing never scrolls; print()
+//   wraps at the width and scrolls at the bottom, like console.log.
+// - Input reads the TTY's stdin: readInput returns keys and mouse events (after CSI.mouse(true)), readKey / readChar /
+//   readLine skip mouse reports. The mouse is also available as events (mouse_click, monitor_touch).
 
 import { TTY, CSI, colourIndex } from '/rom/lib/tty';
-import { decodeKeys, stripMouse, KeyName } from '/rom/lib/internal/keys';
+import { decodeInput, stripMouse, KeyName, InputType, MouseAction, MouseButton } from '/rom/lib/internal/keys';
 
-/** The names of the keys readKey() returns (`key.name`). */
-export { KeyName };
+/** The names of the keys readKey() returns (`key.name`), and the constants for readInput()'s results. */
+export { KeyName, InputType, MouseAction, MouseButton };
 
 const WHITE = 1;
 const BLACK = 32768;
@@ -58,7 +59,7 @@ export class Term {
 
     // ── Size ─────────────────────────────────────────────────────────────────────
 
-    /** The size text wraps at: the TTY's, unless set with setSize. */
+    /** The size print() wraps and write() cuts off at: the TTY's, unless set with setSize. */
     getSize(): TermSize {
         return this.#size ?? { width: this.#output.columns, height: this.#output.rows };
     }
@@ -123,9 +124,20 @@ export class Term {
         if (this.#y < this.getSize().height - 1) this.#y++;
     }
 
-    /** Write text at the cursor in this Term's colours, wrapping at its width; `\n` starts a new row. */
+    /**
+     * Write text at the cursor in this Term's colours, cut off at the right edge (it never wraps, so drawing on the last
+     * row does not scroll); `\n` starts a new row. The cursor moves behind the text, also past the edge.
+     */
     write(text: string): void {
-        text = String(text);
+        this.#emit(String(text), false);
+    }
+
+    /** Write text and start a new row, wrapping at the Term's width (scrolling at the bottom), like console.log. */
+    print(text = ''): void {
+        this.#emit(String(text) + '\n', true);
+    }
+
+    #emit(text: string, wrap: boolean): void {
         let width = this.getSize().width;
         let out: string[] = [];
         let colours = this.#colours();
@@ -136,26 +148,21 @@ export class Term {
             let ch = text.charAt(i);
             if (ch === '\n') { flush(); this.#newLine(out); continue; }
             if (ch === '\r') { flush(); out.push('\r'); this.#x = 0; continue; }
-            if (this.#x >= width) { flush(); this.#newLine(out); }
+            if (this.#x >= width && wrap) { flush(); this.#newLine(out); }
             if (ch === '\t') {
-                let spaces = Math.min(8 - (this.#x % 8), width - this.#x);
-                run += ' '.repeat(spaces);
-                this.#x += spaces;
+                let spaces = 8 - (this.#x % 8);
+                run += ' '.repeat(Math.max(0, Math.min(spaces, width - this.#x)));
+                this.#x += wrap ? Math.min(spaces, width - this.#x) : spaces;
                 continue;
             }
             let code = ch.charCodeAt(0);
             if (code < 0x20 || code === 0x7f) continue; // other control characters would confuse the emulator
-            run += ch;
+            if (this.#x < width) run += ch;
             this.#x++;
         }
         flush();
         if (colours !== '') out.push(CSI.reset);
         this.#out(out.join(''));
-    }
-
-    /** write(text) followed by a new row. */
-    print(text = ''): void {
-        this.write(String(text) + '\n');
     }
 
     /**
@@ -197,42 +204,65 @@ export class Term {
 
     // ── Input ────────────────────────────────────────────────────────────────────
 
-    /** Read more input from the TTY (blocks); mouse reports are dropped. */
+    /** Read more input from the TTY (blocks); it keeps mouse reports for readInput(). */
     #fill(): boolean {
         let data = this.#input.readSync();
         if (data === undefined) return false;
-        this.#text += stripMouse(data);
+        this.#text += data;
         return true;
+    }
+
+    /** Drop the mouse reports from the buffered input (for the readers of text). */
+    #textOnly(): void {
+        this.#text = stripMouse(this.#text);
+    }
+
+    /**
+     * Wait for the next input: a key (`{ type: InputType.KEY, sequence, name, ctrl, meta, shift }`) or, once mouse
+     * reports are asked for (`CSI.mouse(true)`), a mouse event (`{ type: InputType.MOUSE, action, button, direction,
+     * x, y, ctrl, meta, shift }`, coordinates from 0); `undefined` at end of input. Use raw mode for single keys.
+     */
+    readInput(): TtyInput | undefined {
+        while (this.#text.length === 0) {
+            if (!this.#fill()) return undefined;
+        }
+        let input = decodeInput(this.#text)[0];
+        this.#text = this.#text.slice(Math.max(1, input.sequence.length));
+        return input;
     }
 
     /**
      * Wait for a key and return it as a Node key object (`{ sequence, name, ctrl, meta, shift }`), or `undefined` at
-     * end of input. Use raw mode (`process.stdin.setRawMode(true)`) to get every key as it is pressed.
+     * end of input. Mouse reports are skipped. Use raw mode (`process.stdin.setRawMode(true)`) to get every key as it
+     * is pressed.
      */
     readKey(): Key | undefined {
-        while (this.#text.length === 0) {
-            if (!this.#fill()) return undefined;
+        while (true) {
+            let input = this.readInput();
+            if (input === undefined) return undefined;
+            if (input.type === InputType.KEY) {
+                let { sequence, name, ctrl, meta, shift } = input;
+                return { sequence, name, ctrl, meta, shift };
+            }
         }
-        let first: Key | undefined;
-        decodeKeys(this.#text, (_sequence, key) => { if (first === undefined) first = key; });
-        let key = first!;
-        this.#text = this.#text.slice(Math.max(1, key.sequence.length));
-        return key;
     }
 
-    /** Wait for one character of input, or `undefined` at end of input. */
+    /** Wait for one character of input, or `undefined` at end of input. Mouse reports are skipped. */
     readChar(): string | undefined {
+        this.#textOnly();
         while (this.#text.length === 0) {
             if (!this.#fill()) return undefined;
+            this.#textOnly();
         }
         let ch = this.#text.charAt(0);
         this.#text = this.#text.slice(1);
         return ch;
     }
 
-    /** Wait for a line of input (without its line ending), or `undefined` at end of input. */
+    /** Wait for a line of input (without its line ending), or `undefined` at end of input. Mouse reports are skipped. */
     readLine(): string | undefined {
         while (true) {
+            this.#textOnly();
             let match = /\r?\n|\r/.exec(this.#text);
             if (match !== null) {
                 let line = this.#text.slice(0, match.index);

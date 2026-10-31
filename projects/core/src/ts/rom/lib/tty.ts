@@ -26,6 +26,12 @@ import loop from 'internal/loop';
 import pty from 'internal/pty';
 import { decodeKeys } from '/rom/lib/internal/keys';
 
+/**
+ * The other direction of CSI: decodeInput(data) splits what a TTY delivers into keys (Node key objects) and mouse
+ * events, compared against InputType / MouseAction / MouseButton instead of strings.
+ */
+export { decodeInput, InputType, MouseAction, MouseButton } from '/rom/lib/internal/keys';
+
 const ESC = '\x1b';
 
 /** Decode a chunk (string or bytes) to a string; bytes are taken as Latin-1, the terminal's character set. */

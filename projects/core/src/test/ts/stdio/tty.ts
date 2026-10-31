@@ -6,8 +6,8 @@
 
 import * as prelude from './prelude';
 import asyncMod from 'async';
-import { TTY, ReadStream, WriteStream, isatty } from 'tty';
-import { Term } from 'term';
+import { TTY, ReadStream, WriteStream, isatty, decodeInput, InputType, MouseAction, MouseButton } from 'tty';
+import { Term, KeyName } from 'term';
 
 const eq = prelude.eq, throws = prelude.throws;
 
@@ -85,6 +85,23 @@ t.setRawMode(false);
 t.stdin.pause();
 t.readOutput();
 
+// ── decodeInput: the other direction of CSI ─────────────────────────────────────────────────────────────────────
+
+const decoded = decodeInput('a\x1b[A\x1b[<4;3;2M\x1b[<0;3;2m\x1b[<32;4;2M\x1b[<65;1;1M\x1b[M#!!');
+same(decoded.map((i) => i.type), [InputType.KEY, InputType.KEY, InputType.MOUSE, InputType.MOUSE, InputType.MOUSE,
+    InputType.MOUSE, InputType.MOUSE]);
+const [plain, up, press, release, drag, wheel, x10] = decoded;
+same(plain.type === InputType.KEY && [plain.name, plain.sequence], ['a', 'a']);
+same(up.type === InputType.KEY && up.name, KeyName.UP);
+same(press.type === InputType.MOUSE && [press.action, press.button, press.x, press.y, press.shift, press.ctrl],
+    [MouseAction.PRESS, MouseButton.LEFT, 2, 1, true, false], 'Shift+click at column 3, row 2 (0-based 2, 1)');
+same(release.type === InputType.MOUSE && [release.action, release.button, release.shift], [MouseAction.RELEASE, MouseButton.LEFT, false]);
+same(drag.type === InputType.MOUSE && [drag.action, drag.button, drag.x], [MouseAction.DRAG, MouseButton.LEFT, 3]);
+same(wheel.type === InputType.MOUSE && [wheel.action, wheel.button, wheel.direction], [MouseAction.SCROLL, null, 1]);
+same(x10.type === InputType.MOUSE && [x10.action, x10.button, x10.x, x10.y], [MouseAction.RELEASE, null, 0, 0],
+    'an X10 release names no button');
+eq(press.sequence, '\x1b[<4;3;2M');
+
 // ── Term on a virtual TTY ────────────────────────────────────────────────────────────────────────────────────────
 
 const v = new TTY(5, 3);
@@ -97,8 +114,15 @@ eq(v.readOutput(), 'ab', 'default colours: plain text');
 same(term.getCursorPos(), { x: 2, y: 0 });
 
 term.write('cdefg');
-eq(v.readOutput(), 'cde\r\nfg', 'wraps at the width');
-same(term.getCursorPos(), { x: 2, y: 1 });
+eq(v.readOutput(), 'cde', 'write cuts off at the width');
+same(term.getCursorPos(), { x: 7, y: 0 }, 'the cursor moves past the edge');
+term.setCursorPos({ x: 0, y: 0 });
+v.readOutput();
+term.print('abcdefg');
+eq(v.readOutput(), 'abcde\r\nfg\r\n', 'print wraps at the width');
+same(term.getCursorPos(), { x: 0, y: 2 });
+term.setCursorPos({ x: 2, y: 1 });
+v.readOutput();
 
 term.setTextColor(16384);
 term.setBackgroundColor(4096);
@@ -125,6 +149,13 @@ v.input('\x1b[<0;1;1Mq\x1b[Bz');
 eq(term.readKey()!.name, 'q');
 eq(term.readKey()!.name, 'down');
 eq(term.readChar(), 'z');
+// readInput returns mouse events too; readChar skips them.
+v.input('\x1b[<2;5;4Mk\x1b[<0;1;1Mw');
+const click = term.readInput()!;
+same(click.type === InputType.MOUSE && [click.action, click.button, click.x, click.y],
+    [MouseAction.PRESS, MouseButton.RIGHT, 4, 3]);
+same(term.readInput()!.type, InputType.KEY);
+eq(term.readChar(), 'w');
 v.setRawMode(false);
 v.input('first\rsecond\r');
 eq(term.readLine(), 'first');
