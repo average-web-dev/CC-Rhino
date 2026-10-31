@@ -293,8 +293,13 @@ part of `assemble`.
   `process.argv.slice(2)` / `process.cwd()`); bash calls it, or just runs the module's top-level code (Node style).
   `main` may be `async`
   (return a promise); the exit code is `process.exitCode`, not `main`'s return value. Line-oriented programs use
-  `readline` / `process.stdin`; full-screen programs (`edit`) read keys from their TTY (`Term.readKey`, stdin
-  `'keydown'`) — bash pauses its own interface while a program runs. Node-style classes (`Console`, `readline.Interface`, the internal
+  `readline` / `process.stdin`; full-screen programs read keys from their TTY (stdin `'keydown'` / `'paste'` /
+  `'mouse'`, as `vi` does; `edit` still blocks in `Term.readKey`) — bash pauses its own interface while a program runs.
+- **Prefer event-driven code**, as in Node: programs and libraries react to events (stdin `'keydown'` / `'data'`,
+  stdout `'resize'`, timers, `events.on`, promises) and return from `main`; the flowing stdin, pending timers and
+  operations keep the job alive, and a program ends by removing its listeners / pausing stdin (cleanup in one
+  `close()` that also runs when a handler throws). Blocking loops (`while (…) term.readInput()`, polling with
+  `sleep`) only where the work is truly sequential (a one-shot prompt, a script). Node-style classes (`Console`, `readline.Interface`, the internal
   `EventEmitter`, `Timeout`/`Immediate`) are real `class`es; `Console` and the readline `Interface`s are exported
   through `/rom/lib/internal/callable`, so that, as in Node, they also work without `new`.
 - Argument checks in ROM code use `internal/validators` (`validateString`, `validateInteger(v, name, min, max)`,
