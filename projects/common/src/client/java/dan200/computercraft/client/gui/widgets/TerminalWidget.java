@@ -48,6 +48,8 @@ public class TerminalWidget extends AbstractWidget {
 
     private float rebootTimer = -1;
     private float shutdownTimer = -1;
+    /** The middle button pasted: its release and drags are not sent to the computer. */
+    private boolean middlePasted;
 
     public TerminalWidget(Terminal terminal, UserComputerInput computerInput, ClientComputerActions computerActions, int x, int y) {
         super(x, y, terminal.getWidth() * FONT_WIDTH + MARGIN * 2, terminal.getHeight() * FONT_HEIGHT + MARGIN * 2, DESCRIPTION);
@@ -71,7 +73,8 @@ public class TerminalWidget extends AbstractWidget {
     @Override
     public boolean keyPressed(int key, int scancode, int modifiers) {
         if (key == GLFW.GLFW_KEY_ESCAPE) return false;
-        if (Screen.isPaste(key)) {
+        // Paste as terminals do (Ctrl+Shift+V, Shift+Insert): a plain Ctrl+V is a key for the program.
+        if (isPasteShortcut(key, modifiers)) {
             paste();
             return true;
         }
@@ -92,6 +95,12 @@ public class TerminalWidget extends AbstractWidget {
         }
 
         return true;
+    }
+
+    private static boolean isPasteShortcut(int key, int modifiers) {
+        var mods = modifiers & (GLFW.GLFW_MOD_CONTROL | GLFW.GLFW_MOD_SHIFT | GLFW.GLFW_MOD_ALT | GLFW.GLFW_MOD_SUPER);
+        return (key == GLFW.GLFW_KEY_V && mods == (GLFW.GLFW_MOD_CONTROL | GLFW.GLFW_MOD_SHIFT))
+            || (key == GLFW.GLFW_KEY_INSERT && mods == GLFW.GLFW_MOD_SHIFT);
     }
 
     private void paste() {
@@ -116,6 +125,13 @@ public class TerminalWidget extends AbstractWidget {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (!inTermRegion(mouseX, mouseY)) return false;
 
+        // The middle button pastes, as in a terminal; if a program asked for the mouse, only together with Shift.
+        if (button == GLFW.GLFW_MOUSE_BUTTON_MIDDLE && (!terminal.getMouseReporting() || Screen.hasShiftDown())) {
+            middlePasted = true;
+            paste();
+            return true;
+        }
+
         var charX = (int) ((mouseX - innerX) / FONT_WIDTH);
         var charY = (int) ((mouseY - innerY) / FONT_HEIGHT);
         computerInput.mouseClick(button + 1, charX + 1, charY + 1);
@@ -125,6 +141,10 @@ public class TerminalWidget extends AbstractWidget {
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (button == GLFW.GLFW_MOUSE_BUTTON_MIDDLE && middlePasted) {
+            middlePasted = false;
+            return true;
+        }
         if (!inTermRegion(mouseX, mouseY)) return false;
 
         var charX = (int) ((mouseX - innerX) / FONT_WIDTH);
@@ -136,6 +156,7 @@ public class TerminalWidget extends AbstractWidget {
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double v2, double v3) {
+        if (button == GLFW.GLFW_MOUSE_BUTTON_MIDDLE && middlePasted) return true;
         if (!inTermRegion(mouseX, mouseY)) return false;
 
         var charX = (int) ((mouseX - innerX) / FONT_WIDTH);

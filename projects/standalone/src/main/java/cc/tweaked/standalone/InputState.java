@@ -59,7 +59,9 @@ public class InputState {
     private void keyPressed(long window, int key, int modifiers) {
         if (key == GLFW.GLFW_KEY_ESCAPE) return;
 
-        if (key == GLFW.GLFW_KEY_V && modifiers == GLFW.GLFW_MOD_CONTROL) {
+        // Paste as terminals do (Ctrl+Shift+V, Shift+Insert): a plain Ctrl+V is a key for the program.
+        if ((key == GLFW.GLFW_KEY_V && modifiers == (GLFW.GLFW_MOD_CONTROL | GLFW.GLFW_MOD_SHIFT))
+            || (key == GLFW.GLFW_KEY_INSERT && modifiers == GLFW.GLFW_MOD_SHIFT)) {
             var string = GLFW.glfwGetClipboardString(window);
             if (string != null) input.paste(string);
             return;
