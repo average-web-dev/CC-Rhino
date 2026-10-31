@@ -286,52 +286,51 @@ function pasteText(sequence: string): string {
     return text.endsWith(PASTE_END) ? text.slice(0, -PASTE_END.length) : text;
 }
 
+/** The input at `data[i]` (an ESC sequence, a paste, a mouse report or a character) and the index after it. */
+function decodeAt(data: string, i: number): [TtyInput, number] {
+    let ch = data.charAt(i);
+    if (ch !== '\x1b') return [decodeChar(ch, ch, false), i + 1];
+    let paste = pasteAt(data, i);
+    if (paste > 0) {
+        let sequence = data.slice(i, i + paste);
+        return [{ type: InputType.PASTE, text: pasteText(sequence), sequence }, i + paste];
+    }
+    let report: MouseReport | undefined;
+    let length = mouseReportAt(data, i, (r) => { report = r; });
+    if (length > 0) return [mouseInput(report!, data.slice(i, i + length)), i + length];
+    let next = data.charAt(i + 1);
+    if (next === '[' || next === 'O') {
+        let j = i + 2;
+        while (j < data.length && /[0-9;:]/.test(data.charAt(j))) j++;
+        let params = data.slice(i + 2, j);
+        let final = data.charAt(j);
+        let sequence = data.slice(i, j + 1);
+        let key = final === 'u' && next === '['
+            ? decodeKittyKey(params, sequence)
+            : decodeCsiKey(params, final, sequence);
+        return [key, j + 1];
+    }
+    if (next === '') return [decodeChar('\x1b', '\x1b', false), i + 1];
+    // ESC + character: the character with Alt.
+    return [decodeChar(next, '\x1b' + next, true), i + 2];
+}
+
 /** Split terminal input into keyboard, mouse and paste events, in order. */
 function decode(data: string, onInput: (input: TtyInput) => void): void {
     let i = 0;
     while (i < data.length) {
-        let ch = data.charAt(i);
-        if (ch !== '\x1b') {
-            onInput(decodeChar(ch, ch, false));
-            i++;
-            continue;
-        }
-        let paste = pasteAt(data, i);
-        if (paste > 0) {
-            let sequence = data.slice(i, i + paste);
-            onInput({ type: InputType.PASTE, text: pasteText(sequence), sequence });
-            i += paste;
-            continue;
-        }
-        let report: MouseReport | undefined;
-        let length = mouseReportAt(data, i, (r) => { report = r; });
-        if (length > 0) {
-            onInput(mouseInput(report!, data.slice(i, i + length)));
-            i += length;
-            continue;
-        }
-        let next = data.charAt(i + 1);
-        if (next === '[' || next === 'O') {
-            let j = i + 2;
-            while (j < data.length && /[0-9;:]/.test(data.charAt(j))) j++;
-            let params = data.slice(i + 2, j);
-            let final = data.charAt(j);
-            let sequence = data.slice(i, j + 1);
-            onInput(final === 'u' && next === '['
-                ? decodeKittyKey(params, sequence)
-                : decodeCsiKey(params, final, sequence));
-            i = j + 1;
-            continue;
-        }
-        if (next === '') {
-            onInput(decodeChar('\x1b', '\x1b', false));
-            i++;
-            continue;
-        }
-        // ESC + character: the character with Alt.
-        onInput(decodeChar(next, '\x1b' + next, true));
-        i += 2;
+        let [input, next] = decodeAt(data, i);
+        onInput(input);
+        i = next;
     }
+}
+
+/**
+ * The first input in `data` and how many characters it takes, or undefined for no data (for readers that take one
+ * input at a time, like Term.readInput, without decoding the rest each time).
+ */
+export function decodeFirst(data: string): [TtyInput, number] | undefined {
+    return data.length === 0 ? undefined : decodeAt(data, 0);
 }
 
 /** Decode terminal input into keyboard, mouse and paste events, in order (the counterpart of tty.CSI). */

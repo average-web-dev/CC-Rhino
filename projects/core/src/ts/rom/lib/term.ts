@@ -31,7 +31,7 @@
 //   fire monitor_touch.
 
 import { TTY, CSI } from '/rom/lib/tty';
-import { decodeInput, stripMouse, toLegacy, Key, InputType, MouseAction, MouseButton } from '/rom/lib/internal/keys';
+import { decodeFirst, stripMouse, toLegacy, Key, InputType, MouseAction, MouseButton } from '/rom/lib/internal/keys';
 import { Color } from '/rom/lib/color';
 import { ERR_INVALID_ARG_VALUE } from '/rom/lib/internal/errors';
 import { validateInteger, validateNumber, validateString } from '/rom/lib/internal/validators';
@@ -278,8 +278,8 @@ export class Term {
         while (this.#text.length === 0) {
             if (!this.#fill()) return undefined;
         }
-        let input = decodeInput(this.#text)[0];
-        this.#text = this.#text.slice(Math.max(1, input.sequence.length));
+        let [input, length] = decodeFirst(this.#text)!;
+        this.#text = this.#text.slice(length);
         return input;
     }
 
