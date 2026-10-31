@@ -129,17 +129,17 @@ class JSEventEmitTest {
     @Test
     void emit_rejects_native_events() throws Exception {
         boot("""
-            events.on('key', function () { probe.record('spoofed key'); });
+            events.on('mouse_click', function () { probe.record('spoofed click'); });
             events.on('task_complete', function () { probe.record('spoofed task'); });
-            ['key', 'char', 'timer', 'task_complete', 'terminate', 'unhandled_rejection', '__start__'].forEach(function (name) {
+            ['mouse_click', 'paste', 'timer', 'task_complete', 'terminate', 'unhandled_rejection', '__start__'].forEach(function (name) {
                 try { events.emit(name, 1, true, 'x'); probe.record('emitted ' + name); }
                 catch (e) { probe.record(e.code + ': ' + e.message); }
             });
             probe.record(events.emit('my_key', 1));
             """);
         assertEquals(List.of(
-            "ERR_RESERVED_EVENT: Cannot emit 'key': it is a native event, only the computer can fire it",
-            "ERR_RESERVED_EVENT: Cannot emit 'char': it is a native event, only the computer can fire it",
+            "ERR_RESERVED_EVENT: Cannot emit 'mouse_click': it is a native event, only the computer can fire it",
+            "ERR_RESERVED_EVENT: Cannot emit 'paste': it is a native event, only the computer can fire it",
             "ERR_RESERVED_EVENT: Cannot emit 'timer': it is a native event, only the computer can fire it",
             "ERR_RESERVED_EVENT: Cannot emit 'task_complete': it is a native event, only the computer can fire it",
             "ERR_RESERVED_EVENT: Cannot emit 'terminate': it is a native event, only the computer can fire it",
@@ -351,7 +351,7 @@ class JSEventEmitTest {
             events.on('p', function (v) { probe.record('listener ' + v); });
             eventsP.emit('p', 1).then(function (r) { probe.record('resolved ' + r); });
             probe.record('after emit');
-            eventsP.emit('key').then(null, function (e) { probe.record('rejected ' + e.code); });
+            eventsP.emit('paste').then(null, function (e) { probe.record('rejected ' + e.code); });
             """);
         drainTicks();
         assertEquals(List.of("listener 1", "after emit", "resolved true", "rejected ERR_RESERVED_EVENT"), rec.values);

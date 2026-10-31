@@ -110,7 +110,7 @@ class StdioShellTest {
                 console.log('unref started');
                 """)
             .addFile("listener.js", """
-                require('events').on('char', function () { console.log('leftover listener'); });
+                require('events').on('paste', function () { console.log('leftover listener'); });
                 require('events').on('timer', function () { console.log('leftover listener'); });
                 console.log('listening');
                 """)
@@ -142,6 +142,22 @@ class StdioShellTest {
         var n = 0;
         for (var y = 0; y < 19; y++) if (h.line(y).equals(line)) n++;
         return n;
+    }
+
+    /** With a local /boot.js the bios shows its boot menu, which reads the arrow keys and Enter from its TTY. */
+    @Test
+    void boot_menu_reads_keys_from_the_tty() {
+        var mount = programs().addFile("boot.js", "console.log('local boot ran');\n");
+        try (var h = TerminalHarness.boot(mount)) {
+            h.waitForText("Boot Selection");
+            h.key(KEY_DOWN);
+            h.waitFor("the second entry selected", x -> x.screen().contains(" > Local Boot"));
+            h.key(KEY_UP);
+            h.waitFor("the first entry selected", x -> x.screen().contains(" > CC: Rhino"));
+            h.key(KEY_DOWN);
+            h.key(KEY_ENTER);
+            h.waitForText("local boot ran");
+        }
     }
 
     @Test
@@ -280,7 +296,7 @@ class StdioShellTest {
             h.enter("/listener.js");
             h.waitForText("listening");
             waitForPrompt(h, "/");
-            h.type("x");
+            h.paste("x");
             h.ticks(5);
             assertEquals(-1, h.rowOf("leftover"), h.dump());
             h.ctrl('U');

@@ -7,9 +7,7 @@ package dan200.computercraft.core.engine;
 import dan200.computercraft.api.scripting.Events;
 import dan200.computercraft.api.scripting.IArguments;
 import dan200.computercraft.api.scripting.ScriptException;
-import dan200.computercraft.core.apis.events.CharEvent;
 import dan200.computercraft.core.apis.events.CoreEvents;
-import dan200.computercraft.core.apis.events.KeyEvent;
 import dan200.computercraft.core.apis.events.RedstoneEvent;
 import org.jspecify.annotations.Nullable;
 import org.mozilla.javascript.BaseFunction;
@@ -65,7 +63,7 @@ public final class JSEventEmitter {
 
     static {
         // The core runtime's events. Other modules register theirs (e.g. PeripheralEvents) at startup.
-        Events.register(CoreEvents.class, KeyEvent.class, CharEvent.class, RedstoneEvent.class);
+        Events.register(CoreEvents.class, RedstoneEvent.class);
         Events.registerNames(START_EVENT, SELF_TICK_EVENT);
     }
 

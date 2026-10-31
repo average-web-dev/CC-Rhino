@@ -47,11 +47,6 @@ public final class CoreEvents {
         }
     }
 
-    /** A key was released. */
-    @Event("key_up")
-    public record KeyUp(int key) {
-    }
-
     /** Text was pasted into the computer. */
     @Event("paste")
     public record Paste(ByteBuffer text) {

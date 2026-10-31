@@ -158,14 +158,12 @@ class StdioTerminalTest {
             var onData = function (d) { probe.record(d); };
             process.stdin.on('data', onData);
             process.stdin.pause();
-            require('events').on('key', function (key) {
-                if (key === 265) { process.stdin.resume(); probe.record('resumed'); }
-            });
+            require('events').on('paste', function () { process.stdin.resume(); probe.record('resumed'); });
             """, 20, 5, true)) {
             h.waitForProbe(1);
             h.type("lost");
             h.key(KEY_ENTER);
-            h.key(KEY_UP);
+            h.paste("");
             h.waitForProbe(2);
             h.type("kept");
             h.key(KEY_ENTER);

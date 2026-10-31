@@ -23,6 +23,7 @@ require('/rom/lib/internal/globals');
 
 (function (){
   const term   = new (require('/rom/lib/term') as typeof import('/rom/lib/term')).Term();
+  const Key    = (require('/rom/lib/tty') as typeof import('/rom/lib/tty')).Key;
   const fs     = require('fs');
   const events = require('events');
   const system = require('system');
@@ -152,11 +153,12 @@ require('/rom/lib/internal/globals');
       drawMenu(entries, selected, remaining);
 
       function cleanup(): void {
-          events.off("key",   onKey);
+          process.stdin.off("keydown", onKey);
           events.off("timer", onTimer);
-          // The menu read keys through events: drop what they typed into the TTY meanwhile.
-          (process.stdin as TtyStdin).discard();
+          // Hand the TTY on as it was: cooked, not flowing, nothing typed left over.
           process.stdin.setRawMode(false);
+          (process.stdin as TtyStdin).setFlowing(null);
+          (process.stdin as TtyStdin).discard();
       }
 
       function doBoot(entry: BootEntry): void {
@@ -173,15 +175,15 @@ require('/rom/lib/internal/globals');
           }
       }
 
-      function onKey(key: number, held: boolean): void {
-          if (held) return;
+      function onKey(key: TtyKeyInput): void {
+          if (key.repeat) return;
           remaining = -1; // any keypress stops auto-boot
           term.setCursorPos({ x: 0, y: 13 });
-          switch (key) {
-              case 265:    selected = (selected - 1 + entries.length) % entries.length; break;
-              case 264:  selected = (selected + 1) % entries.length; break;
-              case 257:
-              case 335:
+          switch (key.code) {
+              case Key.ARROW_UP:   selected = (selected - 1 + entries.length) % entries.length; break;
+              case Key.ARROW_DOWN: selected = (selected + 1) % entries.length; break;
+              case Key.ENTER:
+              case Key.NUMPAD_ENTER:
                   doBoot(entries[selected]);
                   return;
           }
@@ -201,7 +203,7 @@ require('/rom/lib/internal/globals');
       }
 
       process.stdin.setRawMode(true);
-      events.on("key",   onKey);
+      process.stdin.on("keydown", onKey);
       events.on("timer", onTimer);
   }
 
