@@ -181,7 +181,6 @@
     "gui.computercraft.tooltip.copy": "Másolás vágólapra",
     "gui.computercraft.tooltip.disk_id": "Lemez ID: %s",
     "gui.computercraft.tooltip.terminate": "A futó kód leállítása",
-    "gui.computercraft.tooltip.terminate.key": "Tartsd lenyomva a Ctrl+T billentyűket",
     "gui.computercraft.tooltip.turn_off": "Kapcsold ki ezt a számítógépet",
     "gui.computercraft.tooltip.turn_off.key": "Tartsd lenyomva a Ctrl+S billentyűket",
     "gui.computercraft.tooltip.turn_on": "Kapcsold be ezt a számítógépet",

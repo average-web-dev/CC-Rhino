@@ -5,27 +5,19 @@
 //
 //   edit <path>   — open (or create) a file for editing.
 //
-// Interactive program model: main() blocks (spinning on system.yield) while its
-// own char/key/paste listeners do the editing, so the parent shell stays parked
-// until the editor exits. Press Ctrl to open the menu (Save / Exit), arrows to
-// select, Enter to invoke.
+// Interactive program model: main() reads keys from process.stdin (in raw mode)
+// through a Term and draws with it, until the editor exits. Esc opens the menu
+// (Save / Exit; arrows to select, Enter to invoke); Ctrl+S saves, Ctrl+Q exits.
 //
 // MVP scope: load/edit/save plaintext, scrolling, paste, resize. Syntax
 // highlighting (term.blit) and require-name tab completion are follow-ups
 // (JS_MIGRATION Phase 11.28).
 
-import events from 'events';
-import term   from 'term';
 import fs     from 'fs';
-import system from 'system';
+import { Term, KeyName } from '/rom/lib/term';
 
-// GLFW key codes (same set used inline by bash.ts).
-const K = {
-    ENTER: 257, ENTER2: 335, BACKSPACE: 259, DELETE: 261, TAB: 258,
-    LEFT: 263, RIGHT: 262, UP: 265, DOWN: 264,
-    HOME: 268, END: 269, PAGE_UP: 266, PAGE_DOWN: 267,
-    LCTRL: 341, RCTRL: 345, ESCAPE: 256,
-};
+/** Shortcuts: the letter pressed with Ctrl (Node key names of letters are the lower-case letter). */
+const SHORTCUT_SAVE = 's', SHORTCUT_QUIT = 'q';
 
 // CC colour values (powers of two).
 const WHITE = 1, GREY = 128, LIGHT_GREY = 256, BLACK = 32768;
@@ -44,6 +36,7 @@ function resolve(p: string, cwd: string): string {
 export function main(args: string[], cwd: string): void {
     if (!args[0]) { console.error('Usage: edit <path>'); return; }
     const path = resolve(args[0], cwd ?? '/');
+    const term = new Term();
     const canColor = term.isColor();
 
     // ── Document + view state ───────────────────────────────────────────────────
@@ -232,83 +225,64 @@ export function main(args: string[], cwd: string): void {
         refresh();
     }
 
-    // ── Input handlers ──────────────────────────────────────────────────────────
+    // ── Input ───────────────────────────────────────────────────────────────────
 
-    function onMenuKey(key: number): void {
-        switch (key) {
-            case K.LEFT:  menuSel = (menuSel - 1 + MENU.length) % MENU.length; draw(); break;
-            case K.RIGHT: menuSel = (menuSel + 1) % MENU.length; draw(); break;
-            case K.ENTER: case K.ENTER2:
+    function onMenuKey(key: Key): void {
+        switch (key.name) {
+            case KeyName.LEFT:  menuSel = (menuSel - 1 + MENU.length) % MENU.length; draw(); break;
+            case KeyName.RIGHT: menuSel = (menuSel + 1) % MENU.length; draw(); break;
+            case KeyName.RETURN: case KeyName.ENTER:
                 menuOpen = false;
                 MENU[menuSel].action();
                 if (running) draw();
                 break;
-            case K.ESCAPE:
+            case KeyName.ESCAPE:
                 menuOpen = false; status = ''; draw();
                 break;
         }
     }
 
-    function onKey(key: number, held: boolean): void {
-        if (key === K.LCTRL || key === K.RCTRL) {
-            if (!held) { menuOpen = !menuOpen; menuSel = 0; status = ''; draw(); }
-            return;
-        }
+    function onKey(key: Key): void {
+        if (key.name === KeyName.ESCAPE) { menuOpen = !menuOpen; menuSel = 0; status = ''; draw(); return; }
         if (menuOpen) { onMenuKey(key); return; }
 
         status = '';
-        switch (key) {
-            case K.UP:        moveVertical(-1); break;
-            case K.DOWN:      moveVertical(1); break;
-            case K.LEFT:      moveLeft(); break;
-            case K.RIGHT:     moveRight(); break;
-            case K.HOME:      cx = 0; refresh(); break;
-            case K.END:       cx = lines[cy].length; refresh(); break;
-            case K.PAGE_UP:   pageMove(-1); break;
-            case K.PAGE_DOWN: pageMove(1); break;
-            case K.BACKSPACE: backspace(); break;
-            case K.DELETE:    del(); break;
-            case K.ENTER: case K.ENTER2: enter(); break;
-            case K.TAB:       insertText('  '); break;
+        if (key.ctrl && key.name === SHORTCUT_SAVE) { save(); draw(); return; }
+        if (key.ctrl && key.name === SHORTCUT_QUIT) { running = false; return; }
+        switch (key.name) {
+            case KeyName.UP:        moveVertical(-1); return;
+            case KeyName.DOWN:      moveVertical(1); return;
+            case KeyName.LEFT:      moveLeft(); return;
+            case KeyName.RIGHT:     moveRight(); return;
+            case KeyName.HOME:      cx = 0; refresh(); return;
+            case KeyName.END:       cx = lines[cy].length; refresh(); return;
+            case KeyName.PAGE_UP:   pageMove(-1); return;
+            case KeyName.PAGE_DOWN: pageMove(1); return;
+            case KeyName.BACKSPACE: backspace(); return;
+            case KeyName.DELETE:    del(); return;
+            case KeyName.RETURN: case KeyName.ENTER: enter(); return;
+            case KeyName.TAB:       insertText('  '); return;
         }
+        // A printable character (typed or pasted).
+        let ch = key.sequence;
+        if (!key.ctrl && !key.meta && ch.length === 1 && ch >= ' ' && ch !== '\x7f') insertText(ch);
     }
-
-    function onChar(ch: string): void {
-        if (menuOpen) return;
-        status = '';
-        insertText(ch);
-    }
-
-    function onPaste(text: string): void {
-        if (menuOpen) return;
-        status = '';
-        insertText(text);
-    }
-
-    function onResize(): void { refresh(); }
 
     // ── Lifecycle ───────────────────────────────────────────────────────────────
 
     load();
+    process.stdin.setRawMode(true);
     term.clear();
     draw();
 
-    events.on('char', onChar);
-    events.on('key', onKey);
-    events.on('paste', onPaste);
-    events.on('term_resize', onResize);
-
-    // Block here, one tick at a time, while the listeners above drive the editor.
-    // Ctrl+T makes system.yield() throw "Terminated"; the finally still restores the terminal.
+    // Ctrl+T makes the read throw "Terminated"; the finally still restores the terminal.
     try {
-        while (running) system.yield();
+        while (running) {
+            let key = term.readKey();
+            if (key === undefined) break;
+            onKey(key);
+        }
     } finally {
-        events.off('char', onChar);
-        events.off('key', onKey);
-        events.off('paste', onPaste);
-        events.off('term_resize', onResize);
-
-        // Restore the terminal for the shell.
         term.setBackgroundColor(BLACK);
         term.setTextColor(WHITE);
         term.clear();

@@ -181,7 +181,6 @@
     "gui.computercraft.tooltip.copy": "Copier dans le Presse-Papiers",
     "gui.computercraft.tooltip.disk_id": "ID de disque : %s",
     "gui.computercraft.tooltip.terminate": "Arrêter le programme en cours d'éxecution",
-    "gui.computercraft.tooltip.terminate.key": "Tenir Ctrl+T",
     "gui.computercraft.tooltip.turn_off": "Éteindre cet ordinateur",
     "gui.computercraft.tooltip.turn_off.key": "Tenir Ctrl+S",
     "gui.computercraft.tooltip.turn_on": "Allumer cet ordinateur",

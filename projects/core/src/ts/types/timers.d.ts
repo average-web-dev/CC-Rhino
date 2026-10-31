@@ -115,6 +115,18 @@ interface InternalLoopModule {
     /** Block until the calling thread is idle (`true`) or `wakeIdle()` is called (`false`). */
     waitIdle(): boolean;
     wakeIdle(): void;
+    /** The value attached to the calling thread (or its nearest ancestor) with setContext, inherited by descendants. */
+    context(): unknown;
+    /**
+     * Attach a value to the calling thread (undefined: none, so the ancestors' context applies again), and the id of the
+     * TTY the program runs on (Ctrl+C on that TTY reaches it). The thread becomes where the program's foreground starts.
+     */
+    /**
+     * End the calling program at once: the thread that set its context fails with `error` (its descendants and pending
+     * work are discarded), even if its main code is blocked. Used by process.exit().
+     */
+    exitContext(error: unknown): void;
+    setContext(value: unknown, tty?: number): void;
 }
 
 declare function require(id: "internal/loop"): InternalLoopModule;

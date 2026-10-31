@@ -3,8 +3,12 @@
 
 // /rom/bin/bash.ts — interactive shell
 //
+// As a program: `bash` starts the interactive prompt on its TTY (the OS runs one per console); `bash -c "<line>"`
+// runs one command line and exits with its status (child_process.exec uses it).
+//
 // Exports:
-//   run(path, ...args)  — run a program as a foreground job: load its module and call its main(args, cwd).
+//   main(args)          — see above.
+//   run(path, ...args)  — run a program in the foreground (child_process.spawnSync on the shell's TTY).
 //   start()             — start the interactive prompt (a readline interface on process.stdin/stdout) and return;
 //                         the shell lives on in its listeners.
 //   getCwd()            — current working directory (process.cwd()).
@@ -12,12 +16,11 @@
 
 import readline from 'readline';
 import * as tty from '/rom/lib/internal/tty';
+import { spawnSync } from '/rom/lib/child_process';
 
 import events   from 'events';
-import term     from 'term';
 import fs       from 'fs';
 import env      from 'env';
-import parallel from 'parallel';
 import util     from 'util';
 
 // Names that may follow `$` / `${...}` during variable expansion.
@@ -47,87 +50,36 @@ function resolvePath(p: string): string {
 export function getCwd(): string  { return process.cwd(); }
 export function setCwd(p: string) { process.chdir(p); }
 
-/**
- * Format an error as a single `file:line: message` line. The location is taken from the first stack frame outside
- * the module loader, as errors created with `new Error()` carry no fileName/lineNumber of their own.
- */
-function formatError(fallbackFile: string, e: any): string {
-    let msg = e?.message ?? String(e);
-    let frames = String(e?.stack ?? '').split('\n');
-    for (let frame of frames) {
-        let m = /^\s*at (.+?):(\d+)(?: \(.*\))?$/.exec(frame);
-        if (m && m[1] !== 'require-setup.js') return `${m[1]}:${m[2]}: ${msg}`;
-    }
-    return `${fallbackFile}: ${msg}`;
-}
+const formatError = tty.formatError;
 
 /** Exit code of the last program (0 unless it failed or called process.exit). */
 let lastExitCode = 0;
 
-/**
- * Load a program and call its `main(args, cwd)` if present.
- * Bare names ('ls') are resolved via require.paths (JSRequire searches them).
- * Paths starting with '/', './', '../' are resolved against cwd.
- * Programs are loaded with `require.uncached`, so their top-level code runs on every invocation and edits take
- * effect immediately. Returns false only if the program itself was not found; errors raised by the program
- * (including a missing dependency) are printed and still count as found.
- *
- * The program runs as a foreground job, like a child process: its own green thread (waited for with
- * parallel.waitForAll), its own stdin state (see internal/tty), `process.argv` = ['bash', path, ...args], and the
- * working directory is restored afterwards. After main() (or the module's top-level code) returns, the job keeps
- * running while it has ref'd pending work, as a Node process would (#46): a pending (ref'd) timer, a blocked callback
- * or pending /promises operation, a child thread, or stdin it reads (a readline interface or stdin listener left
- * open). If main() returns a promise (`async main`, #44), its rejection is the program's error. When nothing is left,
- * or on process.exit(), the job's thread is stopped: every events.on listener, unref'd timer, promise reaction or
- * thread it left behind is discarded, so nothing it started runs (or prints) after the prompt. Ctrl+T makes the call
- * it is blocked in — usually that wait — throw `Error("Terminated")`; we then print "Terminated".
- */
-export function run(path: string, ...args: string[]): boolean {
-    return runProgram(path, args);
+/** `bash`: the interactive shell on this program's TTY; `bash -c "<line>"`: run one command line and exit. */
+export function main(args: string[]): void {
+    if (args[0] === '-c') {
+        processLine(args.slice(1).join(' '), null);
+        process.exitCode = lastExitCode;
+        return;
+    }
+    // A shell outlives Ctrl+C at its prompt; the keys reach the programs it runs instead.
+    tty.current().shell = true;
+    start();
 }
 
-function runProgram(path: string, args: string[]): boolean {
-    let isPath = path.startsWith('/') || path.startsWith('./') || path.startsWith('../');
-    let toRequire = isPath ? resolvePath(path) : path;
-    let resolved: string;
-    try {
-        resolved = require.resolve(toRequire);
-    } catch {
-        return false;
-    }
-
-    let savedArgv = process.argv;
-    let savedCwd = process.cwd();
-    let cwd = savedCwd;
-    process.argv = ['bash', '/' + resolved.replace(/^\/+/, '')].concat(args);
-    process.exitCode = undefined;
-    lastExitCode = 0;
-    let job = tty.beginJob();
-    try {
-        parallel.waitForAll(() => {
-            let mod = require.uncached(resolved) as any;
-            let result: unknown = typeof mod?.main === 'function' ? mod.main(args, cwd) : undefined;
-            tty.waitForJob(job, result);
-        });
-    } catch (e: any) {
-        let exitCode = tty.exitCodeOf(e);
-        if (exitCode === null) {
-            lastExitCode = typeof process.exitCode === 'number' ? process.exitCode : 0;
-        } else if (exitCode !== undefined) {
-            lastExitCode = exitCode;
-        } else {
-            lastExitCode = 1;
-            // Report on a row of its own, even if the program was interrupted mid-line (e.g. at its prompt).
-            if (term.getCursorPos().x > 0) process.stdout.write('\n');
-            if (e?.message === 'Terminated') console.error('Terminated');
-            else console.error(formatError(resolved, e));
-        }
-    } finally {
-        tty.endJob(job);
-        process.argv = savedArgv;
-        process.exitCode = undefined;
-        try { process.chdir(savedCwd); } catch { /* the directory was removed meanwhile */ }
-    }
+/**
+ * Run a program in the foreground, on the shell's TTY (child_process.spawnSync). Bare names ('ls') are resolved via
+ * require.paths, paths ('/', './', '../') against the working directory. Programs are loaded with `require.uncached`,
+ * so their top-level code runs on every invocation and edits take effect immediately. The program runs as a job of its
+ * own (see /rom/lib/internal/tty): its own thread, `process.argv` = ['bash', path, ...args], a working directory of
+ * its own (it starts in the shell's), a fresh stdin. It keeps running while it has ref'd pending work, as a Node
+ * process would (#46); when it ends, everything it left behind is discarded. A program that fails is reported on the
+ * TTY (Ctrl+C: "Terminated"). Returns false only if the program itself was not found.
+ */
+export function run(path: string, ...args: string[]): boolean {
+    let result = spawnSync(path, args, { stdio: 'inherit' });
+    if (result.error !== undefined) return false;
+    lastExitCode = result.status ?? 1;
     return true;
 }
 
@@ -205,7 +157,7 @@ export function start(): void {
 
     function prompt(): void {
         // Start the prompt on a fresh row if a program left the cursor mid-line.
-        if (term.getCursorPos().x > 0) process.stdout.write('\n');
+        if (tty.cursorColumn() > 0) process.stdout.write('\n');
         rl.setPrompt(makePrompt());
         rl.prompt();
     }
@@ -237,7 +189,7 @@ export function start(): void {
     prompt();
 }
 
-function processLine(line: string, rl: Interface): void {
+function processLine(line: string, rl: Interface | null): void {
     // Expand $VAR / ${VAR} first, then split into words. Programs receive these
     // words verbatim — each program resolves its own paths against cwd.
     let parts = expandVars(line).match(/\S+/g) ?? [];
@@ -266,8 +218,10 @@ function processLine(line: string, rl: Interface): void {
     }
 
     if (cmd === 'exit') {
-        rl.close();
-        term.setCursorBlink(false);
+        if (rl !== null) {
+            rl.close();
+            process.stdout.write(tty.CSI.hideCursor);
+        }
         return;
     }
 
@@ -295,8 +249,8 @@ function processLine(line: string, rl: Interface): void {
     // Pause our interface while the program runs: the program owns the terminal (and gets a fresh stdin, see run()),
     // and we must not react to the same keys. Interactive programs block in main() or keep reading stdin; only when
     // the job has ended does the prompt come back.
-    rl.pause();
-    let found = runProgram(cmd, args);
+    if (rl !== null) rl.pause();
+    let found = run(cmd, ...args);
     if (!found) {
         console.error((cmd as string).includes('/')
             ? `bash: ${cmd}: No such file or directory`

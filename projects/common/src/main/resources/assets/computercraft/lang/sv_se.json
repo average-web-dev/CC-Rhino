@@ -120,7 +120,6 @@
     "gui.computercraft.tooltip.copy": "Kopiera till urklipp",
     "gui.computercraft.tooltip.disk_id": "Diskett-ID: %s",
     "gui.computercraft.tooltip.terminate": "Stoppa aktuellt körande kod",
-    "gui.computercraft.tooltip.terminate.key": "Håll ned Ctrl+T",
     "gui.computercraft.tooltip.turn_off": "Stäng av den här datorn",
     "gui.computercraft.tooltip.turn_off.key": "Håll ned Ctrl+S",
     "gui.computercraft.tooltip.turn_on": "Slå på den här datorn",

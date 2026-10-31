@@ -4,7 +4,6 @@
 
 package dan200.computercraft.shared.network.server;
 
-import dan200.computercraft.core.apis.events.CoreEvents;
 import dan200.computercraft.shared.computer.menu.ComputerMenu;
 import dan200.computercraft.shared.network.NetworkMessages;
 import dan200.computercraft.shared.network.codec.MoreStreamCodecs;
@@ -38,7 +37,7 @@ public final class ComputerActionServerMessage extends ComputerServerMessage {
     @Override
     protected void handle(ServerNetworkContext context, ComputerMenu container) {
         switch (action) {
-            case TERMINATE -> container.getComputer().queueEvent(new CoreEvents.Terminate());
+            case TERMINATE -> container.getComputer().terminate();
             case TURN_ON -> container.getComputer().turnOn();
             case REBOOT -> container.getComputer().reboot();
             case SHUTDOWN -> container.getComputer().shutdown();

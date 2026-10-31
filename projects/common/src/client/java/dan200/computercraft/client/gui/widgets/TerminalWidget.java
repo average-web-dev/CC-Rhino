@@ -33,7 +33,7 @@ import static dan200.computercraft.client.render.text.FixedWidthFontRenderer.FON
 public class TerminalWidget extends AbstractWidget {
     private static final Component DESCRIPTION = Component.translatable("gui.computercraft.terminal");
 
-    private static final float TERMINATE_TIME = 0.5f;
+    private static final float HOLD_TIME = 0.5f;
     private static final float KEY_SUPPRESS_DELAY = 0.2f;
 
     private final Terminal terminal;
@@ -46,7 +46,6 @@ public class TerminalWidget extends AbstractWidget {
     private final int innerWidth;
     private final int innerHeight;
 
-    private float terminateTimer = -1;
     private float rebootTimer = -1;
     private float shutdownTimer = -1;
 
@@ -79,9 +78,6 @@ public class TerminalWidget extends AbstractWidget {
 
         if ((modifiers & GLFW.GLFW_MOD_CONTROL) != 0) {
             switch (KeyConverter.physicalToActual(key, scancode)) {
-                case GLFW.GLFW_KEY_T -> {
-                    if (terminateTimer < 0) terminateTimer = 0;
-                }
                 case GLFW.GLFW_KEY_S -> {
                     if (shutdownTimer < 0) shutdownTimer = 0;
                 }
@@ -91,7 +87,7 @@ public class TerminalWidget extends AbstractWidget {
             }
         }
 
-        if (key >= 0 && terminateTimer < KEY_SUPPRESS_DELAY && rebootTimer < KEY_SUPPRESS_DELAY && shutdownTimer < KEY_SUPPRESS_DELAY) {
+        if (key >= 0 && rebootTimer < KEY_SUPPRESS_DELAY && shutdownTimer < KEY_SUPPRESS_DELAY) {
             computerInput.keyDown(key);
         }
 
@@ -107,11 +103,10 @@ public class TerminalWidget extends AbstractWidget {
         computerInput.keyUp(key);
 
         switch (KeyConverter.physicalToActual(key, scancode)) {
-            case GLFW.GLFW_KEY_T -> terminateTimer = -1;
             case GLFW.GLFW_KEY_R -> rebootTimer = -1;
             case GLFW.GLFW_KEY_S -> shutdownTimer = -1;
             case GLFW.GLFW_KEY_LEFT_CONTROL, GLFW.GLFW_KEY_RIGHT_CONTROL ->
-                terminateTimer = rebootTimer = shutdownTimer = -1;
+                rebootTimer = shutdownTimer = -1;
         }
 
         return true;
@@ -166,15 +161,11 @@ public class TerminalWidget extends AbstractWidget {
     }
 
     public void update() {
-        if (terminateTimer >= 0 && terminateTimer < TERMINATE_TIME && (terminateTimer += 0.05f) > TERMINATE_TIME) {
-            computerActions.terminate();
-        }
-
-        if (shutdownTimer >= 0 && shutdownTimer < TERMINATE_TIME && (shutdownTimer += 0.05f) > TERMINATE_TIME) {
+        if (shutdownTimer >= 0 && shutdownTimer < HOLD_TIME && (shutdownTimer += 0.05f) > HOLD_TIME) {
             computerActions.shutdown();
         }
 
-        if (rebootTimer >= 0 && rebootTimer < TERMINATE_TIME && (rebootTimer += 0.05f) > TERMINATE_TIME) {
+        if (rebootTimer >= 0 && rebootTimer < HOLD_TIME && (rebootTimer += 0.05f) > HOLD_TIME) {
             computerActions.reboot();
         }
     }
@@ -185,7 +176,7 @@ public class TerminalWidget extends AbstractWidget {
 
         if (!focused) {
             computerInput.releaseInputs();
-            shutdownTimer = terminateTimer = rebootTimer = -1;
+            shutdownTimer = rebootTimer = -1;
         }
     }
 

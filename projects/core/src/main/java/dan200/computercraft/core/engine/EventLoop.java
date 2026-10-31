@@ -35,7 +35,7 @@ import java.util.*;
  * All JS runs as a {@link Strand} of some {@link JSThread}, and everything parked or queued here remembers its strand
  * (or owning thread). JS is only ever entered from this class (via {@link #run}), never from inside another JS call:
  * work created while JS runs — starting a thread, resuming a {@code waitFor*} caller — goes through the run queue.
- * See {@link JSThread} for how stopping a thread discards its work and {@link #terminate} for {@code Ctrl+T}.
+ * See {@link JSThread} for how stopping a thread discards its work and {@link #terminate} for {@code Ctrl+C}.
  *
  * <h2>Promises</h2>
  * A parked operation is woken through its {@link Waiter}: a blocking call's continuation is resumed, while an operation
@@ -193,29 +193,46 @@ public final class EventLoop {
         return thread;
     }
 
+    /**
+     * End the calling program at once ({@code process.exit}): its thread — the nearest one, from the calling thread up,
+     * with a {@link JSThread#context} — fails with {@code error}, as if its main code had thrown it. So the program ends
+     * even when {@code process.exit} is called from a callback while its main code is blocked; its descendants and
+     * pending work are discarded, and whoever waits for it sees {@code error}. Without a context (the root) nothing
+     * happens.
+     */
+    void exitContext(Object error) {
+        for (var thread = currentThread(); thread != null; thread = thread.parent) {
+            if (thread.context == null) continue;
+            if (!thread.isRoot()) threadFailed(thread, error);
+            return;
+        }
+    }
+
     /** Stop a thread: it and its descendants are killed and all their pending work is discarded. */
     void stop(JSThread thread) {
         if (thread.state == JSThread.State.RUNNING && !thread.isRoot()) kill(thread);
     }
 
     /**
-     * Deliver {@code terminate} (Ctrl+T): every foreground thread (see {@link JSThread#isForeground()}) blocked in a
+     * Deliver {@code terminate} (Ctrl+C): every foreground thread (see {@link JSThread#isForeground()}) blocked in a
      * sleep, I/O wait, yield or {@code async.unwrap} is resumed so that the blocking call throws
      * {@code Error("Terminated")}. A thread that does not catch it fails, which fails its {@code waitFor*} group in
      * turn, and so on up to the caller — usually the shell. Threads blocked in a {@code waitFor*} are reached through
      * their children; spawned (background) threads and the root thread are left alone.
+     *
+     * @param tty Only programs on this TTY (see {@link JSThread#terminal()}), the visible console; 0 for all.
      */
-    void terminate(Context cx, Scriptable scope) {
+    void terminate(Context cx, Scriptable scope, int tty) {
         var targets = new ArrayList<Parked>();
-        timerMap.values().removeIf(p -> takeTerminable(p.strand(), p.waiter(), targets));
+        timerMap.values().removeIf(p -> takeTerminable(p.strand(), p.waiter(), targets, tty));
         for (var it = ioMap.values().iterator(); it.hasNext(); ) {
             var list = it.next();
-            list.removeIf(e -> takeTerminable(e.strand(), e.waiter(), targets));
+            list.removeIf(e -> takeTerminable(e.strand(), e.waiter(), targets, tty));
             if (list.isEmpty()) it.remove();
         }
-        pendingYields.removeIf(p -> takeTerminable(p.strand(), p.waiter(), targets));
-        awaiting.removeIf(p -> takeTerminable(p.strand(), p.waiter(), targets));
-        idleWaiters.removeIf(p -> takeTerminable(p.strand(), p.waiter(), targets));
+        pendingYields.removeIf(p -> takeTerminable(p.strand(), p.waiter(), targets, tty));
+        awaiting.removeIf(p -> takeTerminable(p.strand(), p.waiter(), targets, tty));
+        idleWaiters.removeIf(p -> takeTerminable(p.strand(), p.waiter(), targets, tty));
 
         for (var target : targets) {
             ready.add(new Resume(target.strand(), target.waiter(), newError(cx, scope, "Error", TERMINATED), true));
@@ -227,11 +244,13 @@ public final class EventLoop {
      * operations started through a {@code /promises} module (parked on a non-main strand) are left alone: they end
      * when the thread that started them fails.
      */
-    private static boolean takeTerminable(Strand strand, Waiter waiter, List<Parked> targets) {
+    private static boolean takeTerminable(Strand strand, Waiter waiter, List<Parked> targets, int tty) {
         var thread = strand.thread();
         if (!strand.main() || thread.state != JSThread.State.RUNNING || thread.isRoot() || !thread.isForeground()) {
             return false;
         }
+        var terminal = thread.terminal();
+        if (tty != 0 && terminal != 0 && terminal != tty) return false;
         targets.add(new Parked(strand, waiter));
         return true;
     }
@@ -735,7 +754,7 @@ public final class EventLoop {
      *   <li>A listener owned by the calling thread or one of its ancestors is returned as is: {@code emit} calls it
      *   directly, so it runs as part of the caller's strand and may block, blocking the caller. That is the caller's
      *   own lineage: the ancestor is waiting for the caller (or runs it in the background) and is killed along with
-     *   it, or before it. Work the listener starts belongs to the caller; Ctrl+T or stopping the caller reaches a
+     *   it, or before it. Work the listener starts belongs to the caller; Ctrl+C or stopping the caller reaches a
      *   blocked listener like any blocking call of the caller, and the error propagates out of {@code emit}.</li>
      *   <li>A listener of an unrelated thread is returned wrapped in a {@link ForeignListener}, which runs it as its
      *   owner, from Java: like normal dispatch, it cannot block (it gets the usual "cannot be used inside callbacks

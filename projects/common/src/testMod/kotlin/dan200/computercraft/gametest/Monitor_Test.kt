@@ -103,6 +103,27 @@ class Monitor_Test {
     }
 
     /**
+     * A monitor's TTY renders what is written to it (ANSI colours included), and its size follows the monitor.
+     */
+    @GameTest(template = "monitor_test.creates_terminal")
+    fun Tty_renders_output(helper: GameTestHelper) = helper.sequence {
+        thenExecute {
+            val monitor = helper.getBlockEntity(BlockPos(2, 2, 2), ModRegistry.BlockEntities.MONITOR_ADVANCED.get())
+            monitor.peripheral()
+            val server = monitor.cachedServerMonitor!!
+            val terminal = server.terminal!!
+            val tty = server.tty
+
+            assertEquals(terminal.width, tty.columns(), "TTY width follows the monitor")
+            assertEquals(terminal.height, tty.rows(), "TTY height follows the monitor")
+
+            tty.stdout().write("\u001b[31mhi\u001b[0m")
+            assertEquals("hi", terminal.getLine(0).toString().substring(0, 2))
+            assertEquals('e', terminal.getTextColourLine(0).toString()[0], "red text")
+        }
+    }
+
+    /**
      * Test monitors render correctly
      */
     @GameTestGenerator

@@ -181,7 +181,6 @@
     "gui.computercraft.tooltip.copy": "Kopírovat do schránky",
     "gui.computercraft.tooltip.disk_id": "ID disku: %s",
     "gui.computercraft.tooltip.terminate": "Zastavit nyní běžící kód",
-    "gui.computercraft.tooltip.terminate.key": "Podrž Ctrl+T",
     "gui.computercraft.tooltip.turn_off": "Vypnout tento počítač",
     "gui.computercraft.tooltip.turn_off.key": "Zmáčkni Ctrl+S",
     "gui.computercraft.tooltip.turn_on": "Zapnout teno počítač",

@@ -302,12 +302,13 @@ class StdioShellTest {
             h.ticks(25);
             assertEquals(-1, h.rowOf("nope"), h.dump());
 
-            // Ctrl+T while it has pending async work: back to the prompt, and nothing prints afterwards.
+            // Ctrl+C (cooked mode) while it has pending async work: back to the prompt, and nothing prints afterwards.
             h.enter("clear");
             waitForPrompt(h, "/");
             h.enter("/ticker.js");
             h.waitForText("tick");
-            h.terminate();
+            h.ctrl(KEY_C);
+            h.waitForText("^C");
             h.waitForText("Terminated");
             waitForPrompt(h, "/");
             var screen = h.screen();
@@ -338,7 +339,13 @@ class StdioShellTest {
             h.enter("quit");
             waitForPrompt(h, "/");
 
-            // Ctrl+T ends it while it waits for input.
+            // Ctrl+C in a readline program (raw mode): as in Node, it closes the interface and the program ends.
+            h.enter("/repl.js");
+            h.waitFor("the program's prompt", x -> x.line(x.cursorY()).equals("r>"));
+            h.ctrl(KEY_C);
+            waitForPrompt(h, "/");
+
+            // The terminate button ends it while it waits for input.
             h.enter("/repl.js");
             h.waitFor("the program's prompt", x -> x.line(x.cursorY()).equals("r>"));
             h.terminate();
@@ -374,6 +381,66 @@ class StdioShellTest {
             h.enter("x");
             waitForPrompt(h, "/");
             assertEquals(-1, h.rowOf("process.exit"), h.dump());
+        }
+    }
+
+    /** edit reads keys through a Term on process.stdin: typing, Ctrl+S saves, Ctrl+Q exits. */
+    @Test
+    void edit_saves_and_exits() {
+        try (var h = TerminalHarness.boot(programs())) {
+            waitForPrompt(h, "/");
+            h.enter("edit /notes.txt");
+            h.waitFor("the editor", x -> x.screen().contains("/notes.txt"));
+            h.type("hello");
+            h.key(KEY_ENTER);
+            h.type("world");
+            h.waitFor("the typed text", x -> x.line(1).startsWith("world"));
+            h.ctrl('S');
+            h.waitForText("Saved /notes.txt");
+            h.ctrl('Q');
+            waitForPrompt(h, "/");
+            h.enter("cat /notes.txt");
+            h.waitForText("world");
+            assertTrue(h.screen().contains("hello"), h.dump());
+        }
+    }
+
+    /**
+     * Alt+2 shows the second console with a shell of its own; terminating only reaches the visible console; `exit`
+     * there clears it and shows the first console again.
+     */
+    @Test
+    void virtual_consoles() {
+        try (var h = TerminalHarness.boot(programs()
+            .addFile("wait.js", "exports.main = function () { require('system').sleep(40); console.log('slept'); };"))) {
+            waitForPrompt(h, "/");
+            h.enter("/wait.js");
+            h.ticks(3);
+
+            h.alt('2');
+            waitForPrompt(h, "/");
+            assertEquals(-1, h.rowOf("/ $ /wait.js"), "console 2 has its own screen\n" + h.dump());
+            h.enter("echo on two");
+            h.waitForText("on two");
+            h.terminate(); // the terminate button on console 2: its shell lives on, the program on console 1 too
+            h.ticks(5);
+            waitForPrompt(h, "/");
+
+            h.alt('1');
+            h.waitForText("slept");
+            assertEquals(-1, h.rowOf("Terminated"), "terminating console 2 did not reach console 1\n" + h.dump());
+            assertEquals(-1, h.rowOf("on two"), h.dump());
+
+            // `exit` on console 2: back on console 1, and console 2 starts afresh when shown again.
+            h.alt('2');
+            waitForPrompt(h, "/");
+            h.enter("exit");
+            h.waitForText("slept");
+            assertEquals(-1, h.rowOf("on two"), "console 1 is visible again\n" + h.dump());
+            h.alt('2');
+            waitForPrompt(h, "/");
+            assertEquals(-1, h.rowOf("on two"), "console 2 was cleared\n" + h.dump());
+            assertEquals(-1, h.rowOf("exit"), h.dump());
         }
     }
 }

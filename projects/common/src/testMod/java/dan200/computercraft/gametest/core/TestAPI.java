@@ -87,7 +87,7 @@ public class TestAPI extends ComputerState implements IComputerAPI {
     }
 
     /**
-     * Queue an event on this computer, as if it came from outside (for instance {@code terminate} from Ctrl+T).
+     * Queue an event on this computer, as if it came from outside (for instance {@code terminate} from Ctrl+C).
      *
      * @param event The name of the event to queue.
      */

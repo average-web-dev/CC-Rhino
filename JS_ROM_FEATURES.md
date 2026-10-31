@@ -65,8 +65,8 @@ before `require.paths` and as `node:<name>`). Full API: JS_API_REDESIGN.md, "Nod
   Delays are rounded up to whole ticks (≥ 1). Replaces `os.startTimer` + `os.pullEvent('timer')` loops and `sleep`
   without blocking.
 
-**CC-specific behaviour**: colour escape codes are ignored on monochrome terminals; the computer's terminal never
-resizes, so stdout `'resize'` only fires when ROM code emits `term_resize`.
+**CC-specific behaviour**: colour escape codes are ignored on monochrome terminals; stdout `'resize'` fires on the
+native `tty_resize` event of its TTY (monitors, virtual TTYs; the screen's consoles never resize).
 
 **Priority**: essential
 
@@ -532,36 +532,17 @@ settings.save(path?: string): boolean   // default ".settings"; serialises curre
 
 ### term
 
-**Summary**: Terminal redirect layer: wraps the native terminal object and allows redirecting all output to an alternate terminal (monitor, window, etc.).
+**Status**: replaced by the TTY model (#50) — there is no redirect layer and no native `term` any more.
 
-**Feature contract**:
-```
-term.redirect(target: TermRedirect): TermRedirect   // returns old target
-term.current(): TermRedirect                         // current redirect
-term.native(): TermRedirect                          // original hardware terminal
-term.nativePaletteColor(color: number): [number, number, number]  // not redirectable
-term.nativePaletteColour(...)  // alias
-
-// All standard terminal methods are forwarded to current():
-//   write, blit, clear, clearLine, setCursorPos, getCursorPos,
-//   setCursorBlink, getCursorBlink, getSize, scroll,
-//   setTextColor, getTextColor, setBackgroundColor, getBackgroundColor,
-//   isColor, setPaletteColor, getPaletteColor
-//   (+ British spellings)
-```
-
-**CC-specific behaviour**:
-- `term` itself cannot be used as a redirect target (use `term.current()`).
-- When redirecting, if the target is missing any method that the native terminal has, a stub that throws an error is injected for that method.
-- `nativePaletteColor`/`nativePaletteColour` always read from the hardware terminal, not the redirect.
-
-**Dependencies**: native `term`
-
-**Implementation notes**: In JS, `term` is a proxy object whose method calls delegate to `redirectTarget`. `redirect` simply swaps `redirectTarget` and returns the old one.
-
-**Priority**: essential
-
----
+- `require('term')` is a ROM module with the class `Term`: `new Term(tty?)` draws by writing ANSI escape sequences
+  into a TTY (the calling program's `process.stdout` by default, or e.g. `TTY.from(monitor.getTty())`).
+  `write` (cuts off at the edge), `print` (wraps), `blit`, `clear` / `clearLine`, `scroll`, `getCursorPos` /
+  `setCursorPos` (`{x, y}`, 0-based), `getCursorBlink` / `setCursorBlink`, `getSize` / `setSize`, text and background
+  colour, `isColor`, `readKey` / `readInput` / `readChar` / `readLine`; constants `KeyName`, `InputType`,
+  `MouseAction`, `MouseButton`.
+- "Redirecting" means running a program on another TTY (`child_process.spawn(prog, args, { stdio: tty })`,
+  `os.run(prog, args, { tty })`), not swapping a global terminal object.
+- The palette functions are gone for now; colours come back with Tier 0 (`Color` / `ColorSet`, #2).
 
 ### textutils
 
@@ -713,6 +694,10 @@ v.equals(other: Vector): boolean
 ---
 
 ### window
+
+> **Note (#50):** with TTYs there is no `TermRedirect` to wrap. The plan is a native display that carries a TTY and a
+> terminal emulator, like a monitor, so a program runs in a window by being started with the window's TTY; the
+> contract below is the CraftOS reference.
 
 **Summary**: A buffered off-screen terminal redirect that occupies a sub-region of a parent terminal; supports visibility toggling, repositioning, and content redrawing.
 
@@ -2046,10 +2031,10 @@ Events that the ROM layer produces or consumes:
 
 ## Terminal Coordinate Convention
 
-- The CC terminal uses **1-indexed** `(x, y)` coordinates internally.
-- The JS native `term` module exposes **0-indexed** coordinates at the Java boundary.
-- The `term` API layer (and all programs) must always use 1-indexed coordinates.
-- The conversion (`-1` on write, `+1` on read) happens at the native module boundary.
+- Script APIs use **0-indexed** `(x, y)` coordinates: `Term` cursor positions, `decodeInput` mouse events, the
+  printer's `getCursorPos` / `setCursorPos`.
+- ANSI sequences on the wire are 1-indexed, as in VT terminals (`ESC [ row ; col H`, SGR mouse reports); `tty.CSI`
+  and `tty.decodeInput` convert, so programs never see them.
 
 ---
 

@@ -13,6 +13,7 @@ import dan200.computercraft.core.computer.GlobalEnvironment;
 import dan200.computercraft.core.filesystem.FileSystem;
 import dan200.computercraft.core.metrics.MetricsObserver;
 import dan200.computercraft.core.terminal.Terminal;
+import dan200.computercraft.core.tty.Screen;
 import dan200.computercraft.test.core.computer.BasicEnvironment;
 import org.jspecify.annotations.Nullable;
 
@@ -47,6 +48,11 @@ public abstract class BasicApiEnvironment implements IAPIEnvironment {
     @Override
     public Terminal getTerminal() {
         throw new IllegalStateException("Terminal not available");
+    }
+
+    @Override
+    public Screen getScreen() {
+        throw new IllegalStateException("Screen not available");
     }
 
     @Override

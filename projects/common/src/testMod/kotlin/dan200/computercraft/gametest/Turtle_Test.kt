@@ -820,7 +820,7 @@ class Turtle_Test {
     fun Command_error(helper: GameTestHelper) = helper.sequence { thenComputerOk() }
 
     /**
-     * Terminating (Ctrl+T) a program while a turtle command is in flight makes that call throw `Terminated`. The
+     * Terminating (Ctrl+C) a program while a turtle command is in flight makes that call throw `Terminated`. The
      * queued command still runs.
      */
     @GameTest(timeoutTicks = Timeouts.COMPUTER_TIMEOUT)

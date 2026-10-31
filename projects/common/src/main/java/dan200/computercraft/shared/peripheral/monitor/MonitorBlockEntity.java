@@ -8,6 +8,7 @@ import com.google.common.annotations.VisibleForTesting;
 import dan200.computercraft.api.peripheral.AttachedComputerSet;
 import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.api.peripheral.IPeripheral;
+import dan200.computercraft.core.apis.events.CoreEvents;
 import dan200.computercraft.core.terminal.Terminal;
 import dan200.computercraft.shared.computer.terminal.TerminalState;
 import dan200.computercraft.shared.config.Config;
@@ -135,7 +136,13 @@ public class MonitorBlockEntity extends BlockEntity {
 
         if (xIndex != 0 || yIndex != 0 || serverMonitor == null) return;
 
-        if (serverMonitor.pollResized()) eachComputer(c -> c.queueEvent(new PeripheralEvents.MonitorResize(c.getAttachmentName())));
+        if (serverMonitor.pollResized()) {
+            var tty = serverMonitor.getTty().id();
+            eachComputer(c -> {
+                c.queueEvent(new PeripheralEvents.MonitorResize(c.getAttachmentName()));
+                c.queueEvent(new CoreEvents.TtyResize(tty));
+            });
+        }
         if (serverMonitor.pollTerminalChanged()) MonitorWatcher.enqueue(this);
     }
 
@@ -479,6 +486,7 @@ public class MonitorBlockEntity extends BlockEntity {
         var yCharPos = (int) Math.min(originTerminal.getHeight(), Math.max((pair.y() - RENDER_BORDER - RENDER_MARGIN) / yCharHeight + 1.0, 1.0));
 
         eachComputer(c -> c.queueEvent(new PeripheralEvents.MonitorTouch(c.getAttachmentName(), xCharPos, yCharPos)));
+        serverTerminal.touch(xCharPos, yCharPos);
     }
 
     private void eachComputer(Consumer<IComputerAccess> fun) {

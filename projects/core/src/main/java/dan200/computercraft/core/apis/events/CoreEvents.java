@@ -33,9 +33,18 @@ public final class CoreEvents {
     public record Alarm(int id) {
     }
 
-    /** Ctrl+T was held: the foreground program should stop. */
+    /**
+     * Ctrl+C was typed on a TTY in cooked mode (or the terminate button was pressed): the foreground program should
+     * stop.
+     *
+     * @param tty The TTY whose program should stop (the visible console), or 0 for every program.
+     */
     @Event("terminate")
-    public record Terminate() {
+    public record Terminate(int tty) {
+        /** Stop every program (no console in particular). */
+        public Terminate() {
+            this(0);
+        }
     }
 
     /** A key was released. */
@@ -136,5 +145,44 @@ public final class CoreEvents {
     /** Files were dropped onto the computer's terminal. */
     @Event("file_transfer")
     public record FileTransfer(TransferredFiles files) {
+    }
+
+    /**
+     * A TTY pipe that a program is waiting on became readable (data, end of input or closed). It wakes blocked
+     * {@code read()} calls; programs read pipes rather than listening for it.
+     */
+    @Event("pipe_readable")
+    public record PipeReadable(int pipe) {
+    }
+
+    /**
+     * A virtual console of the screen became visible (Alt+1 … Alt+9 or {@code screen.show}).
+     *
+     * @param console The console, starting at 0.
+     */
+    @Event("console_show")
+    public record ConsoleShow(int console) {
+    }
+
+    /**
+     * A TTY changed its size (a monitor that grew or changed its text scale, a virtual TTY given a new size). The
+     * streams of the ROM's {@code tty} module turn it into their {@code 'resize'} event.
+     *
+     * @param tty The TTY.
+     */
+    @Event("tty_resize")
+    public record TtyResize(int tty) {
+    }
+
+    /**
+     * Data read from a flowing TTY pipe (see {@code setFlowing}): the streams of the ROM's {@code tty} module turn it
+     * into their {@code 'data'} and {@code 'end'} events.
+     *
+     * @param pipe The pipe.
+     * @param data The text, or {@code null} at end of input.
+     * @cc-r.param data string | null
+     */
+    @Event("pipe_data")
+    public record PipeData(int pipe, @Nullable String data) {
     }
 }

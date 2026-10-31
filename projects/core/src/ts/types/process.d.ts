@@ -64,8 +64,9 @@ interface TtyWriteStream extends Writable {
     hasColors(count?: number | object): boolean;
     getColorDepth(): number;
     /**
-     * `'resize'` fires on the `term_resize` event. The computer's own terminal never changes size, so it only fires when
-     * ROM code emits `term_resize` (e.g. a future window/multishell layer); other events are accepted but never fired.
+     * `'resize'` fires when the TTY changes its size (the native `tty_resize` event: a monitor that grew or changed its
+     * text scale, a virtual TTY given a new size; the consoles of the screen never change size). Its listeners belong
+     * to the calling thread, like `events.on` listeners. Other events are accepted but never fired.
      */
     on(event: string, listener: (...args: any[]) => void): this;
     addListener(event: string, listener: (...args: any[]) => void): this;
@@ -78,14 +79,15 @@ interface TtyWriteStream extends Writable {
 }
 
 /**
- * process.stdin: the keyboard as a Node `tty.ReadStream`.
+ * process.stdin: the program's TTY (the keyboard) as a Node `tty.ReadStream`.
  *
- * - `'data'`: in cooked mode (the default) a line discipline echoes what is typed, handles Backspace / Ctrl+U and
- *   delivers whole lines including `"\n"`; Ctrl+D on an empty line emits `'end'` (the stream stays usable, like a
+ * - `'data'`: in cooked mode (the default) the TTY's line discipline echoes what is typed, handles Backspace / Ctrl+U
+ *   and delivers whole lines including `"\n"`; Ctrl+D on an empty line emits `'end'` (the stream stays usable, like a
  *   terminal). In raw mode (`setRawMode(true)`) every key is delivered as the characters a VT terminal sends.
- * - `'keypress'`: `(sequence, key)` for every key, in both modes.
- * - Nothing is read (or echoed) until the stream flows: adding a `'data'` listener or calling `resume()` starts it,
- *   `pause()` stops it. Input arriving meanwhile is dropped (there is no type-ahead buffer).
+ * - `'keypress'`: `(sequence, key)` for each key in the delivered input (as with Node's emitKeypressEvents), so in
+ *   cooked mode only for what the line discipline passes on.
+ * - Nothing is delivered until the stream flows: adding a `'data'` listener or calling `resume()` starts it, `pause()`
+ *   stops it. Input typed meanwhile stays in the TTY (type ahead) and is delivered when it flows again.
  * - Listeners belong to the thread that adds them: they may block, and are dropped when the program is stopped. A
  *   program run by the shell keeps running while it has stdin listeners and stdin is not paused (as a Node process
  *   does); the shell closes them when the program ends.
@@ -119,20 +121,28 @@ interface TtyReadStream extends ReadableInput {
     listenerCount(event: string): number;
 }
 
+/**
+ * `process` always means the calling program: each program (started by the shell or child_process) has its own TTY,
+ * argv, working directory and exit code. Outside of a program (the bios, the OS layer) it is the computer's root
+ * process on the first console.
+ */
 interface Process {
+    /** The program's TTY: its stdin, stdout and stderr. */
     readonly stdin: TtyReadStream;
     readonly stdout: TtyWriteStream;
     readonly stderr: TtyWriteStream;
-    /** `["bash", "/path/to/program.js", ...args]` while the shell runs a program (`argv.slice(2)` are its arguments). */
+    /** `["bash", "/path/to/program.js", ...args]` for a program (`argv.slice(2)` are its arguments). */
     argv: string[];
-    argv0: string;
+    readonly argv0: string;
     execArgv: string[];
-    /** Environment variables: a live view of the `env` module (`PATH` mirrors `require.paths`). */
+    /** Environment variables: a live view of the `env` module (`PATH` mirrors `require.paths`); shared by all programs. */
     env: Record<string, string | undefined>;
     readonly platform: "computercraft";
+    /** The id of the running program (0 outside of a program). */
+    readonly pid: number;
     /** Exit code of the running program; set by `exit(code)`. */
     exitCode: number | undefined;
-    /** The working directory (the shell's, saved and restored around each program). */
+    /** The program's working directory (a child starts in its parent's; chdir() does not move the parent). */
     cwd(): string;
     /** Change the working directory; throws ENOENT / ENOTDIR like Node. */
     chdir(directory: string): void;

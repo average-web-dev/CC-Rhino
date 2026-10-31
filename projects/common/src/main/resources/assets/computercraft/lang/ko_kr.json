@@ -97,7 +97,6 @@
     "gui.computercraft.tooltip.copy": "클립보드에 복사",
     "gui.computercraft.tooltip.disk_id": "디스크 ID: %s",
     "gui.computercraft.tooltip.terminate": "현재 실행 중인 코드를 중지합니다.",
-    "gui.computercraft.tooltip.terminate.key": "Ctrl+T를 누르세요.",
     "gui.computercraft.tooltip.turn_off": "이 컴퓨터를 끕니다.",
     "gui.computercraft.tooltip.turn_off.key": "Ctrl+S를 누르세요.",
     "gui.computercraft.tooltip.turn_on": "이 컴퓨터를 켭니다.",

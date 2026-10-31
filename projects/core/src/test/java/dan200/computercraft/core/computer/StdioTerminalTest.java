@@ -114,19 +114,20 @@ class StdioTerminalTest {
             h.key(KEY_BACKSPACE);
             h.type("o");
             h.key(KEY_ENTER);
-            h.waitForProbe(3);
-            assertEquals(List.of("ready", "key:backspace", "data:ho\n"), h.probe());
+            h.waitForProbe(2);
+            // The line discipline consumed the backspace: 'keypress' only sees what is delivered (as in Node).
+            assertEquals(List.of("ready", "data:ho\n"), h.probe());
             assertEquals("ho", h.line(0), "typed text is echoed\n" + h.dump());
             assertTrue(h.cursorBlink(), "the cursor blinks while stdin is read");
 
             h.paste("p1\np2");
             h.key(KEY_ENTER);
-            h.waitForProbe(5);
-            assertEquals(List.of("data:p1\n", "data:p2\n"), h.probe().subList(3, 5));
+            h.waitForProbe(4);
+            assertEquals(List.of("data:p1\n", "data:p2\n"), h.probe().subList(2, 4));
 
             h.ctrl('D');
-            h.waitForProbe(6);
-            assertEquals("end", h.probe().get(5));
+            h.waitForProbe(5);
+            assertEquals("end", h.probe().get(4));
         }
     }
 
@@ -152,7 +153,7 @@ class StdioTerminalTest {
     }
 
     @Test
-    void paused_stdin_drops_input() {
+    void paused_stdin_keeps_input() {
         try (var h = boot("""
             var onData = function (d) { probe.record(d); };
             process.stdin.on('data', onData);
@@ -168,9 +169,10 @@ class StdioTerminalTest {
             h.waitForProbe(2);
             h.type("kept");
             h.key(KEY_ENTER);
-            h.waitForProbe(3);
-            assertEquals(List.of("ready", "resumed", "kept\n"), h.probe());
-            assertFalse(h.screen().contains("lost"), "nothing is echoed while paused\n" + h.dump());
+            h.waitForProbe(4);
+            // Type ahead: what was typed while paused stays in the TTY (and was echoed) until stdin is read again.
+            assertEquals(List.of("ready", "resumed", "lost\n", "kept\n"), h.probe());
+            assertTrue(h.screen().contains("lost"), "the line discipline echoes typed input\n" + h.dump());
         }
     }
 }

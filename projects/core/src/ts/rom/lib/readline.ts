@@ -16,7 +16,8 @@
 // it is paused (process.stdin is shared with the shell); there is no kill ring, undo or reverse search.
 
 import { EventEmitter } from '/rom/lib/internal/emitter';
-import * as tty from '/rom/lib/internal/tty';
+import * as tty from '/rom/lib/tty';
+import { decodeKeys } from '/rom/lib/internal/keys';
 import * as util from '/rom/lib/util';
 import { callable } from '/rom/lib/internal/callable';
 import asyncMod from 'async';
@@ -79,84 +80,12 @@ function invalidArgValue(name: string, value: unknown): TypeError {
 
 const KEYPRESS_DECODER = '__ccKeypressDecoder';
 
-function keyFor(name: string | undefined, sequence: string, ctrl = false, meta = false, shift = false): Key {
-    return { sequence, name, ctrl, meta, shift };
-}
-
-const CSI_KEYS: Record<string, string> = {
-    A: 'up', B: 'down', C: 'right', D: 'left', H: 'home', F: 'end', E: 'clear',
-    '1~': 'home', '2~': 'insert', '3~': 'delete', '4~': 'end', '5~': 'pageup', '6~': 'pagedown',
-    '7~': 'home', '8~': 'end', P: 'f1', Q: 'f2', R: 'f3', S: 'f4',
-    '15~': 'f5', '17~': 'f6', '18~': 'f7', '19~': 'f8', '20~': 'f9', '21~': 'f10', '23~': 'f11', '24~': 'f12',
-};
-
-/** Split terminal input (VT sequences) into Node keypress events: emit(sequenceOrUndefined, key). */
-function decodeKeys(data: string, emit: (s: string | undefined, key: Key) => void): void {
-    let i = 0;
-    while (i < data.length) {
-        let ch = data.charAt(i);
-        if (ch === '\x1b') {
-            let next = data.charAt(i + 1);
-            if (next === '[' || next === 'O') {
-                let j = i + 2;
-                let params = '';
-                while (j < data.length && /[0-9;]/.test(data.charAt(j))) { params += data.charAt(j); j++; }
-                let final = data.charAt(j);
-                let sequence = data.slice(i, j + 1);
-                let modifier = 1;
-                let code: string;
-                let parts = params.split(';');
-                if (final === '~') {
-                    code = parts[0] + '~';
-                    if (parts.length > 1) modifier = parseInt(parts[1], 10) || 1;
-                } else {
-                    code = final;
-                    if (parts.length > 1) modifier = parseInt(parts[1], 10) || 1;
-                }
-                let m = modifier - 1;
-                if (final === 'Z') {
-                    emit(undefined, keyFor('tab', sequence, false, false, true));
-                } else {
-                    emit(undefined, keyFor(CSI_KEYS[code], sequence, (m & 4) !== 0, (m & 2) !== 0, (m & 1) !== 0));
-                }
-                i = j + 1;
-                continue;
-            }
-            if (next === '') { emit('\x1b', keyFor('escape', '\x1b')); i++; continue; }
-            // ESC + key: the key with meta.
-            let inner = next;
-            let key = decodeSingle(inner);
-            key.meta = true;
-            key.sequence = '\x1b' + inner;
-            emit(key.sequence, key);
-            i += 2;
-            continue;
-        }
-        let key = decodeSingle(ch);
-        emit(ch, key);
-        i++;
-    }
-}
-
-function decodeSingle(ch: string): Key {
-    let code = ch.charCodeAt(0);
-    if (ch === '\r') return keyFor('return', ch);
-    if (ch === '\n') return keyFor('enter', ch);
-    if (ch === '\t') return keyFor('tab', ch);
-    if (ch === '\b' || ch === '\x7f') return keyFor('backspace', ch, ch === '\b');
-    if (ch === '\x1b') return keyFor('escape', ch);
-    if (ch === ' ') return keyFor('space', ch);
-    if (code > 0 && code <= 26) return keyFor(String.fromCharCode(code + 96), ch, true);
-    if (/^[0-9A-Za-z]$/.test(ch)) return keyFor(ch.toLowerCase(), ch, false, false, /^[A-Z]$/.test(ch));
-    return keyFor(undefined, ch);
-}
-
 /**
- * Make `stream` emit 'keypress' events for its input, as Node's readline.emitKeypressEvents does. process.stdin
- * already emits them (decoded from the computer's key events), so this is a no-op for it.
+ * Make `stream` emit 'keypress' events for its input, as Node's readline.emitKeypressEvents does. TTY streams
+ * (process.stdin) already emit them (decoded from what the TTY delivers), so this is a no-op for them.
  */
 export function emitKeypressEvents(stream: ReadableInput, _iface?: unknown): void {
-    if (stream === tty.stdin || (stream as any)[KEYPRESS_DECODER]) return;
+    if (stream instanceof tty.ReadStream || (stream as any)[KEYPRESS_DECODER]) return;
     let decoder = (data: string | Uint8Array) => {
         if (stream.listenerCount('keypress') === 0) return;
         let text = typeof data === 'string' ? data : String.fromCharCode.apply(null, Array.prototype.slice.call(data));

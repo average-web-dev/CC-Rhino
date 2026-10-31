@@ -47,6 +47,13 @@ final class JSThread {
     State state = State.RUNNING;
     /** The uncaught JS error this thread failed with, if any. */
     @Nullable Object error;
+    /**
+     * A script value set with {@code internal/loop.setContext} (the ROM's job: its TTY, argv, working directory),
+     * inherited by every descendant; see {@link #context()}.
+     */
+    @Nullable Object context;
+    /** The TTY the program in this thread runs on (set with the context; 0 = none), for routing Ctrl+C. */
+    int terminal;
 
     JSThread(int id, @Nullable JSThread parent, @Nullable JSTaskGroup group, int index) {
         this.id = id;
@@ -76,12 +83,14 @@ final class JSThread {
     }
 
     /**
-     * Whether this thread is part of the foreground, i.e. it and all its ancestors (up to the root) are being waited
-     * for by a {@code parallel.waitFor*} call. Only foreground threads receive {@code terminate}; spawned background
-     * threads and their descendants do not.
+     * Whether this thread is part of the foreground of its program, i.e. it and all its ancestors up to the root, or up
+     * to the thread a program runs in (one with its own {@link #context}), are being waited for by a
+     * {@code parallel.waitFor*} call. Only foreground threads receive {@code terminate}; spawned background threads of a
+     * program and their descendants do not.
      */
     boolean isForeground() {
         for (var thread = this; thread.parent != null; thread = thread.parent) {
+            if (thread.context != null) return true;
             if (thread.group == null) return false;
         }
         return true;
@@ -100,13 +109,33 @@ final class JSThread {
         }
     }
 
-    /** Mark this thread as returned, handing its children over to its parent. */
+    /** The TTY of this thread: its own, or the nearest ancestor's (0 if none). */
+    int terminal() {
+        for (var thread = this; thread != null; thread = thread.parent) {
+            if (thread.terminal != 0) return thread.terminal;
+        }
+        return 0;
+    }
+
+    /** The context of this thread: its own, or the nearest ancestor's. */
+    @Nullable Object context() {
+        for (var thread = this; thread != null; thread = thread.parent) {
+            if (thread.context != null) return thread.context;
+        }
+        return null;
+    }
+
+    /** Mark this thread as returned, handing its children over to its parent (they keep this thread's context). */
     void markReturned() {
         state = State.RETURNED;
         var newParent = parent;
         if (newParent == null) return;
         newParent.children.remove(this);
+        var inherited = context();
+        var inheritedTerminal = terminal();
         for (var child : children) {
+            if (child.context == null) child.context = inherited;
+            if (child.terminal == 0) child.terminal = inheritedTerminal;
             child.parent = newParent;
             newParent.children.add(child);
         }

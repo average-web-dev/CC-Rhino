@@ -51,10 +51,7 @@ public final class ComputerSidebar {
             x, y, ICON_WIDTH, ICON_HEIGHT,
             GuiSprites.TERMINATE::get,
             b -> actions.terminate(),
-            new HintedMessage(
-                Component.translatable("gui.computercraft.tooltip.terminate"),
-                Component.translatable("gui.computercraft.tooltip.terminate.key")
-            )
+            new HintedMessage(Component.translatable("gui.computercraft.tooltip.terminate"), (Component) null)
         ));
     }
 

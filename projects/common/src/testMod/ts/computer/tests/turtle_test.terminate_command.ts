@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-// Ctrl+T while a turtle command is in flight terminates the foreground program (run in a parallel.waitFor* thread,
+// Ctrl+C while a turtle command is in flight terminates the foreground program (run in a parallel.waitFor* thread,
 // as the shell does) with Error("Terminated").
 import parallel from 'parallel';
 import turtle from 'turtle';

@@ -67,6 +67,18 @@ class StdioLibraryTest {
         run("timers.js");
     }
 
+    /** The tty module and Term on virtual TTYs. */
+    @Test
+    void tty() {
+        run("tty.js");
+    }
+
+    /** child_process and os.run: programs as jobs with their own TTY, argv, directory and exit code. */
+    @Test
+    void childProcess() {
+        run("child_process.js");
+    }
+
     /** What plain-JS {@code require} sees of every ROM module (#49). */
     @Test
     void exports() {
