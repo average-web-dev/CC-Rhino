@@ -46,6 +46,7 @@ const expected: Record<string, [string, string[]]> = {
     'child_process': ['object', ['ChildProcess', 'exec', 'execSync', 'spawn', 'spawnSync']],
     'os': ['object', ['run']],
     'geometry': ['object', ['Point', 'Vector']],
+    'color': ['object', ['Color']],
     '/rom/lib/internal/globals': ['object', []],
     '/rom/bin/bash': ['object', ['getCwd', 'getExitCode', 'main', 'run', 'setCwd', 'start']],
     '/rom/bin/edit': ['object', main],

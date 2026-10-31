@@ -91,6 +91,12 @@ class StdioLibraryTest {
         run("geometry.js");
     }
 
+    /** The color module: RGB colors. */
+    @Test
+    void color() {
+        run("color.js");
+    }
+
     /** What plain-JS {@code require} sees of every ROM module (#49). */
     @Test
     void exports() {
