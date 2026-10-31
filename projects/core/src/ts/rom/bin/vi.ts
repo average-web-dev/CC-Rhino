@@ -7,8 +7,10 @@
 //   vi [file]     edit a file (or a new, unnamed buffer: :w name writes it)
 //
 // Normal mode moves and changes text, Insert mode (i, a, o …) types it, ':' runs commands (:w, :q, :wq, :q!). The
-// editor itself is /rom/lib/internal/vi; this program connects it to the terminal: raw mode, bracketed paste, and the
-// TTY put back as it was when it ends.
+// editor itself is /rom/lib/internal/vi; this program connects it to the terminal, event driven as a Node program
+// is: main() puts stdin in raw mode with bracketed paste, listens to its 'keydown' / 'paste' events (and stdout's
+// 'resize') and returns. The flowing stdin keeps the program alive until the editor quits: then the listeners are
+// removed, stdin pauses and the TTY is put back as it was.
 
 import fs from 'fs';
 import { Term } from '/rom/lib/term';
@@ -16,7 +18,6 @@ import { CSI } from '/rom/lib/tty';
 import { resolve } from '/rom/lib/resolve';
 import { Editor, type FileIO } from '/rom/lib/internal/vi/editor';
 import { View } from '/rom/lib/internal/vi/view';
-import { InputType } from '/rom/lib/internal/keys';
 
 export function main(args: string[], cwd: string): void {
     let io: FileIO = {
@@ -29,25 +30,41 @@ export function main(args: string[], cwd: string): void {
     let editor = new Editor(io, args[0]);
     let term = new Term();
     let view = new View(term, editor);
+    let stdin = process.stdin;
+    let stdout = process.stdout;
 
-    process.stdin.setRawMode(true);
-    process.stdout.write(CSI.bracketedPaste(true));
-    term.clear();
-    try {
-        view.draw();
-        while (!editor.quit) {
-            let input = term.readInput();
-            if (input === undefined) break;
-            if (input.type === InputType.KEY_DOWN) editor.handleKey(input);
-            else if (input.type === InputType.PASTE) editor.handlePaste(input.text);
-            else continue;
-            if (!editor.quit) view.draw();
+    /** Apply an input to the editor, then redraw, or close when it quit (also when the change failed). */
+    let update = (change: () => void): void => {
+        try {
+            change();
+        } catch (e) {
+            close();
+            throw e;
         }
-    } finally {
-        process.stdout.write(CSI.bracketedPaste(false));
-        process.stdin.setRawMode(false);
+        if (editor.quit) close(); else view.draw();
+    };
+    let onKey = (key: TtyKeyInput) => { update(() => { editor.handleKey(key); }); };
+    let onPaste = (paste: TtyPasteInput) => { update(() => { editor.handlePaste(paste.text); }); };
+    let onResize = () => { update(() => { view.invalidate(); }); };
+
+    /** Stop listening (so the program can end) and give the TTY back as the shell expects it. */
+    let close = (): void => {
+        stdin.off('keydown', onKey);
+        stdin.off('paste', onPaste);
+        stdout.off('resize', onResize);
+        stdin.pause();
+        stdout.write(CSI.bracketedPaste(false));
+        stdin.setRawMode(false);
         term.clear();
         term.setCursorPos({ x: 0, y: 0 });
         term.setCursorBlink(true);
-    }
+    };
+
+    stdin.setRawMode(true);
+    stdout.write(CSI.bracketedPaste(true));
+    term.clear();
+    view.draw();
+    stdin.on('keydown', onKey);
+    stdin.on('paste', onPaste);
+    stdout.on('resize', onResize);
 }
