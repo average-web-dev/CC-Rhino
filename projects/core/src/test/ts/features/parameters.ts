@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 // Parameters on Rhino: all native since the Rhino fork fixed rest parameters through Function.prototype.apply (#41).
-// Destructured parameters are lowered by transform-destructuring (array patterns ignore the iterator protocol).
+// Destructured parameters are native too, except for holes in their array patterns, which babel-preset-rhino fills
+// with unused bindings (parameter-holes.mjs).
 
 function rest(...args: unknown[]): string {
     return JSON.stringify(args);
@@ -30,6 +31,18 @@ function destructured({ x, y }: { x: number; y: number }, [first, second]: numbe
     return x + y + first + second;
 }
 check("destructured parameters", destructured({ x: 1, y: 2 }, [3, 4]), 10);
+
+function second([, b]: number[]): number {
+    return b;
+}
+const skipTwo = ([a, , , d]: number[]) => a + d;
+function nestedHole({ p: [, b] = [0, 9] }: { p?: number[] }, [[, c]]: number[][]): number {
+    return b + c;
+}
+check("a hole in a parameter's array pattern", second([1, 2]), 2);
+check("holes in an arrow parameter", skipTwo([1, 2, 3, 4]), 5);
+check("nested holes, with a default", nestedHole({}, [[1, 2]]), 11);
+check("length with destructured parameters", [second.length, skipTwo.length, nestedHole.length], [1, 1, 2]);
 
 function iterableParameter([first, second]: Iterable<number>): number {
     return first + second;

@@ -224,6 +224,12 @@ class JSRhinoFeatureTest {
             function F(a, b) { this.s = a + b; }
             return new F(...[1, 2]).s;
             """),
+        new Feature("holes in array patterns of parameters", BROKEN, "2,4,3", """
+            function f([, b]) { return b; }
+            var g = ([a, , c]) => a + c;
+            function h({ p: [, b] }) { return b; }
+            return [f([1, 2]), g([1, 2, 3]), h({ p: [1, 3] })].join();
+            """),
         new Feature("array destructuring of iterables", BROKEN, "3", """
             var [a, b] = new Set([1, 2]);
             return a + b;

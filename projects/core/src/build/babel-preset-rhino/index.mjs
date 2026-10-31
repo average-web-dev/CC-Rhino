@@ -26,6 +26,8 @@
 // - array destructuring (ignores the iterator protocol); the destructuring plugin lowers all patterns, so object rest
 //   needs no plugin of its own
 // - `new.target` (syntax error)
+// - holes in array patterns of parameters (`([, b]) => b` binds the wrong element): filled with unused bindings, see
+//   ./parameter-holes.mjs (destructured parameters stay native otherwise)
 // - async functions, async generators and `for await` (Rhino has none of them): lowered to native generators driven by
 //   the asyncToGenerator / wrapAsyncGenerator helpers (never regenerator: Rhino's continuations need real generators,
 //   generators). `for await` closes its iterator when left early.
@@ -49,6 +51,7 @@ import asyncToGenerator from "@babel/plugin-transform-async-to-generator";
 
 import externalHelpers from "./external-helpers.mjs";
 import modules from "./modules.mjs";
+import parameterHoles from "./parameter-holes.mjs";
 import { HELPERS_MODULE } from "./helpers.mjs";
 
 /**
@@ -61,6 +64,7 @@ export default function babelPresetRhino(api, options = {}) {
     return {
         plugins: [
             // The order follows @babel/preset-env (newest syntax first, modules last).
+            parameterHoles,
             asyncGeneratorFunctions,
             classStaticBlock,
             privatePropertyInObject,
