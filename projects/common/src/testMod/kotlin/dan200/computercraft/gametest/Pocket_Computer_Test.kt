@@ -5,12 +5,10 @@
 package dan200.computercraft.gametest
 
 import dan200.computercraft.api.ComputerCraftAPI
-import dan200.computercraft.api.scripting.Coerced
 import dan200.computercraft.api.pocket.IPocketUpgrade
 import dan200.computercraft.api.upgrades.UpgradeData
 import dan200.computercraft.client.pocket.ClientPocketComputers
-import dan200.computercraft.core.apis.TermAPI
-import dan200.computercraft.core.apis.TermMethods
+import dan200.computercraft.core.apis.tty.ScreenAPI
 import dan200.computercraft.gametest.api.*
 import dan200.computercraft.mixin.gametest.GameTestHelperAccessor
 import dan200.computercraft.shared.ModRegistry
@@ -45,7 +43,7 @@ class Pocket_Computer_Test {
             context.givePocketComputer(unique)
         }
         // Write some text to the computer.
-        thenOnComputer(unique) { getApi<TermAPI>().write(Coerced("Hello, world!")) }
+        thenOnComputer(unique) { getApi<ScreenAPI>().terminal.write("Hello, world!") }
         // And ensure its synced to the client.
         thenIdle(4)
         thenOnClient {
@@ -57,10 +55,10 @@ class Pocket_Computer_Test {
         }
         // Update the terminal contents again.
         thenOnComputer(unique) {
-            val term = getApi<TermAPI>()
-            term.setCursorPos(TermMethods.CursorPosition(1, 1))
-            term.setCursorBlink(true)
-            term.write(Coerced("Updated text :)"))
+            val term = getApi<ScreenAPI>().terminal
+            term.setCursorPos(1, 1)
+            term.cursorBlink = true
+            term.write("Updated text :)")
         }
         // And ensure the new computer state and terminal are sent.
         thenIdle(4)
@@ -87,7 +85,7 @@ class Pocket_Computer_Test {
             context.givePocketComputer(unique)
         }
         thenOnComputer(unique) {
-            val terminal = getApi<TermAPI>().terminal
+            val terminal = getApi<ScreenAPI>().terminal
             terminal.write("Hello, world!")
             terminal.setCursorPos(1, 2)
             terminal.textColour = 2

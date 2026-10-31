@@ -32,8 +32,22 @@ t.stdout.write('hello');
 t.stderr.write('oops');
 eq(t.readOutput(), 'hello');
 eq(t.readErrorOutput(), 'oops');
+// 'resize' fires (on a later tick) when the TTY changes its size, and only on the streams of that TTY.
+const other = new TTY(5, 2);
+let otherResized = 0;
+other.stdout.on('resize', () => { otherResized++; });
+const resized = new Promise<number>((resolve) => {
+    t.stdout.once('resize', function (this: TtyWriteStream) { resolve(this.columns); });
+});
+eq(t.stdout.listenerCount('resize'), 1);
+t.setSize(10, 3);
 t.setSize(20, 4);
 eq(t.columns, 20);
+eq(asyncMod.unwrap(resized), 20);
+eq(t.stdout.listenerCount('resize'), 0, 'once removes itself');
+eq(otherResized, 0, 'other TTYs do not see it');
+other.stdout.removeAllListeners('resize');
+eq(other.stdout.listenerCount('resize'), 0);
 
 // Typing into it passes the line discipline: cooked mode echoes and delivers whole lines.
 const lines: string[] = [];

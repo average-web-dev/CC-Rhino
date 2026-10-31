@@ -4,10 +4,9 @@
 
 package dan200.computercraft.gametest
 
-import dan200.computercraft.api.scripting.Coerced
 import dan200.computercraft.client.gui.AbstractComputerScreen
 import dan200.computercraft.core.apis.RedstoneAPI
-import dan200.computercraft.core.apis.TermAPI
+import dan200.computercraft.core.apis.tty.ScreenAPI
 import dan200.computercraft.core.computer.ComputerSide
 import dan200.computercraft.gametest.api.*
 import dan200.computercraft.shared.ModRegistry
@@ -125,9 +124,9 @@ class Computer_Test {
     @ClientGameTest
     fun Open_on_client(context: GameTestHelper) = context.sequence {
         // Write "Hello, world!" and then print each event to the terminal.
-        thenOnComputer { getApi<TermAPI>().write(Coerced("Hello, world!")) }
+        thenOnComputer { getApi<ScreenAPI>().terminal.write("Hello, world!") }
         thenStartComputer {
-            val term = getApi<TermAPI>().terminal
+            val term = getApi<ScreenAPI>().terminal
             while (true) {
                 val event = pullEvent()
                 if (term.cursorY >= term.height) {

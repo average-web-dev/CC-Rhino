@@ -8,6 +8,7 @@ import dan200.computercraft.api.scripting.IComputerAPI;
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.apis.IAPIEnvironment;
+import dan200.computercraft.core.terminal.Terminal;
 import dan200.computercraft.core.tty.Screen;
 
 import java.util.ArrayList;
@@ -42,6 +43,16 @@ public class ScreenAPI implements IComputerAPI {
         synchronized (handles) {
             handles.clear();
         }
+    }
+
+    /**
+     * The computer's terminal, for Java code that draws on it directly (e.g. tests). Scripts draw through a console's
+     * TTY instead.
+     *
+     * @return The terminal the screen shows.
+     */
+    public Terminal getTerminal() {
+        return environment.getTerminal();
     }
 
     private Screen screen() {

@@ -65,8 +65,8 @@ before `require.paths` and as `node:<name>`). Full API: JS_API_REDESIGN.md, "Nod
   Delays are rounded up to whole ticks (≥ 1). Replaces `os.startTimer` + `os.pullEvent('timer')` loops and `sleep`
   without blocking.
 
-**CC-specific behaviour**: colour escape codes are ignored on monochrome terminals; the computer's terminal never
-resizes, so stdout `'resize'` only fires when ROM code emits `term_resize`.
+**CC-specific behaviour**: colour escape codes are ignored on monochrome terminals; stdout `'resize'` fires on the
+native `tty_resize` event of its TTY (monitors, virtual TTYs; the screen's consoles never resize).
 
 **Priority**: essential
 

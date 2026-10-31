@@ -272,7 +272,7 @@ signals, memory usage, colour inspection, …) are absent rather than faked.
 
 | Member | Notes |
 |---|---|
-| `stdout`, `stderr` | `tty.WriteStream`-like: `write(chunk[, encoding][, cb])` (string or `Uint8Array`, Latin-1), `columns`/`rows`, `isTTY`, `cursorTo`/`moveCursor`/`clearLine`/`clearScreenDown`, `getWindowSize`, `hasColors`/`getColorDepth`. Text wraps at the right edge (VT pending-wrap) and scrolls; `\n \r \t \b` and ANSI sequences are interpreted: SGR colours map onto the 16 CC colours (ignored on monochrome terminals), plus CUU/CUD/CUF/CUB/CNL/CPL/CHA/CUP, ED, EL, SU/SD, save/restore, `?25h/l` (cursor blink). `stderr` writes in red. `'resize'` = the `term_resize` event (the computer's own terminal never resizes; a future window layer can emit it). |
+| `stdout`, `stderr` | `tty.WriteStream`-like: `write(chunk[, encoding][, cb])` (string or `Uint8Array`, Latin-1), `columns`/`rows`, `isTTY`, `cursorTo`/`moveCursor`/`clearLine`/`clearScreenDown`, `getWindowSize`, `hasColors`/`getColorDepth`. Text wraps at the right edge (VT pending-wrap) and scrolls; `\n \r \t \b` and ANSI sequences are interpreted: SGR colours map onto the 16 CC colours (ignored on monochrome terminals), plus CUU/CUD/CUF/CUB/CNL/CPL/CHA/CUP, ED, EL, SU/SD, save/restore, `?25h/l` (cursor blink). `stderr` writes in red. `'resize'` = the native `tty_resize` event for this TTY (monitors, virtual TTYs; the screen's consoles never resize). |
 | `stdin` | `tty.ReadStream`-like, fed by `char`/`key`/`paste`: `'data'`, `'keypress'` (`(sequence, key)` with `name`/`ctrl`/`meta`/`shift`), `'end'`; `setRawMode`, `isRaw`, `pause`/`resume`/`isPaused`, `readableFlowing`, `setEncoding` (always strings). **Cooked** (default): line discipline with echo, Backspace, Ctrl+U, Enter → `'data'` = line + `"\n"`, Ctrl+D on an empty line → `'end'` (the stream stays usable, like a terminal). **Raw**: each key as the VT sequence a terminal sends (`"\x1b[A"`, `"\r"`, `"\x7f"`, Ctrl+letter → control character). Nothing is read until the stream flows (a `'data'` listener or `resume()`); input arriving meanwhile is dropped. The cursor blinks while stdin flows. |
 | `argv`, `argv0`, `execArgv` | `['bash', '/path/program.js', ...args]` while bash runs a program (`argv.slice(2)` = arguments) |
 | `env` | live view of the `env` module (`PATH` mirrors `require.paths`); values are strings |
@@ -403,31 +403,24 @@ variant; `require('http/promises')` returns promises of the same results.
 
 ---
 
-## `term` — kept, but multiple returns → objects
+## `term` → TTYs, `screen` and the ROM `Term` (feature/tty-term)
 
-Function names are already camelCase. Main change: tuple returns become objects.
+There is no native `term` module and monitors no longer have drawing methods. Output goes through **TTYs**
+(native pipes + line discipline, rendered by a Java terminal emulator); see `AGENTS.md` → runtime model.
 
-| Function | Parameters | Return (new) | today |
-|---|---|---|---|
-| `write` | `text` | `void` | same |
-| `blit` | `text, fg, bg` | `void` | same |
-| `scroll` | `y` | `void` | same |
-| `clear` / `clearLine` | – | `void` | same |
-| `getCursorPos` | – | `{x, y}` (**0-based**) | was 2 returns, 1-based |
-| `setCursorPos` | `{x, y}` | `void` | **0-based** (was 1-based) |
-| `getCursorBlink` | – | `boolean` | same |
-| `setCursorBlink` | `blink` | `void` | same |
-| `getSize` | – | `{width, height}` | was 2 returns |
-| `getTextColor` / `setTextColor` | `color?` | `number` / `void` | same |
-| `getBackgroundColor` / `setBackgroundColor` | `color?` | `number` / `void` | same |
-| `isColor` | – | `boolean` | same |
-| `getPaletteColor` | `color` | `{r, g, b}` | was 3 returns |
-| `setPaletteColor` | `color, rgb \| {r, g, b} \| r,g,b` | `void` | also accepts `getPaletteColor`'s object |
-| `nativePaletteColor` | `color` | `{r, g, b}` | was 3 returns |
-
-> **Decided:** cursor coordinates are **0-based** (`{x: 0, y: 0}` = top left), diverging from
-> the CC docs (1-based) but JS-idiomatic. `getSize` is unaffected (width/height are lengths,
-> not indices). Internally a +1 is applied when crossing into CC's terminal.
+- `require('screen')`: the computer's virtual consoles — `activate`, `isActive`, `getConsoles`, `getConsole(i)`,
+  `getConsoleCount`, `getVisible`, `show(i)`, `isColor`. Each console is a `TtyHandle`.
+- `monitor.getTty()`: a monitor is a TTY; the peripheral keeps only `setTextScale` / `getTextScale`. Touches arrive
+  in the TTY's stdin as mouse input (once enabled) and as `monitor_touch`.
+- `tty` (ROM, Node API): `ReadStream` / `WriteStream` (`process.stdin/stdout/stderr`), `TTY` (virtual or
+  `TTY.from(handle)`), `CSI` (escape sequences), `isatty`. `WriteStream` fires `'resize'` on the native
+  `tty_resize(tty)` event (monitors, virtual TTYs; the screen's consoles never resize).
+- `term` (ROM): `new Term(tty?)` draws by writing ANSI — `write`/`print`, `blit`, `clear`/`clearLine`, `scroll`,
+  `getCursorPos`/`setCursorPos` (`{x, y}`, **0-based**), `getCursorBlink`/`setCursorBlink`, `getSize`/`setSize`,
+  `getTextColor`/`setTextColor`, `getBackgroundColor`/`setBackgroundColor`, `isColor`, `readKey`/`readChar`/
+  `readLine`; `KeyName` constants for `key.name`.
+- The palette functions (`getPaletteColor`, `setPaletteColor`, `nativePaletteColor`) are gone for now; colours will
+  come back with Tier 0 (`Color` / `ColorSet`).
 
 ---
 

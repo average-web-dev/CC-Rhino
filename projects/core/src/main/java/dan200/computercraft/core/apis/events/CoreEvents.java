@@ -164,6 +164,16 @@ public final class CoreEvents {
     }
 
     /**
+     * A TTY changed its size (a monitor that grew or changed its text scale, a virtual TTY given a new size). The
+     * streams of the ROM's {@code tty} module turn it into their {@code 'resize'} event.
+     *
+     * @param tty The TTY.
+     */
+    @Event("tty_resize")
+    public record TtyResize(int tty) {
+    }
+
+    /**
      * Data read from a flowing TTY pipe (see {@code setFlowing}): the streams of the ROM's {@code tty} module turn it
      * into their {@code 'data'} and {@code 'end'} events.
      *

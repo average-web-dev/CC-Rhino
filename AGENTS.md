@@ -161,7 +161,9 @@ part of `assemble`.
   `Screen` (module `screen`) with virtual consoles (1 on normal, `advanced_consoles` on advanced computers; Alt+1…9);
   it stays inactive until a script activates it (the ROM's `internal/tty` does), then mirrors the visible console onto
   the computer's terminal; input reaches it through `EventComputerInput` (events are still queued too). Monitors have
-  a TTY too (`monitor.getTty()`). There is no native `term` module any more: the ROM module `term` (class `Term`)
+  a TTY too (`monitor.getTty()`; the peripheral itself only keeps the text scale — there are no drawing or palette
+  methods on monitors any more). A TTY that changes size queues `tty_resize(tty)` (monitors, virtual TTYs), which
+  `WriteStream` turns into `'resize'`. There is no native `term` module any more: the ROM module `term` (class `Term`)
   draws by writing ANSI into a TTY, and `tty.CSI` holds the escape sequences (no raw `'\x1b[…'` in ROM code).
 - Node-style stdio (#34) is ROM TypeScript in `/rom/lib`: `process`, `console`, `util`, `readline`,
   `readline/promises`, `tty`, `term`. These "ROM core modules" resolve before `require.paths` and with a `node:`

@@ -64,8 +64,9 @@ interface TtyWriteStream extends Writable {
     hasColors(count?: number | object): boolean;
     getColorDepth(): number;
     /**
-     * `'resize'` fires on the `term_resize` event. The computer's own terminal never changes size, so it only fires when
-     * ROM code emits `term_resize` (e.g. a future window/multishell layer); other events are accepted but never fired.
+     * `'resize'` fires when the TTY changes its size (the native `tty_resize` event: a monitor that grew or changed its
+     * text scale, a virtual TTY given a new size; the consoles of the screen never change size). Its listeners belong
+     * to the calling thread, like `events.on` listeners. Other events are accepted but never fired.
      */
     on(event: string, listener: (...args: any[]) => void): this;
     addListener(event: string, listener: (...args: any[]) => void): this;

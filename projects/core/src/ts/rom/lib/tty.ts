@@ -139,6 +139,14 @@ class LocalListeners {
     }
 }
 
+/** The stream event fired when the TTY changes its size (native `tty_resize`). */
+const RESIZE = 'resize';
+
+interface ResizeListener {
+    fn: Listener;
+    native: (tty: number) => void;
+}
+
 /** Node's tty.WriteStream: what programs write to a TTY (`stdout` or `stderr`). */
 export class WriteStream implements TtyWriteStream {
     readonly fd: number;
@@ -147,6 +155,7 @@ export class WriteStream implements TtyWriteStream {
     #tty: TtyHandle;
     #pipe: PipeHandle;
     #local = new LocalListeners();
+    #resize: ResizeListener[] = [];
 
     constructor(tty: TtyHandle, pipe: PipeHandle, fd: number) {
         this.#tty = tty;
@@ -191,14 +200,35 @@ export class WriteStream implements TtyWriteStream {
     getColorDepth(): number { return this.#tty.isColor() ? 4 : 1; }
 
     on(event: string, listener: Listener): this {
-        if (event === 'resize') events.on('term_resize', listener); else this.#local.add(event, listener);
+        if (event === RESIZE) this.#addResize(listener, false); else this.#local.add(event, listener);
         return this;
+    }
+
+    /** 'resize' listeners are native `tty_resize` listeners of the calling thread, filtered to this TTY. */
+    #addResize(listener: Listener, once: boolean): void {
+        let id = this.#tty.getId();
+        let entry: ResizeListener = {
+            fn: listener,
+            native: (tty: number) => {
+                if (tty !== id) return;
+                if (once) this.#removeResize(entry);
+                listener.call(this);
+            },
+        };
+        this.#resize.push(entry);
+        events.on('tty_resize', entry.native);
+    }
+
+    #removeResize(entry: ResizeListener): void {
+        let index = this.#resize.indexOf(entry);
+        if (index >= 0) this.#resize.splice(index, 1);
+        events.off('tty_resize', entry.native);
     }
 
     addListener(event: string, listener: Listener): this { return this.on(event, listener); }
 
     once(event: string, listener: Listener): this {
-        if (event === 'resize') { events.once('term_resize', listener); return this; }
+        if (event === RESIZE) { this.#addResize(listener, true); return this; }
         let local = this.#local;
         let wrapper = function (this: unknown, ...args: unknown[]) {
             local.remove(event, wrapper);
@@ -209,7 +239,10 @@ export class WriteStream implements TtyWriteStream {
     }
 
     off(event: string, listener: Listener): this {
-        if (event === 'resize') events.off('term_resize', listener); else this.#local.remove(event, listener);
+        if (event !== RESIZE) { this.#local.remove(event, listener); return this; }
+        for (let i = this.#resize.length - 1; i >= 0; i--) {
+            if (this.#resize[i].fn === listener) { this.#removeResize(this.#resize[i]); break; }
+        }
         return this;
     }
 
@@ -217,17 +250,21 @@ export class WriteStream implements TtyWriteStream {
 
     removeAllListeners(event?: string): this {
         this.#local.clear(event);
+        if (event === undefined || event === RESIZE) {
+            for (let entry of this.#resize.slice()) this.#removeResize(entry);
+        }
         return this;
     }
 
     emit(event: string, ...args: unknown[]): boolean {
-        if (event === 'resize') return events.emit('term_resize');
-        return this.#local.emit(this, event, args);
+        if (event !== RESIZE) return this.#local.emit(this, event, args);
+        let snapshot = this.#resize.slice();
+        for (let entry of snapshot) entry.fn.apply(this, args);
+        return snapshot.length > 0;
     }
 
     listenerCount(event: string): number {
-        if (event === 'resize') return events.listenerCount('term_resize');
-        return this.#local.count(event);
+        return event === RESIZE ? this.#resize.length : this.#local.count(event);
     }
 }
 

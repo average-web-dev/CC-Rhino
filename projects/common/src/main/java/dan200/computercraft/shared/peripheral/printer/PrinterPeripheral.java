@@ -9,8 +9,6 @@ import dan200.computercraft.api.scripting.Result;
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.api.peripheral.IPeripheral;
-import dan200.computercraft.core.apis.TermMethods.CursorPosition;
-import dan200.computercraft.core.apis.TermMethods.TermSize;
 import dan200.computercraft.core.terminal.Terminal;
 import dan200.computercraft.core.util.StringUtil;
 import org.jspecify.annotations.Nullable;
@@ -58,6 +56,14 @@ import java.util.Optional;
  * @cc.see cc.strings.wrap To wrap text before printing it.
  */
 public class PrinterPeripheral implements IPeripheral {
+    /** A cursor position on a page. Coordinates are 0-based, so {@code (0, 0)} is the top-left cell. */
+    public record CursorPosition(int x, int y) {
+    }
+
+    /** The size of a page, in characters. */
+    public record PageSize(int width, int height) {
+    }
+
     private final PrinterBlockEntity printer;
 
     public PrinterPeripheral(PrinterBlockEntity printer) {
@@ -92,7 +98,7 @@ public class PrinterPeripheral implements IPeripheral {
     /**
      * Returns the current position of the cursor on the page.
      *
-     * @return The position of the cursor. Like {@code term}, coordinates are 0-based.
+     * @return The position of the cursor. Coordinates are 0-based.
      * @throws ScriptException If a page isn't being printed.
      */
     @ScriptFunction
@@ -120,9 +126,9 @@ public class PrinterPeripheral implements IPeripheral {
      * @throws ScriptException If a page isn't being printed.
      */
     @ScriptFunction
-    public final TermSize getPageSize() throws ScriptException {
+    public final PageSize getPageSize() throws ScriptException {
         var page = getCurrentPage();
-        return new TermSize(page.getWidth(), page.getHeight());
+        return new PageSize(page.getWidth(), page.getHeight());
     }
 
     /**

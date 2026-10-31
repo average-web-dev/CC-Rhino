@@ -7,7 +7,6 @@ package dan200.computercraft.gametest
 import dan200.computercraft.api.scripting.Coerced
 import dan200.computercraft.api.scripting.Result as ScriptResult
 import dan200.computercraft.api.scripting.ScriptException
-import dan200.computercraft.core.apis.TermMethods
 import dan200.computercraft.gametest.api.*
 import dan200.computercraft.shared.ModRegistry
 import dan200.computercraft.shared.media.items.PrintoutData
@@ -129,7 +128,7 @@ class Printer_Test {
 
             peripheral.setPageTitle(Optional.of("New Page"))
             peripheral.write(Coerced("Hello, world!"))
-            peripheral.setCursorPos(TermMethods.CursorPosition(4, 1))
+            peripheral.setCursorPos(PrinterPeripheral.CursorPosition(4, 1))
             peripheral.write(Coerced("Second line"))
 
             // Try to finish the page

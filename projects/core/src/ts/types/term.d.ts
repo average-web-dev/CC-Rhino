@@ -4,6 +4,12 @@
 
 // `term` — Term, a drawing and input API over a TTY (ROM module /rom/lib/term).
 
+/** The size of a Term in characters. */
+interface TermSize {
+    width: number;
+    height: number;
+}
+
 /**
  * A drawing and input API over a TTY: it writes ANSI escape sequences into the TTY (and reads from it), so it works
  * on any TTY (a console of the screen, a monitor, a virtual TTY). Colours apply to what is written through this Term

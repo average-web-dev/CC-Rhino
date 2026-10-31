@@ -6,6 +6,7 @@ package dan200.computercraft.core.apis.tty;
 
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.scripting.ScriptFunction;
+import dan200.computercraft.core.apis.events.CoreEvents;
 import dan200.computercraft.core.tty.Tty;
 import org.jspecify.annotations.Nullable;
 
@@ -19,6 +20,7 @@ import java.util.function.Consumer;
  * @cc.module internal/pty.Tty
  */
 public final class TtyHandle {
+    private final Consumer<Record> queue;
     private final Tty tty;
     private final PipeHandle stdin;
     private final PipeHandle stdout;
@@ -31,6 +33,7 @@ public final class TtyHandle {
      * @param resizable Whether scripts may change the size (a virtual TTY), or the device decides it.
      */
     public TtyHandle(Consumer<Record> queue, Tty tty, boolean resizable) {
+        this.queue = queue;
         this.tty = tty;
         this.resizable = resizable;
         stdin = new PipeHandle(queue, tty.stdin(), tty::input);
@@ -136,7 +139,7 @@ public final class TtyHandle {
     }
 
     /**
-     * Change the size of a virtual TTY.
+     * Change the size of a virtual TTY. If it changes, a {@code tty_resize} event is queued.
      *
      * @param columns The width in characters.
      * @param rows    The height in characters.
@@ -146,7 +149,9 @@ public final class TtyHandle {
     public void setSize(int columns, int rows) throws ScriptException {
         if (!resizable) throw new ScriptException("The size of this TTY is set by its device");
         if (columns < 1 || rows < 1) throw new ScriptException("Size must be positive");
+        var changed = tty.columns() != columns || tty.rows() != rows;
         tty.resize(columns, rows);
+        if (changed) queue.accept(new CoreEvents.TtyResize(tty.id()));
     }
 
     /**
