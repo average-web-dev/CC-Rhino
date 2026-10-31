@@ -16,7 +16,7 @@ interface InterfaceOptions {
     input: ReadableInput;
     output?: Writable | null;
     completer?: Completer;
-    /** Edit lines on a terminal (keypress events, raw mode); default: `output.isTTY`. */
+    /** Edit lines on a terminal (key presses, raw mode); default: `output.isTTY`. */
     terminal?: boolean;
     /** Initial history, newest first. */
     history?: string[];
@@ -78,8 +78,8 @@ interface InterfaceBase extends ReadlineEventEmitter, AsyncIterable<string> {
     /** Pause input; a paused interface ignores input. */
     pause(): this;
     resume(): this;
-    /** Insert `data` as if typed, or simulate a key (`rl.write(null, { ctrl: true, name: "u" })`). */
-    write(data: string | null | undefined, key?: Partial<KeypressKey>): void;
+    /** Insert `data` as if typed, or simulate a key (`rl.write(null, { ctrlKey: true, code: Key.KEY_U })`). */
+    write(data: string | null | undefined, key?: Partial<TtyKeyInput>): void;
     getCursorPos(): CursorPos;
     /** Move below the line being edited and start a new, empty one (without emitting 'line'). */
     clearLine(): void;
@@ -115,8 +115,6 @@ interface ReadlineModule {
     moveCursor(stream: Writable | null | undefined, dx: number, dy: number, callback?: () => void): boolean;
     clearLine(stream: Writable | null | undefined, dir: number, callback?: () => void): boolean;
     clearScreenDown(stream: Writable | null | undefined, callback?: () => void): boolean;
-    /** Make a stream that emits terminal input as 'data' also emit 'keypress' (process.stdin already does). */
-    emitKeypressEvents(stream: ReadableInput, iface?: unknown): void;
     readonly promises: ReadlinePromisesModule;
 }
 

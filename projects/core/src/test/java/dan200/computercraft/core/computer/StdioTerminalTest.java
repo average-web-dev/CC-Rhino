@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * process.stdout / stderr / stdin on a real terminal (#34): wrapping, scrolling, escape sequences and colours on the
- * output side; cooked and raw mode, keypress events and pausing on the input side.
+ * output side; cooked and raw mode, key events and pausing on the input side.
  */
 class StdioTerminalTest {
     private static final String PRELUDE = """
@@ -107,7 +107,7 @@ class StdioTerminalTest {
         try (var h = boot("""
             process.stdin.on('data', function (d) { probe.record('data:' + d); });
             process.stdin.on('end', function () { probe.record('end'); });
-            process.stdin.on('keypress', function (s, key) { if (key.name === 'backspace') probe.record('key:backspace'); });
+            process.stdin.on('keydown', function (key) { if (key.code === 'Backspace') probe.record('key:backspace'); });
             """, 20, 5, true)) {
             h.waitForProbe(1);
             h.type("hi");
@@ -115,7 +115,7 @@ class StdioTerminalTest {
             h.type("o");
             h.key(KEY_ENTER);
             h.waitForProbe(2);
-            // The line discipline consumed the backspace: 'keypress' only sees what is delivered (as in Node).
+            // The line discipline consumed the backspace: 'keydown' only sees what is delivered.
             assertEquals(List.of("ready", "data:ho\n"), h.probe());
             assertEquals("ho", h.line(0), "typed text is echoed\n" + h.dump());
             assertTrue(h.cursorBlink(), "the cursor blinks while stdin is read");
@@ -136,8 +136,9 @@ class StdioTerminalTest {
         try (var h = boot("""
             process.stdin.setRawMode(true);
             process.stdin.on('data', function (d) { probe.record(JSON.stringify(d.replace(/\\x1b/g, '<ESC>'))); });
-            process.stdin.on('keypress', function (s, key) {
-                probe.record((key.ctrl ? 'C-' : '') + (key.shift ? 'S-' : '') + key.name);
+            process.stdin.on('keydown', function (key) {
+                if (key.key === 'Control') return; // the terminal reports modifier keys too
+                probe.record((key.ctrlKey ? 'C-' : '') + (key.shiftKey ? 'S-' : '') + key.code);
             });
             """, 20, 5, true)) {
             h.waitForProbe(1);
@@ -146,7 +147,7 @@ class StdioTerminalTest {
             h.ctrl('C');
             h.key(KEY_ENTER);
             h.waitForProbe(9);
-            assertEquals(List.of("\"a\"", "a", "\"<ESC>[A\"", "up", "\"\\u0003\"", "C-c", "\"\\r\"", "return"),
+            assertEquals(List.of("\"a\"", "KeyA", "\"<ESC>[A\"", "ArrowUp", "\"\\u0003\"", "C-KeyC", "\"\\r\"", "Enter"),
                 h.probe().subList(1, 9));
             assertEquals("", h.line(0), "raw mode does not echo");
         }

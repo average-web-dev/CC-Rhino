@@ -17,7 +17,7 @@
 
 import { EventEmitter } from '/rom/lib/internal/emitter';
 import * as tty from '/rom/lib/tty';
-import { decodeKeys } from '/rom/lib/internal/keys';
+import { decodeInput, InputType, isModifierKey, Key } from '/rom/lib/internal/keys';
 import * as util from '/rom/lib/util';
 import { callable } from '/rom/lib/internal/callable';
 import asyncMod from 'async';
@@ -71,23 +71,20 @@ export function clearScreenDown(stream: Writable | null | undefined, callback?: 
     return stream.write(tty.CSI.clearScreenDown, callback);
 }
 
-// ── Keypress decoding for streams that only emit 'data' ─────────────────────────
-
-const KEYPRESS_DECODER = '__ccKeypressDecoder';
+// ── Keys ─────────────────────────────────────────────────────────────────────────
 
 /**
- * Make `stream` emit 'keypress' events for its input, as Node's readline.emitKeypressEvents does. TTY streams
- * (process.stdin) already emit them (decoded from what the TTY delivers), so this is a no-op for them.
+ * Call `onKey` for each key press in the input of `stream`: a TTY stream (process.stdin) delivers them as 'keydown'
+ * events; any other stream is decoded from its 'data'. Releases and modifier keys alone are skipped. Returns the event
+ * and listener it added.
  */
-export function emitKeypressEvents(stream: ReadableInput, _iface?: unknown): void {
-    if (stream instanceof tty.ReadStream || (stream as any)[KEYPRESS_DECODER]) return;
-    let decoder = (data: string | Uint8Array) => {
-        if (stream.listenerCount('keypress') === 0) return;
+function keyListener(stream: ReadableInput, onKey: (key: TtyKeyInput) => void): [string, (...args: any[]) => void] {
+    let press = (key: TtyKeyInput) => { if (!isModifierKey(key.code)) onKey(key); };
+    if (stream instanceof tty.ReadStream) return ['keydown', press];
+    return ['data', (data: string | Uint8Array) => {
         let text = typeof data === 'string' ? data : String.fromCharCode.apply(null, Array.prototype.slice.call(data));
-        decodeKeys(text, (s, key) => { stream.emit!('keypress', s, key); });
-    };
-    Object.defineProperty(stream, KEYPRESS_DECODER, { value: decoder, configurable: true });
-    stream.on('data', decoder);
+        for (let input of decodeInput(text)) if (input.type === InputType.KEY_DOWN) press(input);
+    }];
 }
 
 // ── Interface ────────────────────────────────────────────────────────────────────
@@ -431,85 +428,96 @@ function tabCompleter(self: InterfaceImpl, lastKeypressWasTab: boolean, result: 
     refreshLine(self);
 }
 
-function ttyWrite(self: InterfaceImpl, s: string | undefined, key: KeypressKey | undefined): void {
-    let previousKey = self._previousKey;
-    key = key || ({} as KeypressKey);
-    self._previousKey = key;
+/** The text a key press types, or undefined (keys like Enter or the arrows, and Ctrl/Alt combinations). */
+function typedText(key: TtyKeyInput): string | undefined {
+    return key.key.length === 1 && !key.ctrlKey && !key.altKey && !key.metaKey ? key.key : undefined;
+}
 
-    if ((key.name === 'up' || key.name === 'down') && !key.ctrl && !key.meta && !key.shift) {
+/**
+ * Edit the line for a key press (`key`, compared by its physical key `code`) or for typed text `s` (rl.write(data)).
+ * Enter as `'\r'` accepts the line, as `'\n'` (or on the keypad) too, but `'\r\n'` counts as one line ending.
+ */
+function ttyWrite(self: InterfaceImpl, s: string | undefined, key: Partial<TtyKeyInput> | undefined): void {
+    let previousKey = self._previousKey;
+    key = key || {};
+    self._previousKey = key;
+    let code = key.code;
+    let lineFeed = code === Key.NUMPAD_ENTER || (code === Key.ENTER && key.sequence === '\n');
+
+    if ((code === Key.ARROW_UP || code === Key.ARROW_DOWN) && !key.ctrlKey && !key.altKey && !key.shiftKey) {
         if (self._substringSearch === null) self._substringSearch = self.line.slice(0, self.cursor);
     } else if (self._substringSearch !== null) {
         self._substringSearch = null;
         if (self.history.length === self.historyIndex) self.historyIndex = -1;
     }
 
-    if (key.name === 'escape') return;
+    if (code === Key.ESCAPE) return;
 
-    if (key.ctrl && key.shift) {
-        switch (key.name) {
-            case 'backspace': deleteLineLeft(self); break;
-            case 'delete': deleteLineRight(self); break;
+    if (key.ctrlKey && key.shiftKey) {
+        switch (code) {
+            case Key.BACKSPACE: deleteLineLeft(self); break;
+            case Key.DELETE: deleteLineRight(self); break;
         }
-    } else if (key.ctrl) {
-        switch (key.name) {
-            case 'c':
+    } else if (key.ctrlKey) {
+        switch (code) {
+            case Key.KEY_C:
                 if (self.listenerCount('SIGINT') > 0) self.emit('SIGINT');
                 else self.close();
                 break;
-            case 'h': deleteLeft(self); break;
-            case 'd':
+            case Key.KEY_H: deleteLeft(self); break;
+            case Key.KEY_D:
                 if (self.cursor === 0 && self.line.length === 0) self.close();
                 else if (self.cursor < self.line.length) deleteRight(self);
                 break;
-            case 'u': deleteLineLeft(self); break;
-            case 'k': deleteLineRight(self); break;
-            case 'a': moveCursorBy(self, -Infinity); break;
-            case 'e': moveCursorBy(self, Infinity); break;
-            case 'b': moveCursorBy(self, -1); break;
-            case 'f': moveCursorBy(self, 1); break;
-            case 'l':
+            case Key.KEY_U: deleteLineLeft(self); break;
+            case Key.KEY_K: deleteLineRight(self); break;
+            case Key.KEY_A: moveCursorBy(self, -Infinity); break;
+            case Key.KEY_E: moveCursorBy(self, Infinity); break;
+            case Key.KEY_B: moveCursorBy(self, -1); break;
+            case Key.KEY_F: moveCursorBy(self, 1); break;
+            case Key.KEY_L:
                 cursorTo(self.output, 0, 0);
                 clearScreenDown(self.output);
                 self.prevRows = 0;
                 refreshLine(self);
                 break;
-            case 'n': historyNext(self); break;
-            case 'p': historyPrev(self); break;
-            case 'w': case 'backspace': deleteWordLeft(self); break;
-            case 'delete': deleteWordRight(self); break;
-            case 'left': wordLeft(self); break;
-            case 'right': wordRight(self); break;
+            case Key.KEY_N: historyNext(self); break;
+            case Key.KEY_P: historyPrev(self); break;
+            case Key.KEY_W: case Key.BACKSPACE: deleteWordLeft(self); break;
+            case Key.DELETE: deleteWordRight(self); break;
+            case Key.ARROW_LEFT: wordLeft(self); break;
+            case Key.ARROW_RIGHT: wordRight(self); break;
         }
-    } else if (key.meta) {
-        switch (key.name) {
-            case 'b': case 'left': wordLeft(self); break;
-            case 'f': case 'right': wordRight(self); break;
-            case 'd': case 'delete': deleteWordRight(self); break;
-            case 'backspace': deleteWordLeft(self); break;
+    } else if (key.altKey) {
+        switch (code) {
+            case Key.KEY_B: case Key.ARROW_LEFT: wordLeft(self); break;
+            case Key.KEY_F: case Key.ARROW_RIGHT: wordRight(self); break;
+            case Key.KEY_D: case Key.DELETE: deleteWordRight(self); break;
+            case Key.BACKSPACE: deleteWordLeft(self); break;
         }
     } else {
-        if (self._sawReturnAt && key.name !== 'enter') self._sawReturnAt = 0;
-        switch (key.name) {
-            case 'return':
+        if (self._sawReturnAt && !lineFeed) self._sawReturnAt = 0;
+        switch (lineFeed ? Key.NUMPAD_ENTER : code) {
+            case Key.ENTER:
                 self._sawReturnAt = Date.now();
                 acceptLine(self);
                 break;
-            case 'enter':
+            case Key.NUMPAD_ENTER:
                 // \r\n counts as one line ending.
                 if (self._sawReturnAt === 0 || Date.now() - self._sawReturnAt > self.crlfDelay) acceptLine(self);
                 self._sawReturnAt = 0;
                 break;
-            case 'backspace': deleteLeft(self); break;
-            case 'delete': deleteRight(self); break;
-            case 'left': moveCursorBy(self, -1); break;
-            case 'right': moveCursorBy(self, 1); break;
-            case 'home': moveCursorBy(self, -Infinity); break;
-            case 'end': moveCursorBy(self, Infinity); break;
-            case 'up': historyPrev(self); break;
-            case 'down': historyNext(self); break;
-            case 'tab':
+            case Key.BACKSPACE: deleteLeft(self); break;
+            case Key.DELETE: deleteRight(self); break;
+            case Key.ARROW_LEFT: moveCursorBy(self, -1); break;
+            case Key.ARROW_RIGHT: moveCursorBy(self, 1); break;
+            case Key.HOME: moveCursorBy(self, -Infinity); break;
+            case Key.END: moveCursorBy(self, Infinity); break;
+            case Key.ARROW_UP: historyPrev(self); break;
+            case Key.ARROW_DOWN: historyNext(self); break;
+            case Key.TAB:
                 if (typeof self.completer === 'function' && self.isCompletionEnabled) {
-                    tabComplete(self, previousKey !== null && previousKey.name === 'tab');
+                    tabComplete(self, previousKey !== null && previousKey.code === Key.TAB);
                     break;
                 }
             // falls through
@@ -564,7 +572,7 @@ class Interface extends EventEmitter {
     declare _questionCallback: ((answer: string) => void) | null;
     declare _questionCancel: ((reason: Error) => void) | null;
     declare _substringSearch: string | null;
-    declare _previousKey: KeypressKey | null;
+    declare _previousKey: Partial<TtyKeyInput> | null;
     declare _sawReturnAt: number;
     declare _lineBuffer: string;
     declare _listeners: { event: string; fn: (...args: any[]) => void; target: 'input' | 'output' }[];
@@ -651,12 +659,12 @@ class Interface extends EventEmitter {
                 self.close();
             });
         } else {
-            emitKeypressEvents(inputStream, this);
-            listen('input', 'keypress', (s: string | undefined, key: KeypressKey) => {
+            let [event, listener] = keyListener(inputStream, (key) => {
                 // process.stdin is shared with the shell: an interface that is paused does not take part.
                 if (self.paused || self.closed) return;
-                ttyWrite(self, s, key);
+                ttyWrite(self, typedText(key), key);
             });
+            listen('input', event, listener);
             listen('input', 'end', () => { self.close(); });
             setRawMode(this, true);
             if (output !== null && output !== undefined && typeof output.on === 'function') {
@@ -713,10 +721,10 @@ class Interface extends EventEmitter {
         return this;
     }
 
-    write(data: string | null | undefined, key?: Partial<KeypressKey>): void {
+    write(data: string | null | undefined, key?: Partial<TtyKeyInput>): void {
         if (this.closed) throw useAfterClose();
         if (this.paused) this.resume();
-        if (this.terminal) ttyWrite(this, data === null ? undefined : data, key as KeypressKey | undefined);
+        if (this.terminal) ttyWrite(this, data === null ? undefined : data, key);
         else if (typeof data === 'string') normalWrite(this, data);
     }
 

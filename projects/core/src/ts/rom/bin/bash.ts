@@ -15,6 +15,7 @@
 //   setCwd(p)           — set the working directory (process.chdir()).
 
 import readline from 'readline';
+import { Key } from '/rom/lib/tty';
 import * as tty from '/rom/lib/internal/tty';
 import { spawnSync } from '/rom/lib/child_process';
 
@@ -173,7 +174,7 @@ export function start(): void {
 
     rl.on('SIGINT', () => {
         // Like bash: show ^C, drop the line and start a new prompt.
-        rl.write(null, { ctrl: true, name: 'e' });
+        rl.write(null, { ctrlKey: true, code: Key.KEY_E });
         process.stdout.write('^C');
         rl.clearLine();
         rl.historyIndex = -1;

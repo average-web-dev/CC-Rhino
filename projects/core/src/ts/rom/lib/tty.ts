@@ -13,8 +13,8 @@
 //   t.readOutput();                             // … is read by whoever holds it ('hi')
 //   const mon = TTY.from(monitor.getTty());     // the TTY of a monitor
 //
-// ReadStream / WriteStream are the Node stream classes (process.stdin / process.stdout are instances): 'data', 'end'
-// and 'keypress' events, pause/resume, setRawMode; write, cursorTo/moveCursor/clearLine, columns/rows.
+// ReadStream / WriteStream are the Node stream classes (process.stdin / process.stdout are instances): 'data' and 'end'
+// events (plus 'keydown' / 'keyup'), pause/resume, setRawMode; write, cursorTo/moveCursor/clearLine, columns/rows.
 //
 // Listeners added with stream.on(...) are registered *natively* in the calling thread, on the `pipe_data` event the
 // TTY pushes while the stream flows. So they belong to the thread that adds them: they may block, and they are
@@ -25,7 +25,7 @@ import events from 'events';
 import loop from 'internal/loop';
 import pty from 'internal/pty';
 import { CSI } from '/rom/lib/internal/csi';
-import { decodeInput, InputType, toKeypress, toLegacy } from '/rom/lib/internal/keys';
+import { decodeInput, InputType, toLegacy } from '/rom/lib/internal/keys';
 import { ERR_INVALID_ARG_TYPE } from '/rom/lib/internal/errors';
 import { validateFunction, validateOneOf } from '/rom/lib/internal/validators';
 
@@ -243,9 +243,9 @@ export class WriteStream implements TtyWriteStream {
     }
 }
 
-const STREAM_EVENTS: Record<string, true> = { data: true, keypress: true, keydown: true, keyup: true, end: true };
+const STREAM_EVENTS: Record<string, true> = { data: true, keydown: true, keyup: true, end: true };
 /** The stream events about keys: delivered key by key, in order, across listeners (see ReadStream.#deliverKeys). */
-const KEY_EVENTS: Record<string, true> = { keypress: true, keydown: true, keyup: true };
+const KEY_EVENTS: Record<string, true> = { keydown: true, keyup: true };
 
 /**
  * How a terminal reports keys in raw mode: 'kitty' (the default) reports every key with its presses, repeats and
@@ -327,8 +327,8 @@ export class ReadStream implements TtyReadStream {
 
     /**
      * CC extension: how the terminal reports keys in raw mode. 'kitty' (the default) reports every key with its
-     * releases and repeats (so there are 'keyup' events), 'legacy' only key presses. Either way 'data', readSync and
-     * 'keypress' look the same (keys as a terminal traditionally sends them).
+     * releases and repeats (so there are 'keyup' events), 'legacy' only key presses. Either way 'data' and readSync
+     * look the same (keys as a terminal traditionally sends them).
      */
     setKeyboardProtocol(protocol: KeyboardProtocol): this {
         validateOneOf(protocol, 'protocol', ['kitty', 'legacy']);
@@ -462,23 +462,17 @@ export class ReadStream implements TtyReadStream {
     }
 
     /**
-     * Deliver the keys in `data` to the 'keypress' / 'keydown' / 'keyup' listeners of `owner`, key by key, so separate
+     * Deliver the keys in `data` to the 'keydown' / 'keyup' listeners of `owner`, key by key, so separate
      * listeners see them in the order they were typed (each pipe_data listener would otherwise get the whole chunk in
      * turn). The keys are delivered from the thread of the oldest such listener.
      */
     #deliverKeys(owner: number, data: string): void {
         for (let input of decodeInput(data)) {
             if (input.type === InputType.MOUSE) continue;
-            let keypress = toKeypress(input);
             for (let sub of this.#subscriptions.slice()) {
-                if (sub.owner !== owner || !this.#alive(sub)) continue;
-                if (sub.event === 'keypress' && keypress !== undefined) {
-                    if (sub.once) this.#unsubscribe(sub);
-                    sub.fn.call(this, keypress[0], keypress[1]);
-                } else if (sub.event === input.type) {
-                    if (sub.once) this.#unsubscribe(sub);
-                    sub.fn.call(this, input);
-                }
+                if (sub.owner !== owner || sub.event !== input.type || !this.#alive(sub)) continue;
+                if (sub.once) this.#unsubscribe(sub);
+                sub.fn.call(this, input);
             }
         }
     }

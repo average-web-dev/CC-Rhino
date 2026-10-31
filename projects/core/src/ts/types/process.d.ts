@@ -7,17 +7,6 @@
 
 declare function BigInt(value: number | string): bigint;
 
-/** A key as reported by `'keypress'` events (Node's readline key object). */
-interface KeypressKey {
-    /** The characters the terminal sends for the key (`"\r"`, `"\x1b[A"`, `"a"`, …). */
-    sequence: string;
-    /** Key name: `"a"`–`"z"`, `"0"`–`"9"`, `"return"`, `"enter"`, `"backspace"`, `"tab"`, `"up"`, `"f1"`, …. */
-    name: string | undefined;
-    ctrl: boolean;
-    meta: boolean;
-    shift: boolean;
-}
-
 /** Anything with a Node-style `write(chunk, [encoding], [callback])`. */
 interface Writable {
     write(chunk: string | Uint8Array, encoding?: string | ((err: Error | null) => void), callback?: (err: Error | null) => void): boolean;
@@ -28,7 +17,7 @@ interface Writable {
     removeListener?(event: string, listener: (...args: any[]) => void): unknown;
 }
 
-/** A readable source of terminal input: `'data'` (and, in terminal mode, `'keypress'`) events. */
+/** A readable source of terminal input: `'data'` events (a TTY stream also has `'keydown'` / `'keyup'`). */
 interface ReadableInput {
     on(event: string, listener: (...args: any[]) => void): unknown;
     removeListener(event: string, listener: (...args: any[]) => void): unknown;
@@ -84,9 +73,8 @@ interface TtyWriteStream extends Writable {
  * - `'data'`: in cooked mode (the default) the TTY's line discipline echoes what is typed, handles Backspace / Ctrl+U
  *   and delivers whole lines including `"\n"`; Ctrl+D on an empty line emits `'end'` (the stream stays usable, like a
  *   terminal). In raw mode (`setRawMode(true)`) every key is delivered as the characters a VT terminal sends.
- * - `'keypress'`: `(sequence, key)` for each key press in the delivered input (as with Node's emitKeypressEvents), so
- *   in cooked mode only for what the line discipline passes on.
- * - `'keydown'` / `'keyup'` (CC extension, like the browser's): a TtyKeyInput for each key, in the order typed across
+ * - `'keydown'` / `'keyup'` (CC extension, like the browser's; instead of Node's `'keypress'`): a TtyKeyInput for each
+ *   key in the delivered input (in cooked mode only what the line discipline passes on), in the order typed across
  *   listeners. In raw mode the terminal reports every key with its releases and repeats (the kitty keyboard protocol;
  *   `setKeyboardProtocol('legacy')` turns that off), while `'data'` still gets keys as a terminal traditionally sends
  *   them.
@@ -112,7 +100,6 @@ interface TtyReadStream extends ReadableInput {
     ref(): this;
     unref(): this;
     on(event: "data", listener: (chunk: string) => void): this;
-    on(event: "keypress", listener: (sequence: string | undefined, key: KeypressKey) => void): this;
     on(event: "keydown" | "keyup", listener: (event: TtyKeyInput) => void): this;
     on(event: "end", listener: () => void): this;
     on(event: string, listener: (...args: any[]) => void): this;

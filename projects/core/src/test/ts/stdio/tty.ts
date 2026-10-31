@@ -73,19 +73,20 @@ t.input('\x04');
 asyncMod.unwrap(new Promise<void>((resolve) => setTimeout(resolve, 1)));
 same(ended, [true], 'Ctrl+D on an empty line ends the input');
 
-// Raw mode passes keys through; 'keypress' decodes them.
+// Raw mode passes keys through; 'keydown' decodes them.
 const keys: string[] = [];
 t.setRawMode(true);
 eq(t.isRaw, true);
-t.stdin.on('keypress', (_s: string | undefined, key: KeypressKey) => { keys.push(`${key.ctrl ? 'C-' : ''}${key.name}`); });
+t.stdin.on('keydown', (key: TtyKeyInput) => { keys.push(`${key.ctrlKey ? 'C-' : ''}${key.code}`); });
 t.input('\x1b[A\x03x\x1b[<0;3;4M');
 asyncMod.unwrap(new Promise<void>((resolve) => setTimeout(resolve, 1)));
-same(keys, ['up', 'C-c', 'x'], 'mouse reports are not keys');
-// Kitty-encoded keys give the same keypress events; releases give none.
+same(keys, ['ArrowUp', 'C-KeyC', 'KeyX'], 'mouse reports are not keys');
+// Kitty-encoded keys give the same events; releases are 'keyup', not 'keydown'.
 keys.length = 0;
 t.input('\x1b[99;5u\x1b[13u\x1b[13;1:3u\x1b[1;1:2A');
 asyncMod.unwrap(new Promise<void>((resolve) => setTimeout(resolve, 1)));
-same(keys, ['C-c', 'return', 'up']);
+same(keys, ['C-KeyC', 'Enter', 'ArrowUp']);
+t.stdin.removeAllListeners('keydown');
 t.setRawMode(false);
 t.stdin.pause();
 t.readOutput();
@@ -96,7 +97,6 @@ const keyEvents: string[] = [];
 const onKeyUp = (e: TtyKeyInput) => { keyEvents.push(`up ${e.code}`); };
 t.stdin.on('keyup', onKeyUp);
 t.stdin.on('keydown', (e: TtyKeyInput) => { keyEvents.push(`down ${e.code} ${e.key}${e.repeat ? ' repeat' : ''}`); });
-t.stdin.on('keypress', (s: string | undefined) => { keyEvents.push(`press ${JSON.stringify(s)}`); });
 const dataSeen: string[] = [];
 t.stdin.on('data', (chunk: string) => { dataSeen.push(chunk); });
 t.stdin.resume(); // paused above
@@ -104,11 +104,9 @@ eq(t.stdin.getKeyboardProtocol(), 'kitty', 'the default');
 t.setRawMode(true);
 t.input('\x1b[97;2;65u\x1b[97;2:2;65u\x1b[97;2:3u\x1b[57441;2:3u\x1b[99;5u\x1b[1;1:3A');
 asyncMod.unwrap(new Promise<void>((resolve) => setTimeout(resolve, 1)));
-same(keyEvents, ['down KeyA A', 'press "A"', 'down KeyA A repeat', 'press "A"', 'up KeyA', 'up ShiftLeft',
-    'down KeyC c', 'press "\\u0003"', 'up ArrowUp']);
+same(keyEvents, ['down KeyA A', 'down KeyA A repeat', 'up KeyA', 'up ShiftLeft', 'down KeyC c', 'up ArrowUp']);
 same(dataSeen, ['AA\x03'], "'data' gets the keys as a terminal traditionally sends them: presses, as text");
 t.stdin.removeAllListeners('keydown');
-t.stdin.removeAllListeners('keypress');
 t.stdin.removeAllListeners('data');
 t.stdin.off('keyup', onKeyUp);
 t.stdin.pause(); // so the input stays in the TTY for readSync

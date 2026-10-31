@@ -6,6 +6,7 @@ import * as prelude from './prelude';
 
 const eq = prelude.eq, throws = prelude.throws, sink = prelude.sink, source = prelude.source;
 import readline from 'readline';
+import { Key } from 'tty';
 import events from 'events';
 import asyncMod from 'async';
 
@@ -55,7 +56,7 @@ eq(t.lines.slice(1).join('|'), 'hello|xworld!|ab|d|foo |foo Xbar|abcd|bc|aXb|one
 // The cursor position accounts for the prompt and wraps at the output's width.
 t.rl.write('abc');
 eq(JSON.stringify(t.rl.getCursorPos()), '{"cols":5,"rows":0}');
-t.rl.write(null, { ctrl: true, name: 'u' });
+t.rl.write(null, { ctrlKey: true, code: Key.KEY_U });
 eq(t.rl.line, '');
 const small = open({ columns: 4 });
 small.rl.write('abc');
@@ -216,12 +217,7 @@ readline.clearLine(cursor, 0);
 readline.clearScreenDown(cursor);
 eq(cursor.out, '\x1b[4;3H\x1b[1D\x1b[1B\x1b[2K\x1b[0J');
 
-// emitKeypressEvents decodes VT input into keys.
-const keyInput = source();
-readline.emitKeypressEvents(keyInput);
-const keys: string[] = [];
-keyInput.on('keypress', function (s: string | undefined, key: KeypressKey) {
-    keys.push((key.ctrl ? 'C-' : '') + (key.meta ? 'M-' : '') + (key.shift ? 'S-' : '') + key.name);
-});
-keyInput.emit('data', 'aB\r\x1b[A\x1b[1;5C\x03\x1bx\x1b[3~\t\x1b[Z');
-eq(keys.join(' '), 'a S-b return up C-right C-c M-x delete tab S-tab');
+// Keys in the kitty encoding edit the line too; releases and modifier keys alone do nothing.
+t = open();
+t.feed('\x1b[97u\x1b[98u\x1b[127u\x1b[57441;2u\x1b[99;2u\x1b[57441;2:3u\x1b[99;5:3u\x1b[13u');
+eq(t.lines.join('|'), 'aC');

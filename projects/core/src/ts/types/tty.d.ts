@@ -25,7 +25,7 @@ interface TtyStdin extends TtyReadStream {
     readRawSync(): string | undefined;
     /**
      * How the terminal reports keys in raw mode: 'kitty' (the default) every key with its presses, repeats and
-     * releases, 'legacy' only presses. 'data', readSync and 'keypress' look the same either way.
+     * releases, 'legacy' only presses. 'data' and readSync look the same either way.
      */
     setKeyboardProtocol(protocol: "kitty" | "legacy"): this;
     getKeyboardProtocol(): "kitty" | "legacy";

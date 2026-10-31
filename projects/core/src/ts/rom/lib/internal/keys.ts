@@ -4,8 +4,7 @@
 
 // /rom/lib/internal/keys.ts — decoding terminal input (the characters and escape sequences a TTY delivers) into
 // keyboard events (like the browser's KeyboardEvent: `type`, `key`, `code`, `repeat`, `ctrlKey` …) and mouse events.
-// Used by the tty streams ('keydown' / 'keyup', and Node's 'keypress' derived from them), readline, tty.decodeInput and
-// Term.
+// Used by the tty streams ('keydown' / 'keyup'), readline, tty.decodeInput and Term.
 //
 // Keys arrive in two encodings: the legacy one (text as typed, xterm sequences for cursor and function keys; only
 // presses, `code` guessed from a US keyboard) and the kitty keyboard protocol, once a program asked for it with
@@ -102,15 +101,16 @@ const KITTY_KEYS: Record<number, [string, string]> = {
 for (let i = 0; i <= 9; i++) KITTY_KEYS[57399 + i] = ['Numpad' + i, String(i)];
 for (let i = 13; i <= 25; i++) KITTY_KEYS[57376 + i - 13] = ['F' + i, 'F' + i];
 
-/** Node's key names (readline's `key.name`) of physical keys that have one besides letters and digits. */
-const NODE_NAMES: Record<string, string> = {
-    [Key.ARROW_UP]: 'up', [Key.ARROW_DOWN]: 'down', [Key.ARROW_LEFT]: 'left', [Key.ARROW_RIGHT]: 'right',
-    [Key.HOME]: 'home', [Key.END]: 'end', [Key.PAGE_UP]: 'pageup', [Key.PAGE_DOWN]: 'pagedown',
-    [Key.INSERT]: 'insert', [Key.DELETE]: 'delete', [Key.ENTER]: 'return', [Key.NUMPAD_ENTER]: 'enter',
-    [Key.TAB]: 'tab', [Key.BACKSPACE]: 'backspace', [Key.ESCAPE]: 'escape', [Key.SPACE]: 'space',
-    [Key.NUMPAD_5]: 'clear',
+/** The modifier keys, which type nothing on their own. */
+const MODIFIER_KEYS: Record<string, true> = {
+    [Key.SHIFT_LEFT]: true, [Key.SHIFT_RIGHT]: true, [Key.CONTROL_LEFT]: true, [Key.CONTROL_RIGHT]: true,
+    [Key.ALT_LEFT]: true, [Key.ALT_RIGHT]: true, [Key.META_LEFT]: true, [Key.META_RIGHT]: true,
 };
-for (let i = 1; i <= 12; i++) NODE_NAMES['F' + i] = 'f' + i;
+
+/** Whether `code` is a modifier key (Shift, Control, Alt, Meta). */
+export function isModifierKey(code: string): boolean {
+    return MODIFIER_KEYS[code] === true;
+}
 
 // ── Mouse ────────────────────────────────────────────────────────────────────────
 
@@ -313,39 +313,6 @@ export function decodeInput(data: string): TtyInput[] {
     let out: TtyInput[] = [];
     decode(data, (key) => { out.push(key); }, (mouse) => { out.push(mouse); });
     return out;
-}
-
-/** Whether a key sequence is in the kitty encoding (`CSI … u`, or with an event type). */
-function isKittySequence(sequence: string): boolean {
-    return /^\x1b\[[0-9;:]*u$/.test(sequence) || (sequence.startsWith('\x1b[') && sequence.indexOf(':') >= 0);
-}
-
-/**
- * Node's keypress arguments for a key press, as a terminal without the kitty protocol would have sent it: the typed
- * string (a single character, or ESC + character with Alt; `undefined` for escape sequences) and the key object with
- * Node's names (`up`, `return`, `a`, …). `undefined` for releases and keys such a terminal sends nothing for (a
- * modifier key alone).
- */
-export function toKeypress(event: TtyKeyInput): [string | undefined, KeypressKey] | undefined {
-    if (event.type === InputType.KEY_UP) return undefined;
-    let sequence = isKittySequence(event.sequence) ? legacySequence(event) : event.sequence;
-    if (sequence === '') return undefined;
-    let name = NODE_NAMES[event.code];
-    // Letters and digits are named after themselves (a shifted digit, like '!', has no name, as in Node).
-    if (name === undefined && /^[A-Za-z0-9]$/.test(event.key)) name = event.key.toLowerCase();
-    // Legacy '\n' is Node's 'enter' (and '\r' its 'return').
-    if (event.sequence === '\n') name = 'enter';
-    let escaped = sequence.charAt(0) === '\x1b' && sequence.length > 1 && '[O'.indexOf(sequence.charAt(1)) >= 0;
-    let typed = escaped ? undefined : sequence;
-    return [typed, { sequence, name, ctrl: event.ctrlKey, meta: event.altKey, shift: event.shiftKey }];
-}
-
-/** Split terminal input into Node keypress events: emit(sequenceOrUndefined, key). Releases and mouse are skipped. */
-export function decodeKeys(data: string, emit: (s: string | undefined, key: KeypressKey) => void): void {
-    decode(data, (event) => {
-        let keypress = toKeypress(event);
-        if (keypress !== undefined) emit(keypress[0], keypress[1]);
-    }, () => {});
 }
 
 // ── Back to the legacy encoding ─────────────────────────────────────────────────
