@@ -422,7 +422,7 @@ Done in #2 on top of the TTY model (#50), differently from the Lua ROM:
 
 - [x] **11.3** Colours: no `colors` module. Colours are ANSI indices 0–15 (`CSI.color(fg, bg)`, mapped one-to-one onto
   the CC colours); `term` has `ColorIndex` (`ColorIndex.ORANGE` → 14) and `Term.setTextColor` takes indices. Palette
-  (#54): OSC 4 / 104 per TTY, `Term.setPaletteColor` with a `Color` (module `color`); bundled cables (colour sets): #53
+  (#54): OSC 4 / 104 per TTY, `Term.setPaletteColor` with a `Color` (module `color`); bundled cables: arrays of `Dye` channels (#53)
 - [x] **11.4** Keys: `Key` constants (`KeyboardEvent.code` strings, exported by `tty` and `term`) for the browser-like
   `'keydown'` / `'keyup'` events of `ReadStream` (kitty keyboard protocol in raw mode); the native `key` / `key_up` /
   `char` events are internal now, Node's `'keypress'` is gone
@@ -857,12 +857,16 @@ class that draws by writing ANSI. Branch `feature/tty-term`.
   colours (`ColorIndex`), `geometry`, internal validators; named constant groups instead of magic strings/numbers
   (#52: `CSI` in `internal/csi`, `GlfwKeys`)
 - [ ] **16.10** Follow-ups: `edit` like vi/vim (#10); `window` as a native display with a TTY (#3); docs on VitePress
-  (#51); bundled cables (#53); `paste` / mouse through the TTY
+  (#51); `paste` / mouse through the TTY
 - [x] **16.11** Palette (#54): OSC 4 / OSC 104 in `TerminalEmulator` (per console, `ESC c` resets), read back through
   `TtyHandle.getPaletteColor`; ROM `color` module (`Color`), `CSI.setPaletteColor` / `resetPalette`, Term colours by
   index, `Term.setPaletteColor` / `getPaletteColor` / `resetPalette`
 - [x] **16.12** Turtle facing (#55): `turtle.place*({ text?, look? })` places as if looking along any vector (the fake
   player's yaw / pitch), `turtle.getFacing()` returns the world direction as `{x, y, z}`
+- [x] **16.13** Bundled cables (#53): channel states as objects keyed by dye, for reading and writing
+  (`redstone.setBundledOutput(side, { [Dye.RED]: true })` changes only the named channels;
+  `getBundledInput(side)[Dye.RED]`; `setAllBundledOutput(side, on)`; `testBundledInput` is gone); `Dye` (Minecraft dye
+  ids 0–15) in `color`
 
 ---
 

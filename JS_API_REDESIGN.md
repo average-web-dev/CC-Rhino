@@ -442,9 +442,9 @@ There is no native `term` module and monitors no longer have drawing methods. Ou
 | `getOutput` / `getInput` | `side` | `boolean` |
 | `setAnalogOutput` | `side, value` | `void` |
 | `getAnalogOutput` / `getAnalogInput` | `side` | `number` |
-| `setBundledOutput` | `side, mask` | `void` |
-| `getBundledOutput` / `getBundledInput` | `side` | `number` |
-| `testBundledInput` | `side, mask` | `boolean` |
+| `setBundledOutput` | `side, states: { [Dye.X]: boolean }` (only the named channels change) | `void` |
+| `setAllBundledOutput` | `side, on` (all 16 channels) | `void` |
+| `getBundledOutput` / `getBundledInput` | `side` | `Record<Dye, boolean>` (all 16: `getBundledInput(side)[Dye.RED]`) |
 
 No tuples, no async → portable 1:1.
 

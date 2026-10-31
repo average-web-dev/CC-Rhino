@@ -83,8 +83,10 @@ strings use the CC hex digits. RGB values are immutable `Color` objects (ROM cor
 `b` 0–255 and alpha `a` 0–1; `Color.from('#rrggbb' | '#rrggbbaa' | 0xRRGGBB | {r, g, b, a?} | [r, g, b, a?])`, `add`,
 `lighten` / `darken(amount)`, `withAlpha`, `toString()` → `'#rrggbb'`); `Term.setPaletteColor(index, color)` (a
 `Color` only; a translucent one is taken over black) /
-`getPaletteColor(index)` / `resetPalette(index?)` replace `term.setPaletteColour` (OSC 4 / 104, per TTY). Colour sets
-for bundled cables: #53. The Lua contract below is kept for reference.
+`getPaletteColor(index)` / `resetPalette(index?)` replace `term.setPaletteColour` (OSC 4 / 104, per TTY). Bundled
+cables take channel states keyed by dye instead of colour sets: `redstone.setBundledOutput(side, { [Dye.RED]: true })`
+with `Dye` (the 16 Minecraft dye ids, white 0 … black 15) from `color` (#53). The Lua contract below is kept for
+reference.
 
 **Summary**: Named colour constants and utility functions for combining, testing, and converting 16-terminal palette colours.
 

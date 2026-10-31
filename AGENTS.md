@@ -175,7 +175,7 @@ part of `assemble`.
   escape sequences (no raw `'\x1b[…'` in ROM code).
 - Node-style stdio (#34) is ROM TypeScript in `/rom/lib`: `process`, `console`, `util`, `readline`,
   `readline/promises`, `tty`, `term`, plus `geometry` (immutable `Point` / `Vector`) and `color` (immutable RGBA
-  `Color`). These "ROM core modules" resolve before `require.paths` and with a `node:`
+  `Color`; `Dye`, the 16 dye ids, e.g. for bundled cables). These "ROM core modules" resolve before `require.paths` and with a `node:`
   prefix (`JSRequire.ROM_CORE_MODULES`). `tty` has Node's `ReadStream`/`WriteStream` over native TTYs plus the `TTY`
   class; `process.stdin/stdout/stderr` are those of the first screen console (`/rom/lib/internal/tty.ts`). While a
   ReadStream flows, the TTY pushes what can be read as `pipe_data` events; `stream.on(...)` registers native listeners
