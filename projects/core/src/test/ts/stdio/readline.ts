@@ -53,6 +53,15 @@ t.feed('ab\x01\x06X\r');                        // Ctrl+A, Ctrl+F (right)
 t.feed('one two\x1bb\x1bdX\r');                 // Meta+B, Meta+D (delete word right)
 eq(t.lines.slice(1).join('|'), 'hello|xworld!|ab|d|foo |foo Xbar|abcd|bc|aXb|one X');
 
+// Bracketed paste: asked for while the interface reads; the text is inserted as it is (a Tab does not complete, an
+// escape is no key) and its line endings accept lines.
+const pasting = open({ completer: () => [['never'], ''] });
+eq(pasting.output.out.indexOf('\x1b[?2004h') >= 0, true, 'asks for bracketed paste');
+pasting.feed('\x1b[200~a\tb\x1b[Dc\rsecond\x1b[201~!\r');
+eq(pasting.lines.join('|'), 'a\tb\x1b[Dc|second!');
+pasting.rl.pause();
+eq(pasting.output.out.endsWith('\x1b[?2004l'), true, 'and stops while paused');
+
 // The cursor position accounts for the prompt and wraps at the output's width.
 t.rl.write('abc');
 eq(JSON.stringify(t.rl.getCursorPos()), '{"cols":5,"rows":0}');

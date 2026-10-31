@@ -88,6 +88,17 @@ t.input('\x1b[99;5u\x1b[13u\x1b[13;1:3u\x1b[1;1:2A');
 asyncMod.unwrap(new Promise<void>((resolve) => setTimeout(resolve, 1)));
 same(keys, ['C-KeyC', 'Enter', 'ArrowUp']);
 t.stdin.removeAllListeners('keydown');
+// Mouse reports and bracketed pastes are events of their own, in order with the keys.
+const inputs: string[] = [];
+t.stdin.on('mouse', (m: TtyMouseInput) => { inputs.push(`mouse ${m.action} ${m.x},${m.y}`); });
+t.stdin.on('paste', (p: TtyPasteInput) => { inputs.push(`paste ${p.text}`); });
+t.stdin.on('keydown', (k: TtyKeyInput) => { inputs.push(`key ${k.code}`); });
+t.input('a\x1b[<0;3;4M\x1b[200~hi\x1b[201~b');
+asyncMod.unwrap(new Promise<void>((resolve) => setTimeout(resolve, 1)));
+same(inputs, ['key KeyA', 'mouse press 2,3', 'paste hi', 'key KeyB']);
+t.stdin.removeAllListeners('mouse');
+t.stdin.removeAllListeners('paste');
+t.stdin.removeAllListeners('keydown');
 t.setRawMode(false);
 t.stdin.pause();
 t.readOutput();
@@ -141,6 +152,7 @@ eq(press.sequence, '\x1b[<4;3;2M');
 /** A decoded key as `type code key modifiers`, for compact checks. */
 function keyOf(input: TtyInput): string {
     if (input.type === InputType.MOUSE) return 'mouse';
+    if (input.type === InputType.PASTE) return `paste ${JSON.stringify(input.text)}`;
     let mods = (input.ctrlKey ? 'C' : '') + (input.altKey ? 'A' : '') + (input.shiftKey ? 'S' : '')
         + (input.metaKey ? 'M' : '') + (input.repeat ? 'R' : '');
     return `${input.type} ${input.code} ${JSON.stringify(input.key)}${mods === '' ? '' : ' ' + mods}`;
@@ -159,6 +171,12 @@ same(decodeInput('\x1b[97;1;97u\x1b[97;2:2;65u\x1b[97;5:3u\x1b[49:33;2;33u\x1b[5
     'keyup NumpadEnter "Enter"', 'keydown ShiftRight "Shift" S', 'keydown MetaLeft "Meta" M', 'keydown Escape "Escape"',
     'keyup ArrowUp "ArrowUp"', 'keydown F3 "F3"', 'keydown F13 "F13"', 'keydown Semicolon "ä"',
 ]);
+// Bracketed paste: one event with the text (escapes in it are not keys); unterminated, it runs to the end.
+same(decodeInput('a\x1b[200~x\x1b[Ay\ry\x1b[201~b').map(keyOf),
+    ['keydown KeyA "a"', 'paste "x\\u001b[Ay\\ry"', 'keydown KeyB "b"']);
+same(decodeInput('\x1b[200~open').map(keyOf), ['paste "open"']);
+eq(CSI.bracketedPaste(true), '\x1b[?2004h');
+eq(CSI.bracketedPaste(false), '\x1b[?2004l');
 eq(Object.isFrozen(Key), true);
 eq(CSI.pushKeyboardFlags(27), '\x1b[>27u');
 eq(CSI.popKeyboardFlags(2), '\x1b[<2u');

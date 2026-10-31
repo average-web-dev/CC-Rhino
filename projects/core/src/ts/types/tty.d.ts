@@ -98,6 +98,10 @@ interface TtyEscapes {
     scroll(n: number): string;
     /** Write `text` with one text and one background colour (blit digits) per character, without wrapping. */
     blit(text: string, fg: string, bg: string): string;
+    /**
+     * Ask for pasted text bracketed (`ESC [ 200 ~ … ESC [ 201 ~`: a 'paste' event instead of typed text), or stop it.
+     */
+    bracketedPaste(on: boolean): string;
     /** Ask for mouse reports in stdin (SGR encoding, presses, releases and drags), or stop them. */
     mouse(on: boolean): string;
     /**
@@ -159,10 +163,24 @@ interface TtyMouseInput {
     sequence: string;
 }
 
-/** What a TTY delivers, decoded: compare `type` against InputType. */
-type TtyInput = TtyKeyInput | TtyMouseInput;
+/**
+ * Pasted text, from tty.decodeInput() / Term.readInput() / stdin's 'paste' event: only sent bracketed (so it can be
+ * told apart from typing) after `CSI.bracketedPaste(true)`; otherwise a paste arrives as typed text.
+ */
+interface TtyPasteInput {
+    type: "paste";
+    /** The pasted text, line endings as `"\r"`. */
+    text: string;
+    /** The characters of the bracketed paste (`ESC [ 200 ~ … ESC [ 201 ~`). */
+    sequence: string;
+}
 
-interface TtyInputTypes { readonly KEY_DOWN: "keydown"; readonly KEY_UP: "keyup"; readonly MOUSE: "mouse"; }
+/** What a TTY delivers, decoded: compare `type` against InputType. */
+type TtyInput = TtyKeyInput | TtyMouseInput | TtyPasteInput;
+
+interface TtyInputTypes {
+    readonly KEY_DOWN: "keydown"; readonly KEY_UP: "keyup"; readonly MOUSE: "mouse"; readonly PASTE: "paste";
+}
 
 /** The flags of the kitty keyboard protocol (CSI.pushKeyboardFlags). */
 interface TtyKeyboardFlags {

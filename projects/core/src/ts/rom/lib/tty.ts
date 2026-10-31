@@ -26,7 +26,7 @@ import loop from 'internal/loop';
 import pty from 'internal/pty';
 import { Color } from '/rom/lib/color';
 import { CSI } from '/rom/lib/internal/csi';
-import { decodeInput, InputType, toLegacy } from '/rom/lib/internal/keys';
+import { decodeInput, toLegacy } from '/rom/lib/internal/keys';
 import { ERR_INVALID_ARG_TYPE } from '/rom/lib/internal/errors';
 import { validateFunction, validateInteger, validateOneOf } from '/rom/lib/internal/validators';
 
@@ -254,9 +254,11 @@ export class WriteStream implements TtyWriteStream {
     }
 }
 
-const STREAM_EVENTS: Record<string, true> = { data: true, keydown: true, keyup: true, end: true };
-/** The stream events about keys: delivered key by key, in order, across listeners (see ReadStream.#deliverKeys). */
-const KEY_EVENTS: Record<string, true> = { keydown: true, keyup: true };
+const STREAM_EVENTS: Record<string, true> = {
+    data: true, keydown: true, keyup: true, mouse: true, paste: true, end: true,
+};
+/** The decoded input events: delivered one by one, in order, across listeners (see ReadStream.#deliverKeys). */
+const KEY_EVENTS: Record<string, true> = { keydown: true, keyup: true, mouse: true, paste: true };
 
 /**
  * How a terminal reports keys in raw mode: 'kitty' (the default) reports every key with its presses, repeats and
@@ -473,13 +475,12 @@ export class ReadStream implements TtyReadStream {
     }
 
     /**
-     * Deliver the keys in `data` to the 'keydown' / 'keyup' listeners of `owner`, key by key, so separate
-     * listeners see them in the order they were typed (each pipe_data listener would otherwise get the whole chunk in
-     * turn). The keys are delivered from the thread of the oldest such listener.
+     * Deliver the input in `data` to the 'keydown' / 'keyup' / 'mouse' / 'paste' listeners of `owner`, one by one, so
+     * separate listeners see it in the order it came (each pipe_data listener would otherwise get the whole chunk in
+     * turn). It is delivered from the thread of the oldest such listener.
      */
     #deliverKeys(owner: number, data: string): void {
         for (let input of decodeInput(data)) {
-            if (input.type === InputType.MOUSE) continue;
             for (let sub of this.#subscriptions.slice()) {
                 if (sub.owner !== owner || sub.event !== input.type || !this.#alive(sub)) continue;
                 if (sub.once) this.#unsubscribe(sub);

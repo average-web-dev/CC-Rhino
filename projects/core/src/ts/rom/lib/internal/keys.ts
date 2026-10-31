@@ -44,7 +44,7 @@ export const Key = Object.freeze({
 } as const);
 
 /** The kinds of input tty.decodeInput() returns (`input.type`). */
-export const InputType = { KEY_DOWN: 'keydown', KEY_UP: 'keyup', MOUSE: 'mouse' } as const;
+export const InputType = { KEY_DOWN: 'keydown', KEY_UP: 'keyup', MOUSE: 'mouse', PASTE: 'paste' } as const;
 
 /** What a mouse report says happened (`input.action`). */
 export const MouseAction = {
@@ -267,20 +267,46 @@ function decodeCsiKey(params: string, final: string, sequence: string): TtyKeyIn
     return keyEvent(key, code, sequence, mods, event);
 }
 
-/** Split terminal input into keyboard and mouse events, in order. */
-function decode(data: string, onKey: (key: TtyKeyInput) => void, onMouse: (mouse: TtyMouseInput) => void): void {
+const PASTE_START = '\x1b[200~';
+const PASTE_END = '\x1b[201~';
+
+/**
+ * The length of the bracketed paste (`ESC [ 200 ~ text ESC [ 201 ~`, sent when a program asked for it with
+ * CSI.bracketedPaste) at `data[i]`, or 0 if there is none; an unterminated one runs to the end of `data`.
+ */
+function pasteAt(data: string, i: number): number {
+    if (!data.startsWith(PASTE_START, i)) return 0;
+    let end = data.indexOf(PASTE_END, i + PASTE_START.length);
+    return end < 0 ? data.length - i : end + PASTE_END.length - i;
+}
+
+/** The text of a bracketed paste sequence. */
+function pasteText(sequence: string): string {
+    let text = sequence.slice(PASTE_START.length);
+    return text.endsWith(PASTE_END) ? text.slice(0, -PASTE_END.length) : text;
+}
+
+/** Split terminal input into keyboard, mouse and paste events, in order. */
+function decode(data: string, onInput: (input: TtyInput) => void): void {
     let i = 0;
     while (i < data.length) {
         let ch = data.charAt(i);
         if (ch !== '\x1b') {
-            onKey(decodeChar(ch, ch, false));
+            onInput(decodeChar(ch, ch, false));
             i++;
+            continue;
+        }
+        let paste = pasteAt(data, i);
+        if (paste > 0) {
+            let sequence = data.slice(i, i + paste);
+            onInput({ type: InputType.PASTE, text: pasteText(sequence), sequence });
+            i += paste;
             continue;
         }
         let report: MouseReport | undefined;
         let length = mouseReportAt(data, i, (r) => { report = r; });
         if (length > 0) {
-            onMouse(mouseInput(report!, data.slice(i, i + length)));
+            onInput(mouseInput(report!, data.slice(i, i + length)));
             i += length;
             continue;
         }
@@ -291,27 +317,27 @@ function decode(data: string, onKey: (key: TtyKeyInput) => void, onMouse: (mouse
             let params = data.slice(i + 2, j);
             let final = data.charAt(j);
             let sequence = data.slice(i, j + 1);
-            onKey(final === 'u' && next === '['
+            onInput(final === 'u' && next === '['
                 ? decodeKittyKey(params, sequence)
                 : decodeCsiKey(params, final, sequence));
             i = j + 1;
             continue;
         }
         if (next === '') {
-            onKey(decodeChar('\x1b', '\x1b', false));
+            onInput(decodeChar('\x1b', '\x1b', false));
             i++;
             continue;
         }
         // ESC + character: the character with Alt.
-        onKey(decodeChar(next, '\x1b' + next, true));
+        onInput(decodeChar(next, '\x1b' + next, true));
         i += 2;
     }
 }
 
-/** Decode terminal input into keyboard and mouse events, in order (the counterpart of tty.CSI). */
+/** Decode terminal input into keyboard, mouse and paste events, in order (the counterpart of tty.CSI). */
 export function decodeInput(data: string): TtyInput[] {
     let out: TtyInput[] = [];
-    decode(data, (key) => { out.push(key); }, (mouse) => { out.push(mouse); });
+    decode(data, (input) => { out.push(input); });
     return out;
 }
 
@@ -363,6 +389,12 @@ export function toLegacy(data: string): string {
     let out = '';
     let i = 0;
     while (i < data.length) {
+        let paste = pasteAt(data, i);
+        if (paste > 0) {
+            out += data.slice(i, i + paste); // pasted text is not keys
+            i += paste;
+            continue;
+        }
         if (data.charAt(i) === '\x1b' && data.charAt(i + 1) === '[' && mouseReportAt(data, i) === 0) {
             let j = i + 2;
             while (j < data.length && /[0-9;:]/.test(data.charAt(j))) j++;
@@ -384,12 +416,18 @@ export function toLegacy(data: string): string {
     return out;
 }
 
-/** Remove mouse reports from terminal input (for readers that only want text, like Term). */
+/** Remove mouse reports and the brackets of pastes from terminal input (for readers that only want text, like Term). */
 export function stripMouse(data: string): string {
     if (data.indexOf('\x1b[') < 0) return data;
     let out = '';
     let i = 0;
     while (i < data.length) {
+        let paste = pasteAt(data, i);
+        if (paste > 0) {
+            out += pasteText(data.slice(i, i + paste));
+            i += paste;
+            continue;
+        }
         let length = data.charAt(i) === '\x1b' ? mouseReportAt(data, i) : 0;
         if (length > 0) { i += length; continue; }
         out += data.charAt(i);

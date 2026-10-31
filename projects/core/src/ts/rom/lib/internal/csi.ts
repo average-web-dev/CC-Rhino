@@ -75,6 +75,12 @@ export const CSI = {
     blit(text: string, fg: string, bg: string): string {
         return `${ESC}Pcc-blit;${fg};${bg};${text}${ESC}\\`;
     },
+    /**
+     * Ask for pasted text bracketed (`ESC [ 200 ~ … ESC [ 201 ~`: a 'paste' event instead of typed text), or stop it.
+     */
+    bracketedPaste(on: boolean): string {
+        return on ? `${ESC}[?2004h` : `${ESC}[?2004l`;
+    },
     /** Ask for mouse reports in stdin (SGR encoding, presses, releases and drags), or stop them. */
     mouse(on: boolean): string {
         return on ? `${ESC}[?1002;1006h` : `${ESC}[?1002;1006l`;

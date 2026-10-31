@@ -23,11 +23,12 @@
 // - write() cuts text off at the Term's width (the TTY's, unless set with setSize), so drawing never scrolls; print()
 //   wraps at the width and scrolls at the bottom, like console.log.
 // - Input reads the TTY's stdin: readInput returns keyboard events (like the browser's: `type` 'keydown' / 'keyup',
-//   `key`, `code` — compare against Key —, `repeat`, `ctrlKey` …) and mouse events (after CSI.mouse(true)); readKey
-//   returns the next key press; readChar / readLine return text (keys as a terminal traditionally sends them) and skip
-//   mouse reports. In raw mode the terminal reports releases, repeats, the keypad and modifier keys too, unless
-//   the stream's keyboard protocol is 'legacy' (stdin.setKeyboardProtocol). The mouse is also available as events
-//   (mouse_click, monitor_touch).
+//   `key`, `code` — compare against Key —, `repeat`, `ctrlKey` …), mouse events (after CSI.mouse(true); until then the
+//   mouse belongs to the terminal) and pastes (after CSI.bracketedPaste(true); otherwise pasted text comes as typed);
+//   readKey returns the next key press; readChar / readLine return text (keys as a terminal traditionally sends them,
+//   pasted text as it is) and skip mouse reports. In raw mode the terminal reports releases, repeats, the keypad and
+//   modifier keys too, unless the stream's keyboard protocol is 'legacy' (stdin.setKeyboardProtocol). Monitors also
+//   fire monitor_touch.
 
 import { TTY, CSI } from '/rom/lib/tty';
 import { decodeInput, stripMouse, toLegacy, Key, InputType, MouseAction, MouseButton } from '/rom/lib/internal/keys';
@@ -258,7 +259,10 @@ export class Term {
         return true;
     }
 
-    /** Drop the mouse reports and key releases from the buffered input, keys as text (for the readers of text). */
+    /**
+     * Drop the mouse reports, key releases and paste brackets from the buffered input, keys as text (for the readers
+     * of text).
+     */
     #textOnly(): void {
         this.#text = toLegacy(stripMouse(this.#text));
     }
@@ -266,8 +270,9 @@ export class Term {
     /**
      * Wait for the next input: a keyboard event (`{ type: 'keydown' | 'keyup', key, code, repeat, ctrlKey, shiftKey,
      * altKey, metaKey, sequence }`) or, once mouse reports are asked for (`CSI.mouse(true)`), a mouse event (`{ type:
-     * 'mouse', action, button, direction, x, y, ctrlKey, … }`, coordinates from 0); `undefined` at end of input. Use raw
-     * mode for single keys.
+     * 'mouse', action, button, direction, x, y, ctrlKey, … }`, coordinates from 0) or, once bracketed paste is asked for
+     * (`CSI.bracketedPaste(true)`), a paste (`{ type: 'paste', text }`); `undefined` at end of input. Use raw mode for
+     * single keys.
      */
     readInput(): TtyInput | undefined {
         while (this.#text.length === 0) {

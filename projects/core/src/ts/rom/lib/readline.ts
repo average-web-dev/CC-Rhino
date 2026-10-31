@@ -74,17 +74,32 @@ export function clearScreenDown(stream: Writable | null | undefined, callback?: 
 // ── Keys ─────────────────────────────────────────────────────────────────────────
 
 /**
- * Call `onKey` for each key press in the input of `stream`: a TTY stream (process.stdin) delivers them as 'keydown'
- * events; any other stream is decoded from its 'data'. Releases and modifier keys alone are skipped. Returns the event
- * and listener it added.
+ * Call `onInput` for each key press and each (bracketed) paste in the input of `stream`: a TTY stream (process.stdin)
+ * delivers them as 'keydown' / 'paste' events; any other stream is decoded from its 'data'. Releases and modifier keys
+ * alone are skipped. Returns the events and listeners to add.
  */
-function keyListener(stream: ReadableInput, onKey: (key: TtyKeyInput) => void): [string, (...args: any[]) => void] {
-    let press = (key: TtyKeyInput) => { if (!isModifierKey(key.code)) onKey(key); };
-    if (stream instanceof tty.ReadStream) return ['keydown', press];
-    return ['data', (data: string | Uint8Array) => {
+function inputListeners(
+    stream: ReadableInput, onInput: (input: TtyKeyInput | TtyPasteInput) => void,
+): [string, (...args: any[]) => void][] {
+    let press = (key: TtyKeyInput) => { if (!isModifierKey(key.code)) onInput(key); };
+    if (stream instanceof tty.ReadStream) return [['keydown', press], ['paste', onInput]];
+    return [['data', (data: string | Uint8Array) => {
         let text = typeof data === 'string' ? data : String.fromCharCode.apply(null, Array.prototype.slice.call(data));
-        for (let input of decodeInput(text)) if (input.type === InputType.KEY_DOWN) press(input);
-    }];
+        for (let input of decodeInput(text)) {
+            if (input.type === InputType.KEY_DOWN) press(input);
+            else if (input.type === InputType.PASTE) onInput(input);
+        }
+    }]];
+}
+
+/**
+ * Ask the terminal for bracketed pastes while the interface reads (so pasted text is inserted as it is, not taken as
+ * keys), as bash does; and stop when it pauses, so programs run meanwhile get pastes as typed text.
+ */
+function bracketedPaste(self: InterfaceImpl, on: boolean): void {
+    if (self.terminal && self.output !== null && self.output !== undefined && self.output.isTTY === true) {
+        self.output.write(tty.CSI.bracketedPaste(on));
+    }
 }
 
 // ── Interface ────────────────────────────────────────────────────────────────────
@@ -659,14 +674,18 @@ class Interface extends EventEmitter {
                 self.close();
             });
         } else {
-            let [event, listener] = keyListener(inputStream, (key) => {
+            for (let [event, listener] of inputListeners(inputStream, (input) => {
                 // process.stdin is shared with the shell: an interface that is paused does not take part.
                 if (self.paused || self.closed) return;
-                ttyWrite(self, typedText(key), key);
-            });
-            listen('input', event, listener);
+                // A paste is inserted as it is (a Tab does not complete); its line endings accept lines.
+                if (input.type === InputType.PASTE) ttyWrite(self, input.text, undefined);
+                else ttyWrite(self, typedText(input), input);
+            })) {
+                listen('input', event, listener);
+            }
             listen('input', 'end', () => { self.close(); });
             setRawMode(this, true);
+            bracketedPaste(this, true);
             if (output !== null && output !== undefined && typeof output.on === 'function') {
                 listen('output', 'resize', () => { refreshLine(self); });
             }
@@ -708,6 +727,7 @@ class Interface extends EventEmitter {
     pause(): this {
         if (this.paused) return this;
         if (typeof this.input.pause === 'function') this.input.pause();
+        bracketedPaste(this, false);
         this.paused = true;
         this.emit('pause');
         return this;
@@ -716,6 +736,7 @@ class Interface extends EventEmitter {
     resume(): this {
         if (!this.paused) return this;
         if (typeof this.input.resume === 'function') this.input.resume();
+        bracketedPaste(this, true);
         this.paused = false;
         this.emit('resume');
         return this;

@@ -83,6 +83,11 @@ interface TtyWriteStream extends Writable {
  *   listeners. In raw mode the terminal reports every key with its releases and repeats (the kitty keyboard protocol;
  *   `setKeyboardProtocol('legacy')` turns that off), while `'data'` still gets keys as a terminal traditionally sends
  *   them.
+ * - `'mouse'` (CC extension): a TtyMouseInput for each mouse report, once the program asked for them
+ *   (`CSI.mouse(true)`); until then the mouse belongs to the terminal (the middle button pastes).
+ * - `'paste'` (CC extension): a TtyPasteInput for each paste, once the program asked for bracketed paste
+ *   (`CSI.bracketedPaste(true)`; readline does); otherwise pasted text (Ctrl+Shift+V, Shift+Insert, middle button)
+ *   arrives as typed text.
  * - Nothing is delivered until the stream flows: adding a `'data'` listener or calling `resume()` starts it, `pause()`
  *   stops it. Input typed meanwhile stays in the TTY (type ahead) and is delivered when it flows again.
  * - Listeners belong to the thread that adds them: they may block, and are dropped when the program is stopped. A
@@ -106,6 +111,8 @@ interface TtyReadStream extends ReadableInput {
     unref(): this;
     on(event: "data", listener: (chunk: string) => void): this;
     on(event: "keydown" | "keyup", listener: (event: TtyKeyInput) => void): this;
+    on(event: "mouse", listener: (event: TtyMouseInput) => void): this;
+    on(event: "paste", listener: (event: TtyPasteInput) => void): this;
     on(event: "end", listener: () => void): this;
     on(event: string, listener: (...args: any[]) => void): this;
     addListener(event: string, listener: (...args: any[]) => void): this;
