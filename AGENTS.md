@@ -153,7 +153,7 @@ part of `assemble`.
   `process.stdout.write`. There is no global `sleep`: `require('system').sleep(ticks)`. Every computer API is a native module:
   `require('fs')`, `require('system')`, `require('events')`, `require('turtle')` … Native modules only exist when
   the hardware is present (e.g. `turtle` only on turtles).
-- TTYs (feature/tty-term): a TTY is native (`core/tty`): a pair of pipes (`Pipe`) plus a line discipline (cooked:
+- TTYs (#50): a TTY is native (`core/tty`): a pair of pipes (`Pipe`) plus a line discipline (cooked:
   echo, editing, Ctrl+U/D/C; raw: passed through), created virtually (`internal/pty`) or owned by a device. A
   `TerminalEmulator` renders a TTY's output onto a `Terminal` grid (VT-style: pending wrap, scrolling, SGR colours →
   CC colours plus the CC extension `38/48;6;i`, cursor/erase sequences, the blit sequence `ESC P cc-blit;fg;bg;text

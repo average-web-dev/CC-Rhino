@@ -823,6 +823,38 @@ function transferUntil(side: string, amount: number): number { /* loop transferE
 
 ---
 
+## Phase 16 — TTYs, Term and virtual consoles (#50)
+
+Replaces the native `term` (the computer's screen *and* its drawing API) and the hand-written terminal driver in
+`rom/lib/internal/tty.ts` with a Unix-like model: a TTY is a pair of native pipes plus a line discipline; whatever
+shows it (a console of the screen, a monitor) renders its ANSI output with a Java terminal emulator; `Term` is a ROM
+class that draws by writing ANSI. Branch `feature/tty-term`.
+
+- [x] **16.1** Native pipes and TTY: `Pipe` (buffer, EOF, per-reader waiters, flowing push), `LineDiscipline`
+  (cooked: echo, Backspace, Ctrl+U, Ctrl+D, Ctrl+C → `terminate(tty)`; raw), `Tty`; `internal/pty` + `TtyHandle` /
+  `PipeHandle` (blocking `read` via `pipe_readable`, `pipe_data` while flowing)
+- [x] **16.2** `TerminalEmulator` (VT/ANSI: pending wrap, scrolling, SGR → CC colours + `38/48;6;i`, cursor/erase,
+  blit DCS `ESC P cc-blit;fg;bg;text ESC \`, mouse modes) and `InputEncoder` (keys, chars, mouse → VT sequences)
+- [x] **16.3** `Screen`: virtual consoles (1 / `advanced_consoles`), Alt+1…9, input via `EventComputerInput`,
+  module `screen`, `console_show`
+- [x] **16.4** Monitors have a TTY (`monitor.getTty()`, touch → mouse reports), `tty_resize`
+- [x] **16.5** ROM `tty` (Node `ReadStream` / `WriteStream`, `TTY`, `CSI`, `decodeInput` + `InputType` /
+  `MouseAction` / `MouseButton`) and `term` (`Term`: `write` clips, `print` wraps, colours, cursor, blit,
+  `readKey` / `readInput` / `readChar` / `readLine`, `KeyName`)
+- [x] **16.6** Jobs: a program's thread carries its job as context (`internal/loop.setContext`), so `process` (Node
+  API, strict) is always the calling program's; `child_process` and `os.run`; bash on `spawnSync`; `process.exit()`
+  ends a program at once (`exitContext`); the OS runs a shell on every free shown console, `chvt`, `exit` on
+  console 2+ shows console 1
+- [x] **16.7** Removed: native `term` / `TermAPI` / `TermMethods`, monitor drawing and palette methods, hold-Ctrl+T
+- [x] **16.8** Tests: `TtyTest`, `TerminalEmulatorTest`, `InputEncoderTest`, `ScreenTest`, `PtyAPITest`,
+  `ScreenAPITest`, `stdio/tty.ts`, `stdio/child_process.ts`, `StdioShellTest` (consoles, Ctrl+C, `exit`), gametest
+  `Tty_renders_output`
+- [ ] **16.9** Follow-ups: Tier 0 (`Color` / `ColorSet` / `Key`, `Vector`, #2) on top of the TTY model; named
+  constant groups instead of magic strings/numbers; `edit` like vi/vim (#10); `window` as a native display with a TTY
+  (#3); docs on VitePress (#51)
+
+---
+
 ## Since the original plan (tracked as GitHub issues)
 
 Work done after this plan was written, mostly from the code review in October 2026 (see the issues for details):
@@ -836,7 +868,8 @@ Work done after this plan was written, mostly from the code review in October 20
 - **Modules / loader:** module cached before execution (cycles, #28); `require.uncached` / `require.resolve`, bash runs
   programs uncached (#24); `getModuleName()` APIs are registered; `IFunction` return values are callable.
 - **Concurrency:** native `parallel` with real green threads and cancellation (`JSParallel`/`JSThread`/`JSTaskGroup`,
-  #29); Ctrl+T terminates the foreground program (#25). No public `pullEvent`/`queueEvent` (decision in #29).
+  #29); Ctrl+T terminated the foreground program (#25) — since #50 it is Ctrl+C in cooked mode. No public
+  `pullEvent`/`queueEvent` (decision in #29).
 - **APIs:** Node-compatible `fs` with Node error codes, callbacks via the event loop (#27); `transferEnergy` /
   `absorbEnergy` exploit fixed (#21); alarms (#31).
 - **Async model (#35):** Rhino promise jobs drained in the microtask phase; engine-generated
@@ -852,5 +885,6 @@ Work done after this plan was written, mostly from the code review in October 20
   `util`, `readline`, `readline/promises` as ROM core modules (resolved before `require.paths`, `node:` prefix);
   terminal driver with VT/ANSI output and cooked/raw stdin whose listeners belong to the calling thread; bash on
   `readline`, programs run as jobs (fresh stdin, argv, cwd restore, alive while reading stdin, `process.exit`).
+- **TTYs (#50):** native TTYs, terminal emulator and virtual consoles replace the native `term`; see Phase 16.
 - **Planned:** native array loops ignoring aborts (#37); compatibility layer for CC: Tweaked addons (#33).
 
