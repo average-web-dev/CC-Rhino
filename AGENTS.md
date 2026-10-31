@@ -74,10 +74,8 @@ part of `assemble`.
   generators and `for await` → native generators driven by `asyncToGenerator`/`wrapAsyncGenerator` — never
   regenerator; class fields/`#private`/static blocks, classes, block scoping in
   loops, spread in calls/`new`, destructuring, `new.target`, ES modules → CommonJS
-  (`modules.mjs`), plus its own plugin that
-  makes leaving a `for-of` early close the iterator (`for-of.mjs`: the loop stays
-  native over an iterator obtained by the `rhinoForOf` helper, wrapped in `try`/`finally` — never `catch`, which
-  halves the interpreter's speed for the whole function — with arrays iterated as is). Babel's runtime helpers are not inlined: files
+  (`modules.mjs`); `for-of` stays native (Rhino closes the iterator when a loop is left early). Babel's runtime
+  helpers are not inlined: files
   get `var _babelHelpers = require("babel-helpers")`, a native engine module (`JSBabelHelpers`) generated at build time
   from `@babel/helpers` by `:core:generateBabelHelpers` (`babel-preset-rhino/helpers.mjs`: the shipped helper list +
   Rhino fixes); a helper outside that list fails the build. Non-module files (the bios) use `require("babel-helpers").x`
@@ -268,9 +266,9 @@ part of `assemble`.
   `new.target`, `async`/`await` — Babel (`babel-preset-rhino`) rewrites what Rhino gets wrong. ES module syntax
   (`import fs from 'fs'`, named exports; see "Module syntax" above). Type-only imports may use `import type`.
   Leaving a `for-of` early closes the iterator (a generator's
-  `finally` runs). What is left: decorators and `using` are unsupported (a missing
+  `finally` runs; native in Rhino). What is left: decorators and `using` are unsupported (a missing
   helper fails the build). Hand-written JS that bypasses the pipeline (Java text blocks, engine-test snippets) still
-  has to respect Rhino: no `class`, no spread in calls, no `const` in loops, `for-of` never closes its iterator.
+  has to respect Rhino: no `class`, no spread in calls, no `const` in loops.
 - Programs in `rom/bin` / `rom/os/bin` export `main(args, cwd)` (`export function main…`; same as
   `process.argv.slice(2)` / `process.cwd()`); bash calls it, or just runs the module's top-level code (Node style).
   `main` may be `async`

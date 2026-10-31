@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 // Iterator closing (#41): leaving a for-of early must call the iterator's return(), so a generator's `finally` runs.
-// Rhino's native for-of never does; babel-preset-rhino's for-of plugin (src/build/babel-preset-rhino/for-of.mjs)
-// adds it. Destructuring is closed by Babel's slicedToArray helper, `for await` by Babel's lowering
+// Rhino's native for-of does that (average-web-dev/rhino@rhino_1_9_backports), so babel-preset-rhino leaves for-of
+// loops alone. Destructuring is closed by Babel's slicedToArray helper, `for await` by Babel's lowering
 // (@babel/plugin-transform-async-generator-functions).
 
 let log: string[] = [];

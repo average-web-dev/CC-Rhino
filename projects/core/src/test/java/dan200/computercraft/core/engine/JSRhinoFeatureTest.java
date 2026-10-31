@@ -233,32 +233,32 @@ class JSRhinoFeatureTest {
             return new F().ok;
             """),
 
-        // Broken: babel-preset-rhino's for-of plugin (for-of.mjs) closes the iterator (#41).
-        new Feature("break out of a for-of closes the iterator", BROKEN, "fin", """
+        // Leaving a for-of early closes the iterator (#41; native since average-web-dev/rhino@rhino_1_9_backports).
+        new Feature("break out of a for-of closes the iterator", NATIVE, "fin", """
             var log = "";
             function* g() { try { yield 1; yield 2; } finally { log = "fin"; } }
             for (var v of g()) break;
             return log;
             """),
-        new Feature("return out of a for-of closes the iterator", BROKEN, "fin", """
+        new Feature("return out of a for-of closes the iterator", NATIVE, "fin", """
             var log = "";
             function* g() { try { yield 1; yield 2; } finally { log = "fin"; } }
             (function () { for (var v of g()) return v; })();
             return log;
             """),
-        new Feature("throw out of a for-of closes the iterator", BROKEN, "fin", """
+        new Feature("throw out of a for-of closes the iterator", NATIVE, "fin", """
             var log = "";
             function* g() { try { yield 1; yield 2; } finally { log = "fin"; } }
             try { for (var v of g()) throw new Error(); } catch (e) {}
             return log;
             """),
-        new Feature("labelled break out of nested for-of closes both iterators", BROKEN, "i,o", """
+        new Feature("labelled break out of nested for-of closes both iterators", NATIVE, "i,o", """
             var log = [];
             function* g(n) { try { yield 1; yield 2; } finally { log.push(n); } }
             outer: for (var a of g("o")) for (var b of g("i")) break outer;
             return log.join();
             """),
-        new Feature("break out of a for-of closes a plain iterator object", BROKEN, "1", """
+        new Feature("break out of a for-of closes a plain iterator object", NATIVE, "1", """
             var closes = 0, i = 0;
             var it = { next: function () { return { value: i++, done: false }; },
                        "return": function () { closes++; return {}; } };

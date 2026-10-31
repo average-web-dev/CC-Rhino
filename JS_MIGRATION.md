@@ -34,15 +34,10 @@ from the engine's native `babel-helpers` module. ROM, test and user code use ES 
 `export function main…`) and can use classes, spread, `const` in loops, rest/default parameters and destructuring
 freely. `JSRhinoFeatureTest` pins the
 feature matrix (what is native, what is transformed). Leaving a `for-of` early (`break`, `return`, labelled jumps,
-exceptions) closes the iterator (#41): Rhino never calls `return()`, so the preset's own `for-of.mjs` plugin keeps the
-native loop but over an iterator it obtained itself, and closes it on every jump out of the loop and, through
-`try`/`finally`, on exceptions. Measured on Rhino's interpreter (1000-element loops; 333 loops over 3 elements):
-arrays +3% / +50% (one inline `Array.isArray` and a `try` per loop entry; array literals are not transformed),
-`Set` +10%, generators +1%, against +500% (`Set`) / +210% (generators) for Babel's `transform-for-of` (a closure
-call per step) and a 2× slowdown of the whole function for any variant that uses `catch`. Array destructuring is
-closed by Babel's `slicedToArray` helper, `for await` by Babel's lowering (`asyncIterator` + `return()`). Remaining
-deviations: an iterator whose `next()` throws still gets `return()` called (errors ignored), and an array whose
-`Symbol.iterator` was replaced is iterated with it but not closed.
+exceptions) closes the iterator (#41): Rhino does that natively since `average-web-dev/rhino@rhino_1_9_backports`
+gained the backport, so the preset no longer transforms `for-of` (its former `for-of.mjs` plugin is gone). Array
+destructuring is closed by Babel's `slicedToArray` helper, `for await` by Babel's lowering (`asyncIterator` +
+`return()`).
 
 **Event loop model (how `events.on` survives a blocking `turtle.dig()`):**
 
