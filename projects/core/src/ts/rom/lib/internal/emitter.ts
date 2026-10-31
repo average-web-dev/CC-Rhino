@@ -8,6 +8,9 @@
 // Listeners run synchronously in the emitting thread, in registration order. emit() uses a plain loop, so listeners
 // may call blocking APIs when emit() itself was called from code that can block (see #38).
 
+import { ERR_UNHANDLED_ERROR } from '/rom/lib/internal/errors';
+import { validateFunction } from '/rom/lib/internal/validators';
+
 type Listener = (...args: any[]) => void;
 
 /** One registration; `once` registrations are removed before their listener runs. */
@@ -16,11 +19,7 @@ interface Entry { fn: Listener; once: boolean; }
 type EventTable = Record<string | symbol, Entry[] | undefined>;
 
 function checkListener(listener: unknown): void {
-    if (typeof listener !== 'function') {
-        let err = new TypeError('The "listener" argument must be of type function');
-        (err as any).code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
-    }
+    validateFunction(listener, 'listener');
 }
 
 /** A non-enumerable own property, so the emitter's state does not show up in util.inspect & co. */
@@ -85,10 +84,7 @@ export class EventEmitter {
             if (event === 'error') {
                 let err = args[0];
                 if (err instanceof Error) throw err;
-                let wrapped = new Error(`Unhandled error. (${String(err)})`);
-                (wrapped as any).code = 'ERR_UNHANDLED_ERROR';
-                (wrapped as any).context = err;
-                throw wrapped;
+                throw new ERR_UNHANDLED_ERROR(err);
             }
             return false;
         }

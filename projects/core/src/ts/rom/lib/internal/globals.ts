@@ -15,6 +15,7 @@ import proc from 'process';
 import con from 'console';
 import * as timers from '/rom/lib/timers';
 import events from 'events';
+import { validateFunction } from '/rom/lib/internal/validators';
 
 function define(name: string, value: unknown): void {
     Object.defineProperty(globalThis, name, { value, writable: true, configurable: true, enumerable: false });
@@ -29,11 +30,7 @@ define('clearInterval', timers.clearInterval);
 define('setImmediate', timers.setImmediate);
 define('clearImmediate', timers.clearImmediate);
 define('queueMicrotask', function queueMicrotask(callback: () => void): void {
-    if (typeof callback !== 'function') {
-        let err = new TypeError('The "callback" argument must be of type function');
-        (err as any).code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
-    }
+    validateFunction(callback, 'callback');
     // A plain function: the engine enters it with continuations (a native callback such as a promise's resolve
     // function could not be).
     events.queueMicrotask(function () { callback(); });

@@ -22,6 +22,7 @@ import * as util from '/rom/lib/util';
 import { callable } from '/rom/lib/internal/callable';
 import asyncMod from 'async';
 import events from 'events';
+import { AbortError, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_USE_AFTER_CLOSE } from '/rom/lib/internal/errors';
 
 const kHistorySize = 30;
 const kMaxLengthOfKillRing = 32;   // (unused, kept for reference to Node's defaults)
@@ -37,8 +38,8 @@ function callbackLater(callback: unknown): void {
 
 export function cursorTo(stream: Writable | null | undefined, x: number, y?: number | (() => void), callback?: () => void): boolean {
     if (typeof y === 'function') { callback = y; y = undefined; }
-    if (Number.isNaN(x)) throw invalidArgValue('x', x);
-    if (Number.isNaN(y as number)) throw invalidArgValue('y', y);
+    if (Number.isNaN(x)) throw new ERR_INVALID_ARG_VALUE('x', x);
+    if (Number.isNaN(y as number)) throw new ERR_INVALID_ARG_VALUE('y', y);
     if (stream === null || stream === undefined || (typeof x !== 'number' && typeof y !== 'number')) {
         callbackLater(callback);
         return true;
@@ -70,12 +71,6 @@ export function clearScreenDown(stream: Writable | null | undefined, callback?: 
     return stream.write(tty.CSI.clearScreenDown, callback);
 }
 
-function invalidArgValue(name: string, value: unknown): TypeError {
-    let err = new TypeError(`The argument '${name}' is invalid. Received ${util.inspect(value)}`);
-    (err as any).code = 'ERR_INVALID_ARG_VALUE';
-    return err;
-}
-
 // ── Keypress decoding for streams that only emit 'data' ─────────────────────────
 
 const KEYPRESS_DECODER = '__ccKeypressDecoder';
@@ -101,9 +96,7 @@ export function emitKeypressEvents(stream: ReadableInput, _iface?: unknown): voi
 type InterfaceImpl = Interface;
 
 function useAfterClose(): Error {
-    let err = new Error('readline was closed');
-    (err as any).code = 'ERR_USE_AFTER_CLOSE';
-    return err;
+    return new ERR_USE_AFTER_CLOSE('readline');
 }
 
 function setRawMode(self: InterfaceImpl, mode: boolean): boolean | undefined {
@@ -602,17 +595,13 @@ class Interface extends EventEmitter {
         }
         let inputStream = input as ReadableInput;
         if (inputStream === null || inputStream === undefined || typeof inputStream.on !== 'function') {
-            let err = new TypeError('The "input" argument must be a readable stream');
-            (err as any).code = 'ERR_INVALID_ARG_TYPE';
-            throw err;
+            throw new ERR_INVALID_ARG_TYPE('input', 'a readable stream', inputStream);
         }
-        if (completer !== undefined && typeof completer !== 'function') throw invalidArgValue('completer', completer);
+        if (completer !== undefined && typeof completer !== 'function') throw new ERR_INVALID_ARG_VALUE('completer', completer);
         if (history === undefined) history = [];
         if (historySize === undefined) historySize = kHistorySize;
         if (typeof historySize !== 'number' || Number.isNaN(historySize) || historySize < 0) {
-            let err = new RangeError('The value of "historySize" is out of range. It must be a non-negative number');
-            (err as any).code = 'ERR_INVALID_ARG_VALUE';
-            throw err;
+            throw new ERR_INVALID_ARG_VALUE('historySize', historySize, 'must be a non-negative number');
         }
         if (terminal === undefined && output !== null && output !== undefined) terminal = !!output.isTTY;
 
@@ -755,10 +744,7 @@ class Interface extends EventEmitter {
         this._questionCallback = null;
         this._questionCancel = null;
         if (cancel !== null) {
-            let err = new Error('The question was aborted, as the interface was closed');
-            err.name = 'AbortError';
-            (err as any).code = 'ABORT_ERR';
-            cancel(err);
+            cancel(new AbortError('The question was aborted, as the interface was closed'));
         }
         this.emit('close');
     }

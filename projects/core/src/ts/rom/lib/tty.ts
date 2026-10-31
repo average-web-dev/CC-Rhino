@@ -25,6 +25,8 @@ import events from 'events';
 import loop from 'internal/loop';
 import pty from 'internal/pty';
 import { decodeKeys } from '/rom/lib/internal/keys';
+import { ERR_INVALID_ARG_TYPE } from '/rom/lib/internal/errors';
+import { validateFunction } from '/rom/lib/internal/validators';
 
 /**
  * The other direction of CSI: decodeInput(data) splits what a TTY delivers into keys (Node key objects) and mouse
@@ -42,9 +44,7 @@ function chunkToString(chunk: unknown): string {
         for (let i = 0; i < chunk.length; i++) out += String.fromCharCode(chunk[i]);
         return out;
     }
-    let err = new TypeError('The "chunk" argument must be of type string or an instance of Uint8Array');
-    (err as any).code = 'ERR_INVALID_ARG_TYPE';
-    throw err;
+    throw new ERR_INVALID_ARG_TYPE('chunk', ['string', 'Uint8Array'], chunk);
 }
 
 /** Call a write/cursor callback asynchronously, as Node does. */
@@ -432,7 +432,7 @@ export class ReadStream implements TtyReadStream {
     }
 
     #subscribe(event: string, fn: Listener, once: boolean): void {
-        if (typeof fn !== 'function') throw new TypeError('The "listener" argument must be of type function');
+        validateFunction(fn, 'listener');
         this.#prune();
         let sub: Subscription = {
             event, fn, once, active: true, owner: this.#owner(),

@@ -22,6 +22,8 @@ import { EventEmitter } from '/rom/lib/internal/emitter';
 import * as jobs from '/rom/lib/internal/tty';
 import { TTY, ReadStream } from '/rom/lib/tty';
 import parallel from 'parallel';
+import { ERR_INVALID_ARG_VALUE } from '/rom/lib/internal/errors';
+import { validateArray } from '/rom/lib/internal/validators';
 
 /** Where a child's stdin/stdout/stderr go. */
 export type StdioOption = 'pipe' | 'inherit' | TTY | TtyHandle;
@@ -71,11 +73,11 @@ function ttyFor(stdio: StdioOption, options: SpawnOptions): { tty: TTY; piped: b
     if (stdio !== null && typeof stdio === 'object' && typeof (stdio as TtyHandle).getStdin === 'function') {
         return { tty: jobs.ttyOf(stdio as TtyHandle), piped: false };
     }
-    throw new TypeError(`The "options.stdio" property must be 'pipe', 'inherit' or a TTY, got ${String(stdio)}`);
+    throw new ERR_INVALID_ARG_VALUE('options.stdio', stdio, "must be 'pipe', 'inherit' or a TTY");
 }
 
 function createJob(program: string, args: string[], options: SpawnOptions, defaultStdio: StdioOption) {
-    if (!Array.isArray(args)) throw new TypeError('The "args" argument must be an array');
+    validateArray(args, 'args');
     let cwd = options.cwd ?? jobs.current().cwd;
     let resolved = resolveProgram(program, cwd);
     let { tty, piped } = ttyFor(options.stdio ?? defaultStdio, options);

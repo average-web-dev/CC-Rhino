@@ -79,6 +79,12 @@ class StdioLibraryTest {
         run("child_process.js");
     }
 
+    /** The ROM's Node-style errors and argument validators. */
+    @Test
+    void errors() {
+        run("errors.js");
+    }
+
     /** What plain-JS {@code require} sees of every ROM module (#49). */
     @Test
     void exports() {

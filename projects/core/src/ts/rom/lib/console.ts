@@ -13,6 +13,8 @@
 import * as util from '/rom/lib/util';
 import proc from 'process';
 import { callable } from '/rom/lib/internal/callable';
+import { ERR_CONSOLE_WRITABLE_STREAM } from '/rom/lib/internal/errors';
+import { validateArray, validateInteger } from '/rom/lib/internal/validators';
 
 const kSecond = 1000;
 const kMinute = 60 * kSecond;
@@ -45,12 +47,6 @@ function formatTime(ms: number): string {
     }
     if (seconds !== 0) return `${seconds.toFixed(3)}s`;
     return `${Number(ms.toFixed(3))}ms`;
-}
-
-function invalidArg(name: string, expected: string): TypeError {
-    let err = new TypeError(`The "${name}" argument must be ${expected}`);
-    (err as any).code = 'ERR_CONSOLE_WRITABLE_STREAM';
-    return err;
 }
 
 function isWritable(stream: unknown): stream is ConsoleStream {
@@ -147,14 +143,10 @@ class Console {
         }
         let stdout = opts.stdout;
         let errStream = opts.stderr === undefined ? stdout : opts.stderr;
-        if (!isWritable(stdout)) throw invalidArg('stdout', 'a writable stream');
-        if (!isWritable(errStream)) throw invalidArg('stderr', 'a writable stream');
+        if (!isWritable(stdout)) throw new ERR_CONSOLE_WRITABLE_STREAM('stdout');
+        if (!isWritable(errStream)) throw new ERR_CONSOLE_WRITABLE_STREAM('stderr');
         let groupIndentation = opts.groupIndentation === undefined ? 2 : opts.groupIndentation;
-        if (typeof groupIndentation !== 'number' || groupIndentation < 0 || groupIndentation > 1000) {
-            let err = new RangeError('The value of "groupIndentation" is out of range. It must be >= 0 && <= 1000');
-            (err as any).code = 'ERR_OUT_OF_RANGE';
-            throw err;
-        }
+        validateInteger(groupIndentation, 'groupIndentation', 0, 1000);
 
         let hidden = (name: string, value: unknown) =>
             Object.defineProperty(this, name, { value, writable: true, configurable: true, enumerable: false });
@@ -271,11 +263,7 @@ class Console {
     }
 
     table(tabularData: unknown, properties?: string[]): void {
-        if (properties !== undefined && !Array.isArray(properties)) {
-            let err = new TypeError('The "properties" argument must be an instance of Array');
-            (err as any).code = 'ERR_INVALID_ARG_TYPE';
-            throw err;
-        }
+        if (properties !== undefined) validateArray(properties, 'properties');
         if (tabularData === null || typeof tabularData !== 'object') {
             print(this, true, [tabularData]);
             return;

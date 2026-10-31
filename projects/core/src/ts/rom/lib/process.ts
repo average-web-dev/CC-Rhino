@@ -16,6 +16,7 @@ import * as env from '/rom/lib/env';
 import fs from 'fs';
 import events from 'events';
 import system from 'system';
+import { validateString } from '/rom/lib/internal/validators';
 
 /** Normalise `p` against the current directory. */
 function resolvePath(p: string): string {
@@ -30,11 +31,7 @@ function resolvePath(p: string): string {
 }
 
 function chdir(directory: string): void {
-    if (typeof directory !== 'string') {
-        let err = new TypeError('The "directory" argument must be of type string');
-        (err as any).code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
-    }
+    validateString(directory, 'directory');
     let target = resolvePath(directory);
     let isDirectory = false;
     let exists = false;

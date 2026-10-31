@@ -10,17 +10,16 @@
 // runtime, so `options.signal` is not supported.
 
 import * as timers from '/rom/lib/timers';
+import { ERR_INVALID_ARG_TYPE } from '/rom/lib/internal/errors';
 
-function invalidOptions(): TypeError {
-    let err = new TypeError('The "options" argument must be of type object');
-    (err as any).code = 'ERR_INVALID_ARG_TYPE';
-    return err;
+function invalidOptions(options: unknown): TypeError {
+    return new ERR_INVALID_ARG_TYPE('options', 'Object', options);
 }
 
 /** Whether `options` asks for a ref'd timer; throws for options that are not an object. */
 function isRef(options: TimerOptions | undefined): boolean {
     if (options === undefined) return true;
-    if (options === null || typeof options !== 'object') throw invalidOptions();
+    if (options === null || typeof options !== 'object') throw invalidOptions(options);
     return options.ref !== false;
 }
 

@@ -15,6 +15,7 @@
 
 import loop from 'internal/loop';
 import events from 'events';
+import { ERR_INVALID_ARG_TYPE } from '/rom/lib/internal/errors';
 
 const MS_PER_TICK = 50;
 /** Node's maximum delay; longer (and invalid) delays become 1 ms, as in Node. */
@@ -24,10 +25,7 @@ const TIMEOUT_MAX = 2147483647;
 const pending = new Map<number, Timeout>();
 
 function invalidCallback(value: unknown): TypeError {
-    let err = new TypeError('The "callback" argument must be of type function. Received ' +
-        (value === null ? 'null' : typeof value));
-    (err as any).code = 'ERR_INVALID_ARG_TYPE';
-    return err;
+    return new ERR_INVALID_ARG_TYPE('callback', 'function', value);
 }
 
 /** Node's delay coercion: anything that is not a number in [1, TIMEOUT_MAX] becomes 1 ms. */

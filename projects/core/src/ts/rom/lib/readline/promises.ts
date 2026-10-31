@@ -8,6 +8,7 @@
 
 import * as readline from '/rom/lib/readline';
 import { callable } from '/rom/lib/internal/callable';
+import { AbortError, ERR_USE_AFTER_CLOSE } from '/rom/lib/internal/errors';
 
 const Base = readline.Interface;
 
@@ -16,16 +17,11 @@ class Interface extends Base {
     override question(query: string, _options?: object): Promise<string> {
         return new Promise<string>((resolve, reject) => {
             if (this.closed) {
-                let err = new Error('readline was closed');
-                (err as any).code = 'ERR_USE_AFTER_CLOSE';
-                reject(err);
+                reject(new ERR_USE_AFTER_CLOSE('readline'));
                 return;
             }
             let onClose = () => {
-                let err = new Error('The question was aborted, as the interface was closed');
-                err.name = 'AbortError';
-                (err as any).code = 'ABORT_ERR';
-                reject(err);
+                reject(new AbortError('The question was aborted, as the interface was closed'));
             };
             this.once('close', onClose);
             super.question(query, (answer: string) => {

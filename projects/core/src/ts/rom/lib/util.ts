@@ -9,6 +9,8 @@
 // Differences from Node: no colours in inspect (`colors` is accepted and ignored — the terminal does understand the
 // ANSI colours styleText produces), no Proxy detection, and promise states cannot be inspected on Rhino.
 
+import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE } from '/rom/lib/internal/errors';
+
 const customInspect: unique symbol = Symbol.for('nodejs.util.inspect.custom') as any;
 const customPromisify: unique symbol = Symbol.for('nodejs.util.promisify.custom') as any;
 
@@ -96,9 +98,7 @@ export function stripVTControlCharacters(str: string): string {
 // ── inspect ──────────────────────────────────────────────────────────────────────
 
 function invalidArgType(name: string, expected: string, actual: unknown): TypeError {
-    let err = new TypeError(`The "${name}" argument must be of type ${expected}. Received ${inspect(actual)}`);
-    (err as any).code = 'ERR_INVALID_ARG_TYPE';
-    return err;
+    return new ERR_INVALID_ARG_TYPE(name, expected, actual);
 }
 
 function formatNumber(n: number): string {
@@ -787,9 +787,7 @@ export function styleText(format: string | string[], text: string): string {
     for (let name of formats) {
         let style = Object.prototype.hasOwnProperty.call(STYLES, name) ? STYLES[name] : undefined;
         if (style === undefined) {
-            let err = new TypeError(`The argument 'format' must be one of: ${Object.keys(STYLES).join(', ')}. Received ${inspect(name)}`);
-            (err as any).code = 'ERR_INVALID_ARG_VALUE';
-            throw err;
+            throw new ERR_INVALID_ARG_VALUE('format', name, `must be one of: ${Object.keys(STYLES).join(', ')}`);
         }
         left += `\x1b[${style[0]}m`;
         right = `\x1b[${style[1]}m` + right;

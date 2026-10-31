@@ -22,6 +22,8 @@
 
 import { TTY, CSI, colourIndex } from '/rom/lib/tty';
 import { decodeInput, stripMouse, KeyName, InputType, MouseAction, MouseButton } from '/rom/lib/internal/keys';
+import { ERR_INVALID_ARG_VALUE } from '/rom/lib/internal/errors';
+import { validateNumber, validateString } from '/rom/lib/internal/validators';
 
 /** The names of the keys readKey() returns (`key.name`), and the constants for readInput()'s results. */
 export { KeyName, InputType, MouseAction, MouseButton };
@@ -66,7 +68,8 @@ export class Term {
 
     /** Wrap text at `width` and treat `height` as the last row (e.g. to draw into part of the TTY). */
     setSize(width: number, height: number): void {
-        if (!(width >= 1) || !(height >= 1)) throw new RangeError('size must be positive');
+        validateNumber(width, 'width', 1);
+        validateNumber(height, 'height', 1);
         this.#size = { width: Math.floor(width), height: Math.floor(height) };
     }
 
@@ -170,11 +173,15 @@ export class Term {
      * blit digits (`0` white … `f` black) as long as `text`. No wrapping; the cursor moves behind the text.
      */
     blit(text: string, textColour: string, backgroundColour: string): void {
-        if (textColour.length !== text.length || backgroundColour.length !== text.length) {
-            throw new RangeError('arguments must be the same length');
-        }
-        if (!/^[0-9a-fA-F]*$/.test(textColour) || !/^[0-9a-fA-F]*$/.test(backgroundColour)) {
-            throw new RangeError('colours must be blit digits (0-9, a-f)');
+        validateString(text, 'text');
+        for (let [name, colours] of [['textColour', textColour], ['backgroundColour', backgroundColour]] as const) {
+            validateString(colours, name);
+            if (colours.length !== text.length) {
+                throw new ERR_INVALID_ARG_VALUE(name, colours, 'must be as long as the text');
+            }
+            if (!/^[0-9a-fA-F]*$/.test(colours)) {
+                throw new ERR_INVALID_ARG_VALUE(name, colours, 'must be blit digits (0-9, a-f)');
+            }
         }
         this.#out(CSI.blit(text, textColour, backgroundColour));
         this.#x += text.length;
