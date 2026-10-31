@@ -21,7 +21,8 @@ import java.util.List;
  * strength of the redstone wired, from 0 to 15.
  * - Bundled cables ({@link #setBundledOutput}/{@link #getBundledInput}): These interact with "bundled" cables, such
  * as those from Project:Red. These allow you to send 16 separate on/off signals. Each channel corresponds to a
- * colour, with the first being [`colors.white`] and the last [`colors.black`].
+ * dye, from white (0) to black (15): {@code redstone.setBundledOutput("back", { [Dye.RED]: true })}, with {@code Dye}
+ * from the {@code color} module.
  * <p>
  * Whenever a redstone input changes, a [`event!redstone`] event will be fired. This may be used instead of repeativly
  * polling.

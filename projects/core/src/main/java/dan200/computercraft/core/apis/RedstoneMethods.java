@@ -8,6 +8,9 @@ import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.computer.ComputerSide;
 import dan200.computercraft.core.redstone.RedstoneAccess;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * A base class for all blocks with redstone integration.
  */
@@ -92,56 +95,82 @@ public class RedstoneMethods {
     }
 
     /**
-     * Set the bundled cable output for a specific side.
+     * Turn channels of the bundled cable output on a specific side on or off: the channels named in {@code states}
+     * change, the others stay as they are.
      *
      * @param side   The side to set.
-     * @param output The colour bitmask to set.
-     * @cc.see colors.subtract For removing a colour from the bitmask.
-     * @cc.see colors.combine For adding a color to the bitmask.
+     * @param states The new state of each channel to change, keyed by dye ({@code Dye} from the {@code color} module).
+     * @throws ScriptException If a key is not a channel (0–15), a value not a boolean, or {@code states} is an array.
+     * @cc-r.param states Partial<Record<Dye, boolean>>
+     * @cc.usage Turn the red channel on behind the computer and the blue one off, then red off again.
+     * <pre>{@code
+     * redstone.setBundledOutput("back", { [Dye.RED]: true, [Dye.BLUE]: false });
+     * redstone.setBundledOutput("back", { [Dye.RED]: false });
+     * }</pre>
      */
     @ScriptFunction
-    public final void setBundledOutput(ComputerSide side, int output) {
-        redstone.setBundledOutput(side, output);
+    public final void setBundledOutput(ComputerSide side, Map<?, ?> states) throws ScriptException {
+        int on = 0, off = 0;
+        for (var entry : states.entrySet()) {
+            var bit = 1 << channelOf(entry.getKey());
+            if (!(entry.getValue() instanceof Boolean value)) {
+                throw new ScriptException("Bundled channel " + entry.getKey() + " must be true or false");
+            }
+            if (value) on |= bit; else off |= bit;
+        }
+        redstone.setBundledOutput(side, (redstone.getBundledOutput(side) | on) & ~off);
+    }
+
+    /**
+     * Turn all 16 channels of the bundled cable output on a specific side on or off.
+     *
+     * @param side The side to set.
+     * @param on   Whether all channels should be on.
+     */
+    @ScriptFunction
+    public final void setAllBundledOutput(ComputerSide side, boolean on) {
+        redstone.setBundledOutput(side, on ? 0xFFFF : 0);
     }
 
     /**
      * Get the bundled cable output for a specific side.
      *
      * @param side The side to get.
-     * @return The bundle cable's output.
+     * @return Whether each of the 16 channels is on, keyed by dye: {@code getBundledOutput("back")[Dye.RED]}.
+     * @cc-r.return Record<Dye, boolean>
      */
     @ScriptFunction
-    public final int getBundledOutput(ComputerSide side) {
-        return redstone.getBundledOutput(side);
+    public final Map<Integer, Boolean> getBundledOutput(ComputerSide side) {
+        return toStates(redstone.getBundledOutput(side));
     }
 
     /**
      * Get the bundled cable input for a specific side.
      *
      * @param side The side to get.
-     * @return The bundle cable's input.
-     * @see #testBundledInput To determine if a specific colour is set.
+     * @return Whether each of the 16 channels is on, keyed by dye: {@code getBundledInput("back")[Dye.RED]}.
+     * @cc-r.return Record<Dye, boolean>
      */
     @ScriptFunction
-    public final int getBundledInput(ComputerSide side) {
-        return redstone.getBundledInput(side);
+    public final Map<Integer, Boolean> getBundledInput(ComputerSide side) {
+        return toStates(redstone.getBundledInput(side));
     }
 
-    /**
-     * Determine if a specific combination of colours are on for the given side.
-     *
-     * @param side The side to test.
-     * @param mask The mask to test.
-     * @return If the colours are on.
-     * @cc.usage Check if [`colors.white`] and [`colors.black`] are on above this block.
-     * <pre>{@code
-     * print(redstone.testBundledInput("top", colors.combine(colors.white, colors.black)))
-     * }</pre>
-     * @see #getBundledInput
-     */
-    @ScriptFunction
-    public final boolean testBundledInput(ComputerSide side, int mask) {
-        var input = redstone.getBundledInput(side);
-        return (input & mask) == mask;
+    /** The channel (0–15) a key of a states object names (objects reach Java with string keys, arrays with numbers). */
+    private static int channelOf(Object key) throws ScriptException {
+        if (key instanceof String text && text.matches("[0-9]{1,2}")) {
+            var channel = Integer.parseInt(text);
+            if (channel <= 15) return channel;
+        }
+        throw new ScriptException(key instanceof String
+            ? "Bundled channel must be a dye (0-15), got " + key
+            : "Bundled channels must be an object keyed by dye ({ [Dye.RED]: true }), not an array");
+    }
+
+    /** Whether each channel (0–15) is on in a bit mask, keyed by channel. */
+    private static Map<Integer, Boolean> toStates(int mask) {
+        var states = new LinkedHashMap<Integer, Boolean>();
+        for (var channel = 0; channel < 16; channel++) states.put(channel, (mask & (1 << channel)) != 0);
+        return states;
     }
 }

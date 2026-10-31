@@ -97,6 +97,12 @@ class StdioLibraryTest {
         run("color.js");
     }
 
+    /** Bundled cables in the redstone module: channels as dyes. */
+    @Test
+    void redstone() {
+        run("redstone.js");
+    }
+
     /** What plain-JS {@code require} sees of every ROM module (#49). */
     @Test
     void exports() {
