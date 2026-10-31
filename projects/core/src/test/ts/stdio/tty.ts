@@ -6,8 +6,8 @@
 
 import * as prelude from './prelude';
 import asyncMod from 'async';
-import { TTY, ReadStream, WriteStream, isatty, decodeInput, InputType, MouseAction, MouseButton } from 'tty';
-import { Term, KeyName } from 'term';
+import { CSI, TTY, ReadStream, WriteStream, isatty, decodeInput, InputType, MouseAction, MouseButton } from 'tty';
+import { Term, KeyName, ColorIndex } from 'term';
 
 const eq = prelude.eq, throws = prelude.throws;
 
@@ -124,12 +124,21 @@ same(term.getCursorPos(), { x: 0, y: 2 });
 term.setCursorPos({ x: 2, y: 1 });
 v.readOutput();
 
-term.setTextColor(16384);
-term.setBackgroundColor(4096);
+term.setTextColor('red');
+term.setBackgroundColor('brown');
 term.write('x');
-eq(v.readOutput(), '\x1b[38;6;14;48;6;12mx\x1b[0m', 'colours apply to this write only');
-same([term.getTextColor(), term.getBackgroundColor()], [16384, 4096]);
-throws(() => term.setTextColor(3));
+eq(v.readOutput(), '\x1b[38;5;1;48;5;3mx\x1b[0m', 'colors apply to this write only');
+eq(term.getTextColor(), 'red');
+eq(term.getBackgroundColor(), 'brown');
+throws(() => term.setTextColor(3 as any), 'ERR_INVALID_ARG_VALUE');
+throws(() => term.setTextColor('rot' as any), 'ERR_INVALID_ARG_VALUE');
+term.setTextColor('white');
+term.setBackgroundColor('black');
+eq(ColorIndex.grey, ColorIndex.gray, 'British spellings');
+eq(new Set(Object.values(ColorIndex)).size, 16, 'one index per color');
+eq(Object.isFrozen(ColorIndex), true);
+eq(CSI.color(15, 0), '\x1b[38;5;15;48;5;0m');
+throws(() => CSI.color(16), 'ERR_OUT_OF_RANGE');
 
 term.setCursorPos({ x: 0, y: 2 });
 term.blit('hi', '0e', 'ff');

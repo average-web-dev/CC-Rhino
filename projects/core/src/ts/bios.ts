@@ -98,9 +98,6 @@ require('/rom/lib/internal/globals');
   // ── GRUB-style boot menu ───────────────────────────────────────────────────
 
   const TIMEOUT_SECS  = 5;
-  const COL_WHITE     = 1;
-  const COL_BLACK     = 32768;
-  const COL_GREY      = 256;
 
   function drawMenu(entries: BootEntry[], selected: number, remaining: number): void {
       const { width, height } = term.getSize();
@@ -109,19 +106,19 @@ require('/rom/lib/internal/globals');
       term.clear();
 
       term.setCursorPos({ x: 0, y: 0 });
-      if (canColor) term.setTextColor(COL_WHITE);
+      if (canColor) term.setTextColor('white');
       term.write("  CC: Rhino  Boot Selection");
 
       term.setCursorPos({ x: 0, y: 1 });
-      if (canColor) term.setTextColor(COL_GREY);
+      if (canColor) term.setTextColor('lightGray');
       term.write("─".repeat(width));
 
       for (let i = 0; i < entries.length; i++) {
           let isSelected = i === selected;
           term.setCursorPos({ x: 0, y: 3 + i });
           if (canColor) {
-              term.setBackgroundColor(isSelected ? COL_WHITE : COL_BLACK);
-              term.setTextColor(isSelected ? COL_BLACK : COL_WHITE);
+              term.setBackgroundColor(isSelected ? 'white' : 'black');
+              term.setTextColor(isSelected ? 'black' : 'white');
           }
           let prefix   = isSelected ? " > " : "   ";
           let maxDetail = 22;
@@ -131,8 +128,8 @@ require('/rom/lib/internal/globals');
       }
 
       if (canColor) {
-          term.setBackgroundColor(COL_BLACK);
-          term.setTextColor(COL_GREY);
+          term.setBackgroundColor('black');
+          term.setTextColor('lightGray');
       }
 
       term.setCursorPos({ x: 0, y: height - 2 });

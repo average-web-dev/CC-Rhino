@@ -26,7 +26,7 @@ import loop from 'internal/loop';
 import pty from 'internal/pty';
 import { decodeKeys } from '/rom/lib/internal/keys';
 import { ERR_INVALID_ARG_TYPE } from '/rom/lib/internal/errors';
-import { validateFunction } from '/rom/lib/internal/validators';
+import { validateFunction, validateInteger } from '/rom/lib/internal/validators';
 
 /**
  * The other direction of CSI: decodeInput(data) splits what a TTY delivers into keys (Node key objects) and mouse
@@ -52,15 +52,6 @@ function later(callback: unknown): void {
     if (typeof callback === 'function') events.queueMicrotask(() => (callback as (err: Error | null) => void)(null));
 }
 
-/** A CC colour (a power of two, 1 … 32768) as its blit index (0 = white … 15 = black). */
-export function colourIndex(colour: number, argument = 'colour'): number {
-    let index = typeof colour === 'number' && Number.isInteger(colour) && colour > 0 ? 31 - Math.clz32(colour) : -1;
-    if (index < 0 || index > 15 || colour !== 2 ** index) {
-        throw new RangeError(`${argument} must be a CC colour (a power of two from 1 to 32768), got ${String(colour)}`);
-    }
-    return index;
-}
-
 /**
  * The escape sequences a TTY understands, so programs (and the ROM) need not spell them out: cursor movement as
  * readline and Node's tty.WriteStream write it, plus showing the cursor, clearing, colours, blit and mouse reports.
@@ -76,10 +67,17 @@ export const CSI = {
     home: `${ESC}[H`,
     /** Back to the default colours. */
     reset: `${ESC}[0m`,
-    /** Select CC colours (powers of two, as `colors`): text, and optionally background. */
+    /**
+     * Select colours by their index (0–15, as on a Linux terminal: 0 black … 7 white, 8–15 bright): text, and
+     * optionally background.
+     */
     color(fg: number, bg?: number): string {
-        let out = `${ESC}[38;6;${colourIndex(fg, 'fg')}`;
-        if (bg !== undefined) out += `;48;6;${colourIndex(bg, 'bg')}`;
+        validateInteger(fg, 'fg', 0, 15);
+        let out = `${ESC}[38;5;${fg}`;
+        if (bg !== undefined) {
+            validateInteger(bg, 'bg', 0, 15);
+            out += `;48;5;${bg}`;
+        }
         return out + 'm';
     },
     /** Scroll the contents up by `n` rows (down if negative). */

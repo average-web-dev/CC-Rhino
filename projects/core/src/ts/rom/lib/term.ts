@@ -7,12 +7,13 @@
 //   import { Term } from 'term';
 //   const term = new Term();                   // the program's own: process.stdout / process.stdin
 //   const mon = new Term(TTY.from(monitor.getTty()));
-//   term.setTextColor(16384); term.write('red'); term.setCursorPos({ x: 0, y: 2 }); term.blit('ab', '0e', 'ff');
+//   term.setTextColor('red'); term.write('red'); term.setCursorPos({ x: 0, y: 2 }); term.blit('ab', '0e', 'ff');
 //
 // A Term only writes ANSI escape sequences into its TTY (and reads from it): whatever shows the TTY (a console of the
 // screen, a monitor) draws them, and the same program works on a virtual TTY. So:
-// - Colours set with setTextColor / setBackgroundColor apply to what is written through this Term only: each write
-//   selects its colours and resets them afterwards (other output, e.g. console.log, keeps the default colours).
+// - Colors are named ('red', 'lightGray', … — the keys of ColorIndex, which maps them to the TTY's color indices). The
+//   colors set with setTextColor / setBackgroundColor apply to what is written through this Term only: each write
+//   selects its colors and resets them afterwards (other output, e.g. console.log, keeps the default colors).
 // - The Term keeps track of its cursor itself (it knows what it wrote); others writing to the same TTY move the real
 //   cursor without it noticing, so setCursorPos before drawing is the safe pattern.
 // - write() cuts text off at the Term's width (the TTY's, unless set with setSize), so drawing never scrolls; print()
@@ -20,16 +21,27 @@
 // - Input reads the TTY's stdin: readInput returns keys and mouse events (after CSI.mouse(true)), readKey / readChar /
 //   readLine skip mouse reports. The mouse is also available as events (mouse_click, monitor_touch).
 
-import { TTY, CSI, colourIndex } from '/rom/lib/tty';
+import { TTY, CSI } from '/rom/lib/tty';
 import { decodeInput, stripMouse, KeyName, InputType, MouseAction, MouseButton } from '/rom/lib/internal/keys';
 import { ERR_INVALID_ARG_VALUE } from '/rom/lib/internal/errors';
-import { validateNumber, validateString } from '/rom/lib/internal/validators';
+import { validateNumber, validateOneOf, validateString } from '/rom/lib/internal/validators';
 
 /** The names of the keys readKey() returns (`key.name`), and the constants for readInput()'s results. */
 export { KeyName, InputType, MouseAction, MouseButton };
 
-const WHITE = 1;
-const BLACK = 32768;
+/**
+ * The 16 colors by name, with their index on the TTY (as CSI.color takes it). The TTY shows each index as one CC color;
+ * changing what an index shows (the palette) is #54.
+ */
+export const ColorIndex = Object.freeze({
+    black: 0, red: 1, green: 2, brown: 3, blue: 4, purple: 5, cyan: 6, lightGray: 7, lightGrey: 7,
+    gray: 8, grey: 8, pink: 9, lime: 10, yellow: 11, lightBlue: 12, magenta: 13, orange: 14, white: 15,
+} as const);
+
+/** A color's name (a key of ColorIndex). */
+export type ColorName = keyof typeof ColorIndex;
+
+const COLOR_NAMES = Object.keys(ColorIndex) as ColorName[];
 
 /** A position on a terminal, starting at 0. */
 export interface CursorPosition { x: number; y: number; }
@@ -43,8 +55,8 @@ export class Term {
     #x = 0;
     #y = 0;
     #size: TermSize | null = null;
-    #fg = WHITE;
-    #bg = BLACK;
+    #fg: ColorName = 'white';
+    #bg: ColorName = 'black';
     #blink = false;
     /** Input read from the TTY but not consumed yet. */
     #text = '';
@@ -92,26 +104,28 @@ export class Term {
         this.#out(this.#blink ? CSI.showCursor : CSI.hideCursor);
     }
 
-    // ── Colours ──────────────────────────────────────────────────────────────────
+    // ── Colors ───────────────────────────────────────────────────────────────────
 
-    getTextColor(): number { return this.#fg; }
+    getTextColor(): ColorName { return this.#fg; }
 
-    setTextColor(colour: number): void {
-        colourIndex(colour);
-        this.#fg = colour;
+    setTextColor(color: ColorName): void {
+        validateOneOf(color, 'color', COLOR_NAMES);
+        this.#fg = color;
     }
 
-    getBackgroundColor(): number { return this.#bg; }
+    getBackgroundColor(): ColorName { return this.#bg; }
 
-    setBackgroundColor(colour: number): void {
-        colourIndex(colour);
-        this.#bg = colour;
+    setBackgroundColor(color: ColorName): void {
+        validateOneOf(color, 'color', COLOR_NAMES);
+        this.#bg = color;
     }
 
-    /** The SGR sequence selecting this Term's colours ('' for the defaults). */
-    #colours(): string {
-        if (this.#fg === WHITE && this.#bg === BLACK) return '';
-        return CSI.color(this.#fg, this.#bg);
+    /** The SGR sequence selecting this Term's colors ('' for the defaults). */
+    #colors(): string {
+        let fg = ColorIndex[this.#fg];
+        let bg = ColorIndex[this.#bg];
+        if (fg === ColorIndex.white && bg === ColorIndex.black) return '';
+        return CSI.color(fg, bg);
     }
 
     // ── Drawing ──────────────────────────────────────────────────────────────────
@@ -128,7 +142,7 @@ export class Term {
     }
 
     /**
-     * Write text at the cursor in this Term's colours, cut off at the right edge (it never wraps, so drawing on the last
+     * Write text at the cursor in this Term's colors, cut off at the right edge (it never wraps, so drawing on the last
      * row does not scroll); `\n` starts a new row. The cursor moves behind the text, also past the edge.
      */
     write(text: string): void {
@@ -143,8 +157,8 @@ export class Term {
     #emit(text: string, wrap: boolean): void {
         let width = this.getSize().width;
         let out: string[] = [];
-        let colours = this.#colours();
-        if (colours !== '') out.push(colours);
+        let colors = this.#colors();
+        if (colors !== '') out.push(colors);
         let run = '';
         let flush = () => { if (run !== '') { out.push(run); run = ''; } };
         for (let i = 0; i < text.length; i++) {
@@ -164,43 +178,43 @@ export class Term {
             this.#x++;
         }
         flush();
-        if (colours !== '') out.push(CSI.reset);
+        if (colors !== '') out.push(CSI.reset);
         this.#out(out.join(''));
     }
 
     /**
-     * Write `text` at the cursor with one colour per character: `textColour` and `backgroundColour` are strings of
+     * Write `text` at the cursor with one color per character: `textColor` and `backgroundColor` are strings of
      * blit digits (`0` white … `f` black) as long as `text`. No wrapping; the cursor moves behind the text.
      */
-    blit(text: string, textColour: string, backgroundColour: string): void {
+    blit(text: string, textColor: string, backgroundColor: string): void {
         validateString(text, 'text');
-        for (let [name, colours] of [['textColour', textColour], ['backgroundColour', backgroundColour]] as const) {
-            validateString(colours, name);
-            if (colours.length !== text.length) {
-                throw new ERR_INVALID_ARG_VALUE(name, colours, 'must be as long as the text');
+        for (let [name, colors] of [['textColor', textColor], ['backgroundColor', backgroundColor]] as const) {
+            validateString(colors, name);
+            if (colors.length !== text.length) {
+                throw new ERR_INVALID_ARG_VALUE(name, colors, 'must be as long as the text');
             }
-            if (!/^[0-9a-fA-F]*$/.test(colours)) {
-                throw new ERR_INVALID_ARG_VALUE(name, colours, 'must be blit digits (0-9, a-f)');
+            if (!/^[0-9a-fA-F]*$/.test(colors)) {
+                throw new ERR_INVALID_ARG_VALUE(name, colors, 'must be blit digits (0-9, a-f)');
             }
         }
-        this.#out(CSI.blit(text, textColour, backgroundColour));
+        this.#out(CSI.blit(text, textColor, backgroundColor));
         this.#x += text.length;
     }
 
-    /** Clear the whole TTY in the background colour (the cursor stays). */
+    /** Clear the whole TTY in the background color (the cursor stays). */
     clear(): void {
         this.#painted(CSI.clearScreen);
     }
 
-    /** Clear the cursor's row in the background colour (the cursor stays). */
+    /** Clear the cursor's row in the background color (the cursor stays). */
     clearLine(): void {
         this.#painted(CSI.clearLine(0));
     }
 
-    /** Write a sequence in this Term's colours (clearing uses the background colour). */
+    /** Write a sequence in this Term's colors (clearing uses the background color). */
     #painted(sequence: string): void {
-        let colours = this.#colours();
-        this.#out(colours === '' ? sequence : colours + sequence + CSI.reset);
+        let colors = this.#colors();
+        this.#out(colors === '' ? sequence : colors + sequence + CSI.reset);
     }
 
     /** Scroll the contents up by `n` rows (down if negative). */

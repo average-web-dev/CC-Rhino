@@ -35,12 +35,17 @@ import java.nio.charset.StandardCharsets;
 public final class TerminalEmulator {
     /** CC colour indices (blit digits): white = 0 … black = 15. */
     static final int WHITE = 0, ORANGE = 1, MAGENTA = 2, LIGHT_BLUE = 3, YELLOW = 4, LIME = 5, PINK = 6, GRAY = 7,
-        LIGHT_GRAY = 8, CYAN = 9, PURPLE = 10, BLUE = 11, GREEN = 13, RED = 14, BLACK = 15;
+        LIGHT_GRAY = 8, CYAN = 9, PURPLE = 10, BLUE = 11, BROWN = 12, GREEN = 13, RED = 14, BLACK = 15;
 
-    /** ANSI colour index (0–7 normal, 8–15 bright) → CC colour. */
-    private static final int[] ANSI_COLOURS = {
-        BLACK, RED, GREEN, ORANGE, BLUE, PURPLE, CYAN, LIGHT_GRAY,
-        GRAY, PINK, LIME, YELLOW, LIGHT_BLUE, MAGENTA, CYAN, WHITE,
+    /**
+     * ANSI colour index (0–7 normal, 8–15 bright) → CC colour (blit digit), one CC colour per index: the assignment
+     * closest to the Linux console's colours (VGA) by CIEDE2000 over all sixteen. So yellow is brown (as on VGA),
+     * bright red is pink and bright cyan is orange, which CC has no closer colour for (until the palette can be
+     * changed, #54). The ANSI index is the CC colour's palette index: blit digit d = ANSI index 15 - d.
+     */
+    static final int[] ANSI_COLOURS = {
+        BLACK, RED, GREEN, BROWN, BLUE, PURPLE, CYAN, LIGHT_GRAY,
+        GRAY, PINK, LIME, YELLOW, LIGHT_BLUE, MAGENTA, ORANGE, WHITE,
     };
 
     private static final int DEFAULT_FG = WHITE;

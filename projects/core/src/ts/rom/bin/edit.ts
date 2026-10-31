@@ -19,9 +19,6 @@ import { Term, KeyName } from '/rom/lib/term';
 /** Shortcuts: the letter pressed with Ctrl (Node key names of letters are the lower-case letter). */
 const SHORTCUT_SAVE = 's', SHORTCUT_QUIT = 'q';
 
-// CC colour values (powers of two).
-const WHITE = 1, GREY = 128, LIGHT_GREY = 256, BLACK = 32768;
-
 /** Normalise `p` to an absolute path, resolving against `cwd` and collapsing `.`/`..`. */
 function resolve(p: string, cwd: string): string {
     if (!p.startsWith('/')) p = (cwd === '/' ? '' : cwd) + '/' + p;
@@ -94,8 +91,8 @@ export function main(args: string[], cwd: string): void {
 
     function drawBar(width: number, height: number): void {
         term.setCursorPos({ x: 0, y: height - 1 });
-        term.setBackgroundColor(canColor ? LIGHT_GREY : BLACK);
-        term.setTextColor(canColor ? BLACK : WHITE);
+        term.setBackgroundColor(canColor ? 'lightGray' : 'black');
+        term.setTextColor(canColor ? 'black' : 'white');
         if (menuOpen) {
             let s = ' ';
             for (let i = 0; i < MENU.length; i++) {
@@ -110,15 +107,15 @@ export function main(args: string[], cwd: string): void {
             let room = Math.max(0, width - right.length - 1);
             term.write(pad(text, room) + ' ' + right);
         }
-        term.setBackgroundColor(BLACK);
-        term.setTextColor(WHITE);
+        term.setBackgroundColor('black');
+        term.setTextColor('white');
     }
 
     function draw(): void {
         const { width, height } = term.getSize();
         const editHeight = height - 1;
-        term.setBackgroundColor(BLACK);
-        term.setTextColor(WHITE);
+        term.setBackgroundColor('black');
+        term.setTextColor('white');
         for (let row = 0; row < editHeight; row++) {
             term.setCursorPos({ x: 0, y: row });
             let line = lines[scrollY + row] ?? '';
@@ -283,8 +280,8 @@ export function main(args: string[], cwd: string): void {
             onKey(key);
         }
     } finally {
-        term.setBackgroundColor(BLACK);
-        term.setTextColor(WHITE);
+        term.setBackgroundColor('black');
+        term.setTextColor('white');
         term.clear();
         term.setCursorPos({ x: 0, y: 0 });
         term.setCursorBlink(true);

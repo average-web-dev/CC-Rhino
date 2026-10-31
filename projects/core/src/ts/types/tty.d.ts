@@ -72,7 +72,10 @@ interface TtyEscapes {
     readonly home: string;
     /** Back to the default colours. */
     readonly reset: string;
-    /** Select CC colours (powers of two, as `colors`): text, and optionally background. */
+    /**
+     * Select colours by their index (0–15, as on a Linux terminal: 0 black … 7 white, 8–15 bright): text, and
+     * optionally background.
+     */
     color(fg: number, bg?: number): string;
     /** Scroll the contents up by `n` rows (down if negative). */
     scroll(n: number): string;
@@ -135,8 +138,6 @@ interface TtyModule {
     InputType: TtyInputTypes;
     MouseAction: TtyMouseActions;
     MouseButton: TtyMouseButtons;
-    /** A CC colour (a power of two, 1 … 32768) as its blit index (0 = white … 15 = black); RangeError otherwise. */
-    colourIndex(colour: number, argument?: string): number;
     /** Whether `fd` is a TTY: process.stdin/stdout/stderr (0, 1, 2) always are. */
     isatty(fd: number): boolean;
 }

@@ -5,6 +5,7 @@
 package dan200.computercraft.core.tty;
 
 import dan200.computercraft.core.terminal.Terminal;
+import java.util.HashSet;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -65,9 +66,19 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    void ansi_colours_name_every_cc_colour() {
+        var seen = new HashSet<Integer>();
+        for (var colour : TerminalEmulator.ANSI_COLOURS) seen.add(colour);
+        assertEquals(16, seen.size(), "one CC colour per ANSI index");
+
+        emulator.writeOut("\u001b[33ma\u001b[96mb\u001b[38;5;3mc\u001b[38;5;14md");
+        assertEquals("c1c1", fg(0).substring(0, 4), "yellow is brown (VGA), bright cyan is orange");
+    }
+
+    @Test
     void cc_colour_extension() {
         emulator.writeOut("\u001b[38;6;12;48;6;4ma\u001b[38;6;16mb");
-        assertEquals("cc", fg(0).substring(0, 2), "brown, which ANSI cannot name; 16 is ignored");
+        assertEquals("cc", fg(0).substring(0, 2), "brown; 16 is ignored");
         assertEquals("44", bg(0).substring(0, 2), "yellow background");
     }
 

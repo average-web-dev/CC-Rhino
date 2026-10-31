@@ -8,9 +8,6 @@
 /** One of the six sides of a computer. */
 type Side = "top" | "bottom" | "left" | "right" | "front" | "back";
 
-/** A CC colour, encoded as a single bit (1, 2, 4, … 0x8000) like the `colors` API. */
-type Color = number;
-
 /** Binary payloads are plain byte arrays. Aliased as `Buffer` for readability. */
 type Buffer = Uint8Array;
 
