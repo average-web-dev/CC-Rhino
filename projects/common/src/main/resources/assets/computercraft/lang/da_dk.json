@@ -24,7 +24,6 @@
     "gui.computercraft.tooltip.copy": "Kopier til udklipsholder",
     "gui.computercraft.tooltip.disk_id": "Disk-ID: %s",
     "gui.computercraft.tooltip.terminate": "Stop den igangværende kode",
-    "gui.computercraft.tooltip.terminate.key": "Hold Ctrl+T nede",
     "gui.computercraft.tooltip.turn_off": "Sluk denne computer",
     "gui.computercraft.tooltip.turn_off.key": "Hold Ctrl+S nede",
     "gui.computercraft.tooltip.turn_on": "Tænd denne computer",

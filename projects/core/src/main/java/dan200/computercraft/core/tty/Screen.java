@@ -34,6 +34,7 @@ public final class Screen {
     private int visible;
     private boolean active;
     private @Nullable IntConsumer onShow;
+    private @Nullable IntConsumer onInterrupt;
 
     /** One virtual console: a TTY and the emulator rendering it into an off-screen buffer. */
     public final class Console {
@@ -48,6 +49,7 @@ public final class Screen {
             buffer = new Terminal(display.getWidth(), display.getHeight(), display.isColour());
             emulator = new TerminalEmulator(buffer);
             tty.setColumnSource(buffer::getCursorX);
+            tty.setOnInterrupt(() -> interrupted(tty.id()));
             tty.attach(text -> {
                 emulator.writeOut(text);
                 rendered(this);
@@ -115,9 +117,22 @@ public final class Screen {
         return consoles.get(visible);
     }
 
-    /** The TTY Ctrl+T goes to: the visible console's, or 0 (every program) while the screen is inactive. */
+    /** The TTY a terminate request goes to: the visible console's, or 0 (every program) while the screen is inactive. */
     public synchronized int terminateTarget() {
         return active ? consoles.get(visible).tty().id() : 0;
+    }
+
+    /** Called with the console's TTY id when Ctrl+C is typed on a console in cooked mode. */
+    public synchronized void setOnInterrupt(@Nullable IntConsumer onInterrupt) {
+        this.onInterrupt = onInterrupt;
+    }
+
+    private void interrupted(int tty) {
+        IntConsumer callback;
+        synchronized (this) {
+            callback = onInterrupt;
+        }
+        if (callback != null) callback.accept(tty);
     }
 
     /** Called (on the thread that switched) when another console becomes visible. */

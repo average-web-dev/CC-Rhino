@@ -31,13 +31,12 @@ import java.util.List;
 public class InputState {
     private static final Logger LOG = LoggerFactory.getLogger(InputState.class);
 
-    private static final float TERMINATE_TIME = 0.5f;
+    private static final float HOLD_TIME = 0.5f;
     private static final float KEY_SUPPRESS_DELAY = 0.2f;
 
     private final Computer computer;
     private final UserComputerInput input;
 
-    private float terminateTimer = -1;
     private float rebootTimer = -1;
     private float shutdownTimer = -1;
 
@@ -68,9 +67,6 @@ public class InputState {
 
         if ((modifiers & GLFW.GLFW_MOD_CONTROL) != 0) {
             switch (key) {
-                case GLFW.GLFW_KEY_T -> {
-                    if (terminateTimer < 0) terminateTimer = 0;
-                }
                 case GLFW.GLFW_KEY_S -> {
                     if (shutdownTimer < 0) shutdownTimer = 0;
                 }
@@ -80,7 +76,7 @@ public class InputState {
             }
         }
 
-        if (key >= 0 && terminateTimer < KEY_SUPPRESS_DELAY && rebootTimer < KEY_SUPPRESS_DELAY && shutdownTimer < KEY_SUPPRESS_DELAY) {
+        if (key >= 0 && rebootTimer < KEY_SUPPRESS_DELAY && shutdownTimer < KEY_SUPPRESS_DELAY) {
             input.keyDown(key);
         }
     }
@@ -89,11 +85,10 @@ public class InputState {
         input.keyUp(key);
 
         switch (key) {
-            case GLFW.GLFW_KEY_T -> terminateTimer = -1;
             case GLFW.GLFW_KEY_R -> rebootTimer = -1;
             case GLFW.GLFW_KEY_S -> shutdownTimer = -1;
             case GLFW.GLFW_KEY_LEFT_CONTROL, GLFW.GLFW_KEY_RIGHT_CONTROL ->
-                terminateTimer = rebootTimer = shutdownTimer = -1;
+                rebootTimer = shutdownTimer = -1;
         }
     }
 
@@ -135,15 +130,11 @@ public class InputState {
     }
 
     public void update() {
-        if (terminateTimer >= 0 && terminateTimer < TERMINATE_TIME && (terminateTimer += 0.05f) > TERMINATE_TIME) {
-            computer.terminate();
-        }
-
-        if (shutdownTimer >= 0 && shutdownTimer < TERMINATE_TIME && (shutdownTimer += 0.05f) > TERMINATE_TIME) {
+        if (shutdownTimer >= 0 && shutdownTimer < HOLD_TIME && (shutdownTimer += 0.05f) > HOLD_TIME) {
             computer.shutdown();
         }
 
-        if (rebootTimer >= 0 && rebootTimer < TERMINATE_TIME && (rebootTimer += 0.05f) > TERMINATE_TIME) {
+        if (rebootTimer >= 0 && rebootTimer < HOLD_TIME && (rebootTimer += 0.05f) > HOLD_TIME) {
             if (computer.isOn()) {
                 computer.reboot();
             } else {

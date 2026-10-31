@@ -181,7 +181,6 @@
     "gui.computercraft.tooltip.copy": "Скопійовано в Буфер обміну",
     "gui.computercraft.tooltip.disk_id": "Ідентифікатор диска: %s",
     "gui.computercraft.tooltip.terminate": "Припинити поточний запущений код",
-    "gui.computercraft.tooltip.terminate.key": "Утримуй Ctrl+T",
     "gui.computercraft.tooltip.turn_off": "Вимкнути цей комп'ютер",
     "gui.computercraft.tooltip.turn_off.key": "Утримуй Ctrl+S",
     "gui.computercraft.tooltip.turn_on": "Увімкнути цей комп'ютер",

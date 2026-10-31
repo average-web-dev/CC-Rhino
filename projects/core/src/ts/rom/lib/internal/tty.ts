@@ -18,7 +18,7 @@
 // child thread, or stdin it reads (each stdin listener holds a keep-alive handle while stdin flows). If main() returns
 // a promise (`async main`, #44), its rejection is the program's error. When nothing is left, or on process.exit(), the
 // job's thread is stopped: every events.on listener, unref'd timer, promise reaction or thread it left behind is
-// discarded. Ctrl+T makes the call it is blocked in throw `Error("Terminated")`.
+// discarded. Ctrl+C makes the call it is blocked in throw `Error("Terminated")`.
 
 import events from 'events';
 import loop from 'internal/loop';
@@ -44,7 +44,7 @@ export class Job {
     exitRequest = 0;
     /** Set when the promise returned by main() rejected. */
     failure: { error: unknown } | null = null;
-    /** A shell: Ctrl+T while it waits for input does not end it (it reaches the programs it runs instead). */
+    /** A shell: Ctrl+C while it waits for input does not end it (it reaches the programs it runs instead). */
     shell = false;
 
     constructor(id: number, tty: TTY, argv: string[], cwd: string) {
@@ -185,7 +185,7 @@ export function formatError(fallbackFile: string, e: any): string {
 export interface JobResult {
     /** The exit code (process.exit, process.exitCode; 1 if it failed). */
     code: number;
-    /** The error the program failed with (including `Error("Terminated")` for Ctrl+T or kill()). */
+    /** The error the program failed with (including `Error("Terminated")` for Ctrl+C or kill()). */
     error?: unknown;
 }
 
@@ -211,7 +211,7 @@ export interface RunOptions {
 
 /**
  * Run the program at `resolved` (a path require.resolve returned) as `job`, blocking the calling thread until it ends.
- * The program runs in a new thread whose context is the job (so Ctrl+T on the job's TTY reaches it).
+ * The program runs in a new thread whose context is the job (so Ctrl+C on the job's TTY reaches it).
  */
 export function run(job: Job, resolved: string, args: string[], options: RunOptions = {}): JobResult {
     let tty = job.tty;

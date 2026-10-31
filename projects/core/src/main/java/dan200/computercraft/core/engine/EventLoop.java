@@ -35,7 +35,7 @@ import java.util.*;
  * All JS runs as a {@link Strand} of some {@link JSThread}, and everything parked or queued here remembers its strand
  * (or owning thread). JS is only ever entered from this class (via {@link #run}), never from inside another JS call:
  * work created while JS runs — starting a thread, resuming a {@code waitFor*} caller — goes through the run queue.
- * See {@link JSThread} for how stopping a thread discards its work and {@link #terminate} for {@code Ctrl+T}.
+ * See {@link JSThread} for how stopping a thread discards its work and {@link #terminate} for {@code Ctrl+C}.
  *
  * <h2>Promises</h2>
  * A parked operation is woken through its {@link Waiter}: a blocking call's continuation is resumed, while an operation
@@ -199,7 +199,7 @@ public final class EventLoop {
     }
 
     /**
-     * Deliver {@code terminate} (Ctrl+T): every foreground thread (see {@link JSThread#isForeground()}) blocked in a
+     * Deliver {@code terminate} (Ctrl+C): every foreground thread (see {@link JSThread#isForeground()}) blocked in a
      * sleep, I/O wait, yield or {@code async.unwrap} is resumed so that the blocking call throws
      * {@code Error("Terminated")}. A thread that does not catch it fails, which fails its {@code waitFor*} group in
      * turn, and so on up to the caller — usually the shell. Threads blocked in a {@code waitFor*} are reached through
@@ -739,7 +739,7 @@ public final class EventLoop {
      *   <li>A listener owned by the calling thread or one of its ancestors is returned as is: {@code emit} calls it
      *   directly, so it runs as part of the caller's strand and may block, blocking the caller. That is the caller's
      *   own lineage: the ancestor is waiting for the caller (or runs it in the background) and is killed along with
-     *   it, or before it. Work the listener starts belongs to the caller; Ctrl+T or stopping the caller reaches a
+     *   it, or before it. Work the listener starts belongs to the caller; Ctrl+C or stopping the caller reaches a
      *   blocked listener like any blocking call of the caller, and the error propagates out of {@code emit}.</li>
      *   <li>A listener of an unrelated thread is returned wrapped in a {@link ForeignListener}, which runs it as its
      *   owner, from Java: like normal dispatch, it cannot block (it gets the usual "cannot be used inside callbacks

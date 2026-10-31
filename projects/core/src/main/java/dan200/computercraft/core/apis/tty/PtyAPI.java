@@ -8,6 +8,7 @@ import dan200.computercraft.api.scripting.IComputerAPI;
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.apis.IAPIEnvironment;
+import dan200.computercraft.core.apis.events.CoreEvents;
 import dan200.computercraft.core.tty.Tty;
 
 import java.util.Optional;
@@ -48,6 +49,8 @@ public class PtyAPI implements IComputerAPI {
         var width = columns.orElse(DEFAULT_COLUMNS);
         var height = rows.orElse(DEFAULT_ROWS);
         if (width < 1 || height < 1) throw new ScriptException("Size must be positive");
-        return new TtyHandle(environment::queueEvent, new Tty(width, height), true);
+        var tty = new Tty(width, height);
+        tty.setOnInterrupt(() -> environment.queueEvent(new CoreEvents.Terminate(tty.id())));
+        return new TtyHandle(environment::queueEvent, tty, true);
     }
 }

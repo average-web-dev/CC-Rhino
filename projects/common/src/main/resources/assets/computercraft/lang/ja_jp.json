@@ -181,7 +181,6 @@
     "gui.computercraft.tooltip.copy": "クリップボードにコピー",
     "gui.computercraft.tooltip.disk_id": "ディスクID: %s",
     "gui.computercraft.tooltip.terminate": "現在実行中のコードを停止する",
-    "gui.computercraft.tooltip.terminate.key": "Ctrl+T 長押し",
     "gui.computercraft.tooltip.turn_off": "このコンピューターをオフにする",
     "gui.computercraft.tooltip.turn_off.key": "Ctrl+S 長押し",
     "gui.computercraft.tooltip.turn_on": "このコンピューターをオンにする",

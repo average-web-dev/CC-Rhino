@@ -52,7 +52,7 @@ final class JSThread {
      * inherited by every descendant; see {@link #context()}.
      */
     @Nullable Object context;
-    /** The TTY the program in this thread runs on (set with the context; 0 = none), for routing Ctrl+T. */
+    /** The TTY the program in this thread runs on (set with the context; 0 = none), for routing Ctrl+C. */
     int terminal;
 
     JSThread(int id, @Nullable JSThread parent, @Nullable JSTaskGroup group, int index) {

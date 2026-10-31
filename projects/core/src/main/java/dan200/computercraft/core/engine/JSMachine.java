@@ -257,7 +257,7 @@ public class JSMachine implements IMachine {
             var rawArgs = arguments != null ? arguments : new Object[0];
             var fullArgs = buildFullArgs(eventName, rawArgs);
 
-            // Ctrl+T: make the foreground program's blocked calls throw "Terminated" (see EventLoop.terminate).
+            // Ctrl+C: make the foreground program's blocked calls throw "Terminated" (see EventLoop.terminate).
             if (TERMINATE_EVENT.equals(eventName)) {
                 var tty = rawArgs.length >= 1 && rawArgs[0] instanceof Number n ? n.intValue() : 0;
                 eventLoop.terminate(cx, scope, tty);

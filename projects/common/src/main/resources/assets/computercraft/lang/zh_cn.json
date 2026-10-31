@@ -181,7 +181,6 @@
     "gui.computercraft.tooltip.copy": "复制到剪贴板",
     "gui.computercraft.tooltip.disk_id": "软盘ID：%s",
     "gui.computercraft.tooltip.terminate": "停止当前运行的代码",
-    "gui.computercraft.tooltip.terminate.key": "按住 Ctrl+T",
     "gui.computercraft.tooltip.turn_off": "关闭这台计算机",
     "gui.computercraft.tooltip.turn_off.key": "按住 Ctrl+S",
     "gui.computercraft.tooltip.turn_on": "打开这台计算机",

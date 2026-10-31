@@ -119,7 +119,7 @@ interface InternalLoopModule {
     context(): unknown;
     /**
      * Attach a value to the calling thread (undefined: none, so the ancestors' context applies again), and the id of the
-     * TTY the program runs on (Ctrl+T on that TTY reaches it). The thread becomes where the program's foreground starts.
+     * TTY the program runs on (Ctrl+C on that TTY reaches it). The thread becomes where the program's foreground starts.
      */
     setContext(value: unknown, tty?: number): void;
 }

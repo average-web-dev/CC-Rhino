@@ -7,6 +7,9 @@ package dan200.computercraft.core.tty;
 import dan200.computercraft.core.terminal.Terminal;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static dan200.computercraft.core.tty.InputEncoder.*;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -63,6 +66,27 @@ class ScreenTest {
 
         screen.paste("p\n");
         assertEquals("p\n", readAll(screen.consoles().get(2).tty().stdin()));
+    }
+
+    @Test
+    void ctrl_c_interrupts_the_visible_console() {
+        var interrupted = new ArrayList<Integer>();
+        screen.setOnInterrupt(interrupted::add);
+        screen.activate();
+        screen.show(1);
+        screen.keyDown(KEY_LEFT_CONTROL);
+        screen.keyDown(KEY_A + 2); // Ctrl+C
+        screen.keyUp(KEY_A + 2);
+        screen.keyUp(KEY_LEFT_CONTROL);
+        assertEquals(List.of(screen.consoles().get(1).tty().id()), interrupted);
+
+        // In raw mode it is just a key.
+        screen.consoles().get(1).tty().setRaw(true);
+        screen.keyDown(KEY_LEFT_CONTROL);
+        screen.keyDown(KEY_A + 2);
+        screen.keyUp(KEY_LEFT_CONTROL);
+        assertEquals(1, interrupted.size());
+        assertEquals("\u0003", readAll(screen.consoles().get(1).tty().stdin()));
     }
 
     @Test

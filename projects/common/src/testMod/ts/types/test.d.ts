@@ -15,7 +15,7 @@ interface TestGlobal {
     fail(message: unknown): never;
     /** Write `message` to the server log. */
     log(message: unknown): void;
-    /** Queue an event on this computer, as if it came from outside (for instance `terminate` from Ctrl+T). */
+    /** Queue an event on this computer, as if it came from outside (for instance `terminate` from Ctrl+C). */
     queueEvent(event: string): void;
     /**
      * Run a turtle command whose `execute()` throws `message`, as a buggy addon command might. The call throws instead

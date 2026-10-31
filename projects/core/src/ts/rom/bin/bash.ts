@@ -62,7 +62,7 @@ export function main(args: string[]): void {
         process.exitCode = lastExitCode;
         return;
     }
-    // A shell outlives Ctrl+T at its prompt; the keys reach the programs it runs instead.
+    // A shell outlives Ctrl+C at its prompt; the keys reach the programs it runs instead.
     tty.current().shell = true;
     start();
 }
@@ -74,7 +74,7 @@ export function main(args: string[]): void {
  * own (see /rom/lib/internal/tty): its own thread, `process.argv` = ['bash', path, ...args], a working directory of
  * its own (it starts in the shell's), a fresh stdin. It keeps running while it has ref'd pending work, as a Node
  * process would (#46); when it ends, everything it left behind is discarded. A program that fails is reported on the
- * TTY (Ctrl+T: "Terminated"). Returns false only if the program itself was not found.
+ * TTY (Ctrl+C: "Terminated"). Returns false only if the program itself was not found.
  */
 export function run(path: string, ...args: string[]): boolean {
     let result = spawnSync(path, args, { stdio: 'inherit' });

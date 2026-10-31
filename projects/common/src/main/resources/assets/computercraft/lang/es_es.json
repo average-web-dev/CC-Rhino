@@ -179,7 +179,6 @@
     "gui.computercraft.tooltip.copy": "Copiar al portapapeles",
     "gui.computercraft.tooltip.disk_id": "ID del disquete: %s",
     "gui.computercraft.tooltip.terminate": "Detener el código en ejecución",
-    "gui.computercraft.tooltip.terminate.key": "Mantenga Ctrl+T",
     "gui.computercraft.tooltip.turn_off": "Apagar esta computadora",
     "gui.computercraft.tooltip.turn_off.key": "Mantenga Ctrl+S",
     "gui.computercraft.tooltip.turn_on": "Encender esta computadora",

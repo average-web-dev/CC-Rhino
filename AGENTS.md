@@ -120,7 +120,7 @@ part of `assemble`.
 | Event loop (timers / IO / microtasks / yields / setImmediate) | `core/engine/EventLoop.java` |
 | Node timers (`setTimeout` & co., #45): native queue + `internal/loop` module, ROM `timers` / `timers/promises` | `core/engine/JSTimers.java`, `JSLoopModule.java`, `MachineTimers.java` (tick clock, `computer/Environment`), `src/ts/rom/lib/timers.ts`, `timers/promises.ts`; types `src/ts/types/timers.d.ts` |
 | Job lifetime / keep-alive (#46): `EventLoop.isIdle`, `waitIdle`, keep-alive handles; jobs, thread context, `child_process`, `os.run` | `core/engine/EventLoop.java`, `JSLoopModule.java`, `JSThread.java` (context, terminal), `src/ts/rom/lib/internal/tty.ts` (`run`, `Job`), `rom/lib/child_process.ts`, `rom/lib/os.ts`, `rom/bin/bash.ts`, `rom/os/index.ts` |
-| Green threads (`parallel` module), thread ownership/cancellation, Ctrl+T | `core/engine/JSParallel.java`, `JSThread.java`, `JSTaskGroup.java`, `EventLoop.java` |
+| Green threads (`parallel` module), thread ownership/cancellation, Ctrl+C (terminate) | `core/engine/JSParallel.java`, `JSThread.java`, `JSTaskGroup.java`, `EventLoop.java` |
 | `require()` resolver + module cache (`require.uncached`, `require.resolve`) | `core/engine/JSRequire.java` (+ `REQUIRE_SETUP_JS` in `JSMachine`) |
 | Java ⇄ JS value conversion (records, cycle-safe tables, `ArrayTable`) | `core/engine/JSValues.java`, `JSArguments.java` |
 | Wrapping returned Java objects with script methods (handles, dynamic objects) | `core/engine/JSObjects.java` |
@@ -218,11 +218,12 @@ part of `assemble`.
   for `IFunction`s / `IDynamicObject` methods everything not declared otherwise (`IFunction.nonYielding(fn)`,
   `IDynamicObject.isNonYielding(i)`).
 - Concurrency: `require('parallel')` is native (green threads). Every parked continuation, listener, microtask and
-  `setImmediate` belongs to a thread; stopping a thread discards them. Ctrl+T (`terminate` event carrying the visible
-  console's TTY id) raises `Error("Terminated")` in the foreground of the programs on that TTY: a thread is in the
-  foreground if every thread up to its program's thread (the one with a context) is waited for by `parallel.waitFor*`
-  (`JSThread.isForeground`); a shell job (`job.shell`) survives it at its prompt. There is deliberately **no** public
-  `pullEvent`/`queueEvent`.
+  `setImmediate` belongs to a thread; stopping a thread discards them. Ctrl+C typed on a TTY in cooked mode (as on
+  Linux: `Tty.setOnInterrupt` → `terminate` event carrying the TTY id; the GUI's terminate button sends the visible
+  console's; there is no Ctrl+T any more; in raw mode Ctrl+C is just the key `\x03`) raises `Error("Terminated")` in
+  the foreground of the programs on that TTY: a thread is in the foreground if every thread up to its program's thread
+  (the one with a context) is waited for by `parallel.waitFor*` (`JSThread.isForeground`); a shell job (`job.shell`)
+  survives it at its prompt. There is deliberately **no** public `pullEvent`/`queueEvent`.
 - Events: native events (`@Event` records → `EventMap`) are queued with `queueEvent(record)` from any thread and reach
   listeners on a later tick (listeners may block; blocked calls waiting for the event are woken). `events.emit(name,
   ...args)` delivers *script-defined* events synchronously (Node semantics, returns "had listeners"); native names

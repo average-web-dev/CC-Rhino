@@ -11,7 +11,7 @@
 // never runs again. When a thread simply returns, whatever it leaves behind is
 // inherited by its parent thread.
 //
-// Ctrl+T (the `terminate` event) is delivered to the foreground: every thread that
+// Ctrl+C (the `terminate` event) is delivered to the foreground: every thread that
 // is being waited for by a waitFor* call (directly or through its ancestors) and is
 // blocked in sleep/yield/an I/O call has that call throw `Error("Terminated")`.
 // Spawned background threads are not terminated.
@@ -40,7 +40,7 @@ interface ParallelModule {
      * Start a task as a background thread owned by the calling thread and return a
      * handle to it. The task starts once the caller blocks or returns. An uncaught
      * error ends the thread (see {@link ThreadHandle.getError}). Background threads
-     * are not terminated by Ctrl+T, but are stopped when their owner is stopped.
+     * are not terminated by Ctrl+C, but are stopped when their owner is stopped.
      */
     spawn(task: ParallelTask): ThreadHandle;
     /**

@@ -221,7 +221,7 @@ public class ServerComputer implements ComputerEnvironment {
         queueEvent(event, null);
     }
 
-    /** Ctrl+T: stop the program on the visible console. */
+    /** The terminate button: stop the program on the visible console. */
     public final void terminate() {
         computer.terminate();
     }

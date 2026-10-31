@@ -197,7 +197,6 @@
   "gui.computercraft.tooltip.copy": "Copy to clipboard",
   "gui.computercraft.tooltip.disk_id": "Disk ID: %s",
   "gui.computercraft.tooltip.terminate": "Stop the currently running code",
-  "gui.computercraft.tooltip.terminate.key": "Hold Ctrl+T",
   "gui.computercraft.tooltip.turn_off": "Turn this computer off",
   "gui.computercraft.tooltip.turn_off.key": "Hold Ctrl+S",
   "gui.computercraft.tooltip.turn_on": "Turn this computer on",

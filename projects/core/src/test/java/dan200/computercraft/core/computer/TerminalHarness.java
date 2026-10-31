@@ -47,6 +47,7 @@ public final class TerminalHarness implements AutoCloseable {
     public static final int KEY_LEFT_CONTROL = 341;
     public static final int KEY_LEFT_ALT = 342;
     public static final int KEY_ESCAPE = 256;
+    public static final int KEY_C = 67;
 
     private static final int TICK_MILLIS = 50;
 
@@ -163,6 +164,7 @@ public final class TerminalHarness implements AutoCloseable {
         key(KEY_ENTER);
     }
 
+    /** The terminate button of the computer GUI. */
     public void terminate() {
         computer.terminate();
     }

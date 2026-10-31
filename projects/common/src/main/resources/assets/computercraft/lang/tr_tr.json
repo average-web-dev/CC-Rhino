@@ -181,7 +181,6 @@
     "gui.computercraft.tooltip.copy": "Panoya kopyala",
     "gui.computercraft.tooltip.disk_id": "Disk Kimliği: %s",
     "gui.computercraft.tooltip.terminate": "Çalışmakta olan kodu durdur",
-    "gui.computercraft.tooltip.terminate.key": "Ctrl+T tuşlarını basılı tut",
     "gui.computercraft.tooltip.turn_off": "Bu bilgisayarı kapat",
     "gui.computercraft.tooltip.turn_off.key": "Ctrl+S tuşlarını basılı tut",
     "gui.computercraft.tooltip.turn_on": "Bu bilgisayarı aç",

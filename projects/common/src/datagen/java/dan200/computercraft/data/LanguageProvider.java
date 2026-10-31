@@ -211,7 +211,6 @@ public final class LanguageProvider implements DataProvider {
         add("gui.computercraft.tooltip.turn_off", "Turn this computer off");
         add("gui.computercraft.tooltip.turn_off.key", "Hold Ctrl+S");
         add("gui.computercraft.tooltip.terminate", "Stop the currently running code");
-        add("gui.computercraft.tooltip.terminate.key", "Hold Ctrl+T");
         add("gui.computercraft.upload.failed", "Upload Failed");
         add("gui.computercraft.upload.failed.computer_off", "You must turn the computer on before uploading files.");
         add("gui.computercraft.upload.failed.too_much", "Your files are too large to be uploaded.");

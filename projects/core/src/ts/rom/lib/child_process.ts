@@ -178,7 +178,7 @@ export class ChildProcess extends EventEmitter {
 }
 
 /**
- * Start a program and return at once. The child runs in the background (Ctrl+T reaches it only on its own TTY);
+ * Start a program and return at once. The child runs in the background (Ctrl+C reaches it only on its own TTY);
  * its 'exit' event says how it ended.
  */
 export function spawn(program: string, args: string[] = [], options: SpawnOptions = {}): ChildProcess {

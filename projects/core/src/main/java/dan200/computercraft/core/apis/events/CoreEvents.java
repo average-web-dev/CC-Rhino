@@ -34,7 +34,8 @@ public final class CoreEvents {
     }
 
     /**
-     * Ctrl+T was held: the foreground program should stop.
+     * Ctrl+C was typed on a TTY in cooked mode (or the terminate button was pressed): the foreground program should
+     * stop.
      *
      * @param tty The TTY whose program should stop (the visible console), or 0 for every program.
      */

@@ -11,6 +11,7 @@ import screen from 'screen';
 import events from 'events';
 import * as jobs from '/rom/lib/internal/tty';
 import { spawn } from '/rom/lib/child_process';
+import { CSI } from '/rom/lib/tty';
 
 // ── Kernel log ─────────────────────────────────────────────────────────────────
 // Inspired by Linux dmesg / systemd service lines. The tag colours are ANSI styles, which process.stdout maps onto the
@@ -53,9 +54,15 @@ klog('ok', 'Kernel ready - handing off to shell');
 
 // ── Shells on the consoles ──────────────────────────────────────────────────────
 // A shell runs on every console that is shown and not used by a program, like getty: on the first console at boot,
-// on another one when it is switched to (Alt+1 … Alt+9, chvt), and again on the visible console when the program
-// that used it ends (also after `exit`). A program may run on another console (child_process.spawn with
-// { stdio: tty.console(n) }); no shell starts there while it does.
+// on another one when it is switched to (Alt+1 … Alt+9, chvt), and again on the visible console when a program that
+// used it ends. A program may run on another console (child_process.spawn with { stdio: tty.console(n) }); no shell
+// starts there while it does. `exit` in the shell of another console than the first clears that console and shows
+// the first one; the next shell starts there when it is shown again. On the first console a new shell starts at once.
+
+const FIRST_CONSOLE = 0;
+
+/** The TTY ids of the consoles whose shell the OS started and that still runs. */
+const shells = new Set<number>();
 
 /** Start a shell on console `index` if no program uses it. */
 function ensureShell(index: number): void {
@@ -63,15 +70,31 @@ function ensureShell(index: number): void {
     if (jobs.inUse(tty)) return;
     try {
         spawn('/rom/bin/bash', [], { stdio: tty });
+        shells.add(tty.handle.getId());
     } catch (error: any) {
         tty.stderr.write(jobs.formatError('/rom/bin/bash.js', error) + '\n');
     }
 }
 
+/** The console with the TTY `id`, or -1. */
+function consoleOf(id: number): number {
+    for (let i = 0; i < screen.getConsoleCount(); i++) {
+        if (screen.getConsole(i).getId() === id) return i;
+    }
+    return -1;
+}
+
 events.on('console_show', (index: number) => ensureShell(index));
 events.on('tty_released', (id: number) => {
-    let visible = screen.getVisible();
-    if (screen.getConsole(visible).getId() === id) ensureShell(visible);
+    let index = consoleOf(id);
+    if (index < 0) return;
+    // The OS's shell holds its console as long as it runs, so the console is released when the shell ended (`exit`).
+    if (shells.delete(id) && index !== FIRST_CONSOLE) {
+        jobs.console(index).stdout.write(CSI.reset + CSI.clearScreen + CSI.home);
+        if (screen.getVisible() === index) screen.show(FIRST_CONSOLE);
+        return;
+    }
+    if (screen.getVisible() === index) ensureShell(index);
 });
 
 // // Run the user startup script if one exists; silently skip if absent.

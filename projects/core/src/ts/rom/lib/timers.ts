@@ -10,7 +10,7 @@
 // one tick, so `setTimeout(cb, 0)` runs on the next tick at the earliest. The queue itself is native (the engine's
 // `internal/loop` module, see JSTimers): every pending timer has one CC timer, timers due in the same tick run in
 // due-time / creation order, and — like events.on listeners — a callback runs in the thread that created the timer,
-// may block, and is discarded when that thread is stopped (Ctrl+T, parallel stop). A ref'd pending timer (the
+// may block, and is discarded when that thread is stopped (Ctrl+C, parallel stop). A ref'd pending timer (the
 // default) keeps a shell job alive, as it keeps a Node process alive; unref() releases it.
 
 import loop from 'internal/loop';

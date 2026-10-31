@@ -72,6 +72,7 @@ public class Computer {
         this.terminal = terminal;
         screen = new Screen(terminal, terminal.isColour() ? Math.max(1, CoreConfig.advancedConsoles) : 1);
         screen.setOnShow(console -> queueEvent(new CoreEvents.ConsoleShow(console)));
+        screen.setOnInterrupt(tty -> queueEvent(new CoreEvents.Terminate(tty)));
 
         internalEnvironment = new Environment(this, environment);
         executor = new ComputerExecutor(this, environment, context);
@@ -90,7 +91,7 @@ public class Computer {
         return terminal;
     }
 
-    /** Ctrl+T: stop the program on the visible console (every program while the screen is inactive). */
+    /** The terminate button: stop the program on the visible console (every program while the screen is inactive). */
     public void terminate() {
         queueEvent(new CoreEvents.Terminate(screen.terminateTarget()));
     }
