@@ -184,6 +184,28 @@ class StdioShellTest {
         }
     }
 
+    /** A program that ends without switching the mouse and bracketed paste off again does not leave them on. */
+    @Test
+    void job_end_resets_mouse_and_bracketed_paste() {
+        var mount = programs()
+            .addFile("modes.js", "process.stdout.write('\\x1b[?1002;1006h\\x1b[?2004h'); console.log('modes on');\n")
+            .addFile("raw.js", """
+                process.stdin.setRawMode(true);
+                process.stdin.on('data', function (d) { console.log(JSON.stringify(d)); process.stdin.pause(); });
+                """);
+        try (var h = TerminalHarness.boot(mount)) {
+            waitForPrompt(h, "/");
+            h.enter("/modes.js");
+            h.waitForText("modes on");
+            waitForPrompt(h, "/");
+            assertFalse(h.mouseReporting(), "mouse reports off again");
+            h.enter("/raw.js");
+            h.ticks(5);
+            h.paste("x");
+            h.waitForText("\"x\"");
+        }
+    }
+
     @Test
     void boot_leaves_only_the_node_globals() {
         try (var h = TerminalHarness.boot(programs())) {

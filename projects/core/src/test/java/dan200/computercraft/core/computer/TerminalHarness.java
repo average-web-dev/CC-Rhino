@@ -190,6 +190,11 @@ public final class TerminalHarness implements AutoCloseable {
         return terminal.getCursorY();
     }
 
+    /** Whether a program on the shown console asked for mouse reports. */
+    public boolean mouseReporting() {
+        return terminal.getMouseReporting();
+    }
+
     public boolean cursorBlink() {
         return terminal.getCursorBlink();
     }

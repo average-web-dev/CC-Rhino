@@ -254,6 +254,11 @@ export function run(job: Job, resolved: string, args: string[], options: RunOpti
         return { code: 1, error };
     } finally {
         tty.stdin.removeListenersOf(job.id);
+        // Terminal modes the program may have asked for and not undone (it was stopped, or its cleanup never ran, as
+        // with an event-driven program whose listeners are dropped): mouse reports and bracketed paste go off, so the
+        // shell is not left with them. Whoever wants them again asks again (readline does when it resumes). Only on a
+        // TTY a device shows: on a virtual one the sequences would end up in the captured output.
+        if (tty.cursorColumn() !== undefined) tty.stdout.write(CSI.mouse(false) + CSI.bracketedPaste(false));
         tty.stdin.setKeyboardProtocol(savedProtocol);
         tty.setRawMode(savedRaw);
         tty.stdin.setFlowing(savedFlowing);
