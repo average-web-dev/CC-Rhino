@@ -31,6 +31,11 @@ import java.util.function.Consumer;
  *   <li>the kitty keyboard protocol's flags ({@code CSI > flags u} push, {@code CSI < n u} pop, {@code CSI = flags ;
  *   mode u} change, {@code CSI ? u} query, answered in the TTY's input), which {@link #keyboardFlags()} reports to the
  *   input side (see {@link InputEncoder});</li>
+ *   <li>the palette, as in xterm: OSC 4 ({@code ESC ] 4 ; i ; spec ST}, several {@code i ; spec} pairs allowed)
+ *   sets the colour that ANSI colour {@code i} (0–15) shows, {@code spec} being {@code rgb:r/g/b} (1–4 hex digits per
+ *   channel) or {@code #rgb} … {@code #rrrrggggbbbb}; OSC 104 ({@code ESC ] 104 [; i …] ST}) resets the given
+ *   entries, or all. Each console keeps its own palette, {@code ESC c} resets it. Other OSC sequences are ignored; ST
+ *   is {@code ESC \} or BEL;</li>
  *   <li>the CC blit sequence {@code ESC P cc-blit ; <text colours> ; <background colours> ; <text> ESC \}: writes
  *   {@code text} at the cursor with one colour per character ({@code 0}–{@code f}, as {@code term.blit}), without
  *   wrapping, and moves the cursor behind it.</li>
@@ -46,8 +51,9 @@ public final class TerminalEmulator {
     /**
      * ANSI colour index (0–7 normal, 8–15 bright) → CC colour (blit digit), one CC colour per index: the assignment
      * closest to the Linux console's colours (VGA) by CIEDE2000 over all sixteen. So yellow is brown (as on VGA),
-     * bright red is pink and bright cyan is orange, which CC has no closer colour for (until the palette can be
-     * changed, #54). The ANSI index is the CC colour's palette index: blit digit d = ANSI index 15 - d.
+     * bright red is pink and bright cyan is orange, which CC has no closer colour for by default (programs can change
+     * what an index shows with OSC 4). The ANSI index is the CC colour's palette index: blit digit d = ANSI index
+     * 15 - d.
      */
     static final int[] ANSI_COLOURS = {
         BLACK, RED, GREEN, BROWN, BLUE, PURPLE, CYAN, LIGHT_GRAY,
@@ -58,6 +64,7 @@ public final class TerminalEmulator {
     private static final int DEFAULT_BG = BLACK;
     private static final int ERROR_FG = RED;
     private static final char ESC = 0x1b;
+    private static final char BEL = 0x07;
     private static final String BLIT_PREFIX = "cc-blit;";
 
     /** Which mouse events the program asked for ({@code ESC [ ? 1000/1002/1003 h}). */
@@ -129,6 +136,23 @@ public final class TerminalEmulator {
     /** Whether mouse events should use the SGR encoding ({@code ESC [ < … M/m}) rather than the X10 one. */
     public synchronized boolean sgrMouse() {
         return sgrMouse;
+    }
+
+    /**
+     * The colour ANSI colour {@code index} (0–15) shows now.
+     *
+     * @param index The ANSI colour index.
+     * @return The colour as {@code 0xRRGGBB}.
+     */
+    public int paletteColour(int index) {
+        synchronized (terminal) {
+            var rgb = terminal.getPalette().getColour(paletteIndex(index));
+            return channel(rgb[0]) << 16 | channel(rgb[1]) << 8 | channel(rgb[2]);
+        }
+    }
+
+    private static int channel(double value) {
+        return clamp((int) Math.round(value * 255), 0, 255);
     }
 
     /** Render text written to {@code stdout}. */
@@ -242,6 +266,22 @@ public final class TerminalEmulator {
                 csi(text.substring(start + 2, end), text.charAt(end), stream);
                 return end + 1;
             }
+            case ']' -> {
+                for (var i = start + 2; i < text.length(); i++) {
+                    var ch = text.charAt(i);
+                    if (ch == BEL) {
+                        osc(text.substring(start + 2, i));
+                        return i + 1;
+                    }
+                    if (ch == ESC) {
+                        if (i + 1 >= text.length()) return -1;
+                        osc(text.substring(start + 2, i));
+                        // ST (ESC \) ends the sequence; another escape ends it too and is handled on its own.
+                        return text.charAt(i + 1) == '\\' ? i + 2 : i;
+                    }
+                }
+                return -1;
+            }
             case 'P' -> {
                 var end = text.indexOf(ESC + "\\", start + 2);
                 if (end < 0) return -1;
@@ -347,6 +387,7 @@ public final class TerminalEmulator {
         mouseMode = MouseMode.NONE;
         sgrMouse = false;
         keyboardFlags.clear();
+        resetPalette(-1);
     }
 
     // ── Colours ──────────────────────────────────────────────────────────────────
@@ -526,6 +567,102 @@ public final class TerminalEmulator {
         terminal.setCursorPos(x, terminal.getCursorY());
         terminal.blit(latin1(text), latin1(fg.toLowerCase()), latin1(bg.toLowerCase()));
         terminal.setCursorPos(x + text.length(), terminal.getCursorY());
+    }
+
+    // ── Palette ──────────────────────────────────────────────────────────────────
+
+    /** {@code ESC ] … ST}: OSC 4 sets palette entries, OSC 104 resets them; other commands are ignored. */
+    private void osc(String body) {
+        var parts = body.split(";", -1);
+        switch (parts[0]) {
+            case "4" -> {
+                for (var i = 1; i + 1 < parts.length; i += 2) {
+                    var index = ansiIndex(parts[i]);
+                    var rgb = parseColour(parts[i + 1]);
+                    if (index >= 0 && rgb >= 0) setPaletteColour(index, rgb);
+                }
+            }
+            case "104" -> {
+                if (parts.length == 1 || (parts.length == 2 && parts[1].isEmpty())) {
+                    resetPalette(-1);
+                } else {
+                    for (var i = 1; i < parts.length; i++) {
+                        var index = ansiIndex(parts[i]);
+                        if (index >= 0) resetPalette(index);
+                    }
+                }
+            }
+            default -> {
+            }
+        }
+    }
+
+    /**
+     * The {@link dan200.computercraft.core.terminal.Palette} entry of ANSI colour {@code index}: the palette is ordered
+     * by 15 minus the blit digit (as the renderer reads it), which is the ANSI index itself.
+     */
+    private static int paletteIndex(int index) {
+        return 15 - ANSI_COLOURS[index];
+    }
+
+    /** An ANSI colour index 0–15, or -1. */
+    private static int ansiIndex(String text) {
+        try {
+            var index = Integer.parseInt(text);
+            return index >= 0 && index < ANSI_COLOURS.length ? index : -1;
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    /**
+     * An X11 colour spec, {@code rgb:r/g/b} or {@code #rgb} (1–4 hex digits per channel), as {@code 0xRRGGBB}.
+     *
+     * @return The colour, or -1 if the spec is invalid.
+     */
+    private static int parseColour(String spec) {
+        String[] channels;
+        if (spec.startsWith("rgb:")) {
+            channels = spec.substring(4).split("/", -1);
+            if (channels.length != 3) return -1;
+        } else if (spec.startsWith("#") && (spec.length() - 1) % 3 == 0) {
+            var n = (spec.length() - 1) / 3;
+            channels = new String[]{
+                spec.substring(1, 1 + n), spec.substring(1 + n, 1 + 2 * n), spec.substring(1 + 2 * n),
+            };
+        } else {
+            return -1;
+        }
+        var rgb = 0;
+        for (var channel : channels) {
+            if (channel.isEmpty() || channel.length() > 4) return -1;
+            int value;
+            try {
+                value = Integer.parseInt(channel, 16);
+            } catch (NumberFormatException e) {
+                return -1;
+            }
+            var max = (1 << (4 * channel.length())) - 1;
+            rgb = rgb << 8 | Math.round(value * 255f / max);
+        }
+        return rgb;
+    }
+
+    private void setPaletteColour(int index, int rgb) {
+        synchronized (terminal) {
+            terminal.getPalette().setColour(paletteIndex(index),
+                ((rgb >> 16) & 0xFF) / 255.0, ((rgb >> 8) & 0xFF) / 255.0, (rgb & 0xFF) / 255.0);
+        }
+        terminal.setChanged();
+    }
+
+    /** Reset palette entry {@code index} (an ANSI index), or all of them for -1. */
+    private void resetPalette(int index) {
+        synchronized (terminal) {
+            var palette = terminal.getPalette();
+            if (index < 0) palette.resetColours(); else palette.resetColour(paletteIndex(index));
+        }
+        terminal.setChanged();
     }
 
     private static ByteBuffer latin1(String text) {

@@ -139,6 +139,21 @@ public final class TtyHandle {
     }
 
     /**
+     * The colour the device showing this TTY uses for a colour index (what {@code ESC ] 4} set, else the default).
+     *
+     * @param index The colour index, 0–15 (as in {@code ESC [ 38;5;n m}).
+     * @return The colour as {@code 0xRRGGBB}, or {@code undefined} for a virtual TTY.
+     * @throws ScriptException If the index is out of range.
+     * @cc-r.return number | undefined
+     */
+    @ScriptFunction
+    public @Nullable Integer getPaletteColor(int index) throws ScriptException {
+        if (index < 0 || index > 15) throw new ScriptException("Color index must be 0-15, got " + index);
+        var rgb = tty.paletteColour(index);
+        return rgb < 0 ? null : rgb;
+    }
+
+    /**
      * Change the size of a virtual TTY. If it changes, a {@code tty_resize} event is queued.
      *
      * @param columns The width in characters.

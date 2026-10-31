@@ -36,6 +36,10 @@ public class ServerMonitor {
             var terminal = this.terminal;
             return terminal == null ? -1 : terminal.getCursorX();
         });
+        tty.setPaletteSource(index -> {
+            var emulator = this.emulator;
+            return emulator == null ? -1 : emulator.paletteColour(index);
+        });
     }
 
     synchronized void rebuild() {

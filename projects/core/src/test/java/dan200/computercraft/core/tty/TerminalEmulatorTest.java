@@ -201,4 +201,51 @@ class TerminalEmulatorTest {
         assertEquals("$ ls      ", line(0));
         assertCursor(0, 1);
     }
+
+    @Test
+    void osc_4_sets_palette_entries() {
+        assertEquals(0xcc4c4c, emulator.paletteColour(1), "the default: CC red");
+        emulator.writeOut("\u001b]4;1;rgb:ff/00/80\u001b\\");
+        assertEquals(0xff0080, emulator.paletteColour(1));
+        assertEquals(0xff0080, terminal.getPalette().getRenderColours(15 - TerminalEmulator.RED) & 0xffffff,
+            "the CC colour the index shows changed");
+
+        // Several pairs, 1 and 4 digits per channel, #rgb forms, BEL as terminator.
+        emulator.writeOut("\u001b]4;0;rgb:f/0/0;2;rgb:ffff/8080/0000\u0007\u001b]4;3;#123456;4;#fff\u0007");
+        assertEquals(0xff0000, emulator.paletteColour(0));
+        assertEquals(0xff8000, emulator.paletteColour(2));
+        assertEquals(0x123456, emulator.paletteColour(3));
+        assertEquals(0xffffff, emulator.paletteColour(4));
+
+        // Split across writes, completed by the next one.
+        emulator.writeOut("\u001b]4;5;rgb:01/");
+        emulator.writeOut("02/03\u001b\\x");
+        assertEquals(0x010203, emulator.paletteColour(5));
+        assertEquals("x", line(0).trim(), "nothing of the sequence is printed");
+
+        // Invalid entries are skipped.
+        emulator.writeOut("\u001b]4;16;#000000;6;nope;7;rgb:1/2\u0007");
+        assertEquals(0x4c99b2, emulator.paletteColour(6), "not a colour: unchanged");
+        assertEquals(0x999999, emulator.paletteColour(7), "two channels: unchanged");
+    }
+
+    @Test
+    void osc_104_and_reset_restore_the_palette() {
+        emulator.writeOut("\u001b]4;1;#000000;4;#000000;15;#000000\u0007");
+        emulator.writeOut("\u001b]104;1\u0007");
+        assertEquals(0xcc4c4c, emulator.paletteColour(1));
+        assertEquals(0x000000, emulator.paletteColour(4));
+        emulator.writeOut("\u001b]104\u0007");
+        assertEquals(0x3366cc, emulator.paletteColour(4));
+        assertEquals(0xf0f0f0, emulator.paletteColour(15));
+
+        emulator.writeOut("\u001b]4;1;#000000\u0007\u001bc");
+        assertEquals(0xcc4c4c, emulator.paletteColour(1), "ESC c resets the palette");
+    }
+
+    @Test
+    void unknown_osc_sequences_are_swallowed() {
+        emulator.writeOut("a\u001b]0;window title\u0007b\u001b]52;c;Zm9v\u001b\\c");
+        assertEquals("abc       ", line(0));
+    }
 }

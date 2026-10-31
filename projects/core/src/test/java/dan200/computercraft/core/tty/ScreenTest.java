@@ -54,6 +54,21 @@ class ScreenTest {
     }
 
     @Test
+    void each_console_has_its_own_palette() {
+        screen.activate();
+        var red = 15 - TerminalEmulator.RED; // palette entry of CC red
+        screen.consoles().get(1).tty().stdout().write("\u001b]4;1;#102030\u0007");
+        assertEquals(0x102030, screen.consoles().get(1).tty().paletteColour(1), "the TTY reports its device's palette");
+        assertEquals(0xcc4c4c, display.getPalette().getRenderColours(red) & 0xffffff, "console 1 is not shown");
+
+        assertTrue(screen.show(1));
+        assertEquals(0x102030, display.getPalette().getRenderColours(red) & 0xffffff, "shown with the console");
+        assertTrue(screen.show(0));
+        assertEquals(0xcc4c4c, display.getPalette().getRenderColours(red) & 0xffffff);
+        assertEquals(-1, new Tty(10, 3).paletteColour(1), "a virtual TTY has no palette");
+    }
+
+    @Test
     void input_goes_to_the_visible_console() {
         screen.activate();
         screen.show(2);

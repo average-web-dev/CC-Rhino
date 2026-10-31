@@ -60,6 +60,12 @@ public class Palette {
         return byteColours[i];
     }
 
+    /** Set colour {@code i} back to its default. */
+    public void resetColour(int i) {
+        if (i < 0 || i >= PALETTE_SIZE) return;
+        setColour(i, Colour.VALUES[i]);
+    }
+
     public void resetColours() {
         for (var i = 0; i < Colour.VALUES.length; i++) setColour(i, Colour.VALUES[i]);
     }

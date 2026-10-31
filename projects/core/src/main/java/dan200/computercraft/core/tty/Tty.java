@@ -9,6 +9,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.IntSupplier;
+import java.util.function.IntUnaryOperator;
 
 /**
  * A teletype: the channel a program talks through, as a pair of directions plus a line discipline.
@@ -35,6 +36,7 @@ public final class Tty {
     private @Nullable Runnable onInterrupt;
     private @Nullable Runnable onResize;
     private @Nullable IntSupplier column;
+    private @Nullable IntUnaryOperator palette;
 
     /**
      * A TTY for a colour device (or a virtual one).
@@ -155,6 +157,20 @@ public final class Tty {
             column = this.column;
         }
         return column == null ? -1 : column.getAsInt();
+    }
+
+    /** Where the attached device reports the colour each ANSI colour index shows ({@code null}: none). */
+    public synchronized void setPaletteSource(@Nullable IntUnaryOperator palette) {
+        this.palette = palette;
+    }
+
+    /** The colour ANSI colour {@code index} (0–15) shows on the attached device, as {@code 0xRRGGBB}; -1 if unknown. */
+    public int paletteColour(int index) {
+        IntUnaryOperator palette;
+        synchronized (this) {
+            palette = this.palette;
+        }
+        return palette == null ? -1 : palette.applyAsInt(index);
     }
 
     /** Called when the size changes. */

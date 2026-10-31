@@ -4,6 +4,7 @@
 
 package dan200.computercraft.core.tty;
 
+import dan200.computercraft.core.terminal.Palette;
 import dan200.computercraft.core.terminal.Terminal;
 
 import org.jspecify.annotations.Nullable;
@@ -50,6 +51,7 @@ public final class Screen {
             emulator = new TerminalEmulator(buffer);
             emulator.setReplyTo(tty::input);
             tty.setColumnSource(buffer::getCursorX);
+            tty.setPaletteSource(emulator::paletteColour);
             tty.setOnInterrupt(() -> interrupted(tty.id()));
             tty.attach(text -> {
                 emulator.writeOut(text);
@@ -265,6 +267,14 @@ public final class Screen {
             display.setCursorBlink(buffer.getCursorBlink());
             display.setTextColour(buffer.getTextColour());
             display.setBackgroundColour(buffer.getBackgroundColour());
+            synchronized (display) {
+                var palette = display.getPalette();
+                for (var i = 0; i < Palette.PALETTE_SIZE; i++) {
+                    var rgb = buffer.getPalette().getColour(i);
+                    palette.setColour(i, rgb[0], rgb[1], rgb[2]);
+                }
+            }
+            display.setChanged();
         }
     }
 }
