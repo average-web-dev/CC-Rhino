@@ -44,6 +44,7 @@ const expected: Record<string, [string, string[]]> = {
     'term': ['object', ['ColorIndex', 'InputType', 'Key', 'MouseAction', 'MouseButton', 'Term']],
     'child_process': ['object', ['ChildProcess', 'exec', 'execSync', 'spawn', 'spawnSync']],
     'os': ['object', ['run']],
+    'geometry': ['object', ['Point', 'Vector']],
     '/rom/lib/internal/globals': ['object', []],
     '/rom/bin/bash': ['object', ['getCwd', 'getExitCode', 'main', 'run', 'setCwd', 'start']],
     '/rom/bin/edit': ['object', main],

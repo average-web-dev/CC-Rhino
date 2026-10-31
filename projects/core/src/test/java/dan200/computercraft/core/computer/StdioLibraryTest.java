@@ -85,6 +85,12 @@ class StdioLibraryTest {
         run("errors.js");
     }
 
+    /** The geometry module: points and vectors. */
+    @Test
+    void geometry() {
+        run("geometry.js");
+    }
+
     /** What plain-JS {@code require} sees of every ROM module (#49). */
     @Test
     void exports() {
