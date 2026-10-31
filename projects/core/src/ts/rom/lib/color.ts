@@ -12,8 +12,11 @@
 //   term.setPaletteColor(ColorIndex.BLUE, sky);      // the TTY now shows sky blue for index 4
 //
 // A Color is just its channels (r, g, b integers 0–255; alpha `a` 0–1 as in CSS, 1 = opaque unless given): no name,
-// immutable (the object is frozen, methods return new colors). Color.from takes '#rrggbb' / '#rrggbbaa' (or '#rgb' / '#rgba'), a 0xRRGGBB
-// number, anything with r, g, b (and a), or an [r, g, b(, a)] array.
+// immutable (the object is frozen, methods return new colors). Color.from takes '#rrggbb' / '#rrggbbaa' (or '#rgb' /
+// '#rgba'), a 0xRRGGBB number, anything with r, g, b (and a), or an [r, g, b(, a)] array.
+//
+// Dye names the 16 Minecraft dyes by their id (Dye.WHITE is 0 … Dye.BLACK 15): the channels of a bundled cable
+// (redstone.setBundledOutput(side, [Dye.RED, Dye.BLUE])), and the colors of wool, concrete and the like.
 
 import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE } from '/rom/lib/internal/errors';
 import { validateInteger, validateNumber } from '/rom/lib/internal/validators';
@@ -28,6 +31,15 @@ export interface RgbaChannels {
 
 /** What Color.from takes: a Color, `'#rrggbb'` / `'#rrggbbaa'`, a `0xRRGGBB` number, `{ r, g, b, a? }` or an array. */
 export type ColorLike = Color | string | number | RgbaChannels | readonly [number, number, number, number?];
+
+/** The 16 Minecraft dyes by id: the channels of a bundled cable (redstone.setBundledOutput), wool colors, …. */
+export const Dye = Object.freeze({
+    WHITE: 0, ORANGE: 1, MAGENTA: 2, LIGHT_BLUE: 3, YELLOW: 4, LIME: 5, PINK: 6, GRAY: 7, GREY: 7, LIGHT_GRAY: 8,
+    LIGHT_GREY: 8, CYAN: 9, PURPLE: 10, BLUE: 11, BROWN: 12, GREEN: 13, RED: 14, BLACK: 15,
+} as const);
+
+/** A dye id, 0–15 (one of the Dye values), like a numeric enum. */
+export type Dye = typeof Dye[keyof typeof Dye];
 
 const inspectCustom: unique symbol = Symbol.for('nodejs.util.inspect.custom') as any;
 

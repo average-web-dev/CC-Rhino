@@ -55,8 +55,20 @@ interface ColorConstructor {
     equals(a: Color, b: Color): boolean;
 }
 
+/** The 16 Minecraft dyes by id: the channels of a bundled cable (redstone.setBundledOutput), wool colors, …. */
+interface DyeMap {
+    readonly WHITE: 0; readonly ORANGE: 1; readonly MAGENTA: 2; readonly LIGHT_BLUE: 3; readonly YELLOW: 4;
+    readonly LIME: 5; readonly PINK: 6; readonly GRAY: 7; readonly GREY: 7; readonly LIGHT_GRAY: 8;
+    readonly LIGHT_GREY: 8; readonly CYAN: 9; readonly PURPLE: 10; readonly BLUE: 11; readonly BROWN: 12;
+    readonly GREEN: 13; readonly RED: 14; readonly BLACK: 15;
+}
+
+/** A dye id, 0–15 (one of the Dye values), like a numeric enum. */
+type Dye = DyeMap[keyof DyeMap];
+
 interface ColorModule {
     Color: ColorConstructor;
+    Dye: DyeMap;
 }
 
 declare function require(id: "color"): ColorModule;
