@@ -50,6 +50,8 @@ const expected: Record<string, [string, string[]]> = {
     '/rom/lib/internal/globals': ['object', []],
     '/rom/bin/bash': ['object', ['getCwd', 'getExitCode', 'main', 'run', 'setCwd', 'start']],
     '/rom/bin/edit': ['object', main],
+    '/rom/bin/vi': ['object', main],
+    '/rom/bin/vim': ['object', main],
     '/rom/os/bin/cat': ['object', main],
     '/rom/os/bin/chvt': ['object', main],
     '/rom/os/bin/clear': ['object', main],

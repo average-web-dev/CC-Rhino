@@ -161,6 +161,29 @@ class StdioShellTest {
         }
     }
 
+    /** vi takes the TTY (raw mode, kitty keys, bracketed paste), writes the file, and gives the TTY back to bash. */
+    @Test
+    void vi_edits_and_writes_a_file() {
+        try (var h = TerminalHarness.boot(programs())) {
+            waitForPrompt(h, "/");
+            h.enter("vi /notes.txt");
+            h.waitForText("[New]");
+            h.type("ihello");
+            h.key(KEY_ESCAPE);
+            h.waitForText("1,5");
+            h.type(":wq");
+            h.key(KEY_ENTER);
+            waitForPrompt(h, "/");
+            h.enter("cat /notes.txt");
+            h.waitFor("the written file", x -> count(x, "hello") == 1);
+            waitForPrompt(h, "/");
+            h.enter("/upper.js");
+            h.ticks(5);
+            h.enter("cooked again");
+            h.waitForText("> COOKED AGAIN");
+        }
+    }
+
     @Test
     void boot_leaves_only_the_node_globals() {
         try (var h = TerminalHarness.boot(programs())) {
