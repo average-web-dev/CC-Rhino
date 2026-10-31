@@ -127,6 +127,7 @@ part of `assemble`.
 | Promises: `/promises` modules, promise jobs, `async`/`tslib` modules, async-code detection | `core/engine/JSPromises.java`, `Waiter.java`, `JSAPIBuilder.java` (+ `EventLoop`) |
 | Safepoint aborts, resource limits (Rhino `Context` limits for strings, `ArrayBuffer`s, `apply` arguments, stack depth, set in `CCContextFactory.makeContext`; native array loops reach the safepoint) | `core/engine/JSAbort.java`, `JSMachine.java`, `core/CoreConfig.java` (+ `ConfigSpec`) |
 | Node-style stdio: `process`, `console`, `util`, `readline` (+`/promises`), `tty` streams, `term` (Term), job control | `projects/core/src/ts/rom/lib/` (`tty.ts`, `term.ts`, `internal/tty.ts`, `internal/keys.ts`, `internal/globals.ts`, `internal/emitter.ts`); types in `src/ts/types/{process,console,util,readline,tty,term}.d.ts` |
+| ROM helpers: Node-style errors and argument validators (internal), escape sequences (`CSI`), `geometry` (`Point`, `Vector`) | `rom/lib/internal/errors.ts`, `internal/validators.ts`, `internal/csi.ts`, `rom/lib/geometry.ts`; types `src/ts/types/geometry.d.ts` |
 | Native TTYs: pipes, line discipline, terminal emulator, input encoder, screen consoles; `internal/pty`, `screen` modules | `core/tty/` (`Pipe`, `LineDiscipline`, `Tty`, `TerminalEmulator`, `InputEncoder`, `Screen`), `core/apis/tty/`, monitor: `common/.../peripheral/monitor/ServerMonitor.java` |
 | Event bus (`events.on/once/off/emit`, `fireNow`, native-name registry) | `core/engine/JSEventEmitter.java` (incl. the JS `emit`), `core/apis/EventsAPI.java`, `EventLoop.emitPlan`/`dispatchNow`, core-api `scripting/Events.java` |
 | Core APIs (`fs`, `system`, `http`, `peripheral`, `redstone`, `screen`) | `projects/core/src/main/java/dan200/computercraft/core/apis/` |
@@ -155,23 +156,34 @@ part of `assemble`.
   echo, editing, Ctrl+U/D/C; raw: passed through), created virtually (`internal/pty`) or owned by a device. A
   `TerminalEmulator` renders a TTY's output onto a `Terminal` grid (VT-style: pending wrap, scrolling, SGR colours →
   CC colours plus the CC extension `38/48;6;i`, cursor/erase sequences, the blit sequence `ESC P cc-blit;fg;bg;text
-  ESC \`, mouse modes); an `InputEncoder` turns keys/chars/mouse into what a terminal sends. Every computer has a
+  ESC \`, mouse modes, the kitty keyboard flag stack); an `InputEncoder` turns keys/chars/mouse into what a terminal
+  sends: legacy VT bytes, or the kitty keyboard protocol (`CSI code;mods:event;text u`: presses, repeats, releases)
+  when a program pushed flags (`CSI.pushKeyboardFlags`; only in raw mode). GLFW key codes: `core/tty/GlfwKeys`. Colours
+  are ANSI indices 0–15, mapped one-to-one onto the 16 CC colours (`TerminalEmulator.ANSI_COLOURS`, VGA order with
+  3 = brown, 14 = orange). Every computer has a
   `Screen` (module `screen`) with virtual consoles (1 on normal, `advanced_consoles` on advanced computers; Alt+1…9);
   it stays inactive until a script activates it (the ROM's `internal/tty` does), then mirrors the visible console onto
-  the computer's terminal; input reaches it through `EventComputerInput` (events are still queued too). Monitors have
+  the computer's terminal; keys and typed characters reach it through `EventComputerInput` and are **not** queued as
+  events (there are no `key`/`key_up`/`char` events for scripts; `paste` and `mouse_*` still are). Monitors have
   a TTY too (`monitor.getTty()`; the peripheral itself only keeps the text scale — there are no drawing or palette
   methods on monitors any more). A TTY that changes size queues `tty_resize(tty)` (monitors, virtual TTYs), which
   `WriteStream` turns into `'resize'`. There is no native `term` module any more: the ROM module `term` (class `Term`)
-  draws by writing ANSI into a TTY, and `tty.CSI` holds the escape sequences (no raw `'\x1b[…'` in ROM code).
+  draws by writing ANSI into a TTY, and `tty.CSI` (source: `internal/csi`, also used by `util`/`console`) holds the
+  escape sequences (no raw `'\x1b[…'` in ROM code).
 - Node-style stdio (#34) is ROM TypeScript in `/rom/lib`: `process`, `console`, `util`, `readline`,
-  `readline/promises`, `tty`, `term`. These "ROM core modules" resolve before `require.paths` and with a `node:`
+  `readline/promises`, `tty`, `term`, plus `geometry` (immutable `Point` / `Vector`). These "ROM core modules" resolve before `require.paths` and with a `node:`
   prefix (`JSRequire.ROM_CORE_MODULES`). `tty` has Node's `ReadStream`/`WriteStream` over native TTYs plus the `TTY`
   class; `process.stdin/stdout/stderr` are those of the first screen console (`/rom/lib/internal/tty.ts`). While a
   ReadStream flows, the TTY pushes what can be read as `pipe_data` events; `stream.on(...)` registers native listeners
   in the *calling* thread, so a program's stdin handlers may block and die with the program. Input typed while stdin
-  is paused stays in the TTY (type ahead); `'keypress'` is decoded from the delivered input. `process` follows Node's
-  API strictly; everything beyond it (cursor, CC colours, blit, reading keys) is on `Term` (`new Term()` uses
-  `process.stdin/stdout`). Programs run as **jobs** (`/rom/lib/internal/tty`: `run`, `Job`): a job is the *context*
+  is paused stays in the TTY (type ahead). Keys: `ReadStream` emits browser-like `'keydown'` / `'keyup'`
+  (`TtyKeyInput`: `key`, `code`, `repeat`, `ctrlKey` …, decoded by `internal/keys`; compare `code` against the `Key`
+  constants, `KeyboardEvent.code` strings), delivered key by key in typed order across a job's listeners; there is no
+  Node `'keypress'` / `emitKeypressEvents` (readline edits on `'keydown'` too). In raw mode on a device TTY the stream
+  asks for the kitty protocol (`setKeyboardProtocol('kitty' | 'legacy')`, kitty by default, saved per job), while
+  `'data'` / `readSync` still get keys as legacy bytes (`toLegacy`, so `data === '\u0003'` works). `process` follows
+  Node's API strictly; everything beyond it (cursor, colours by name via `ColorIndex`, blit, reading keys:
+  `readKey`/`readInput`) is on `Term` (`new Term()` uses `process.stdin/stdout`). Programs run as **jobs** (`/rom/lib/internal/tty`: `run`, `Job`): a job is the *context*
   of the program's thread (`internal/loop.setContext(job, ttyId)`, inherited by every descendant thread, timer and
   listener, also after a parent returns), so `process` (stdin/stdout/stderr, argv, cwd, exitCode, pid) always means
   the calling program; a child's `chdir` does not move its shell. Programs are started through `child_process`
@@ -273,10 +285,14 @@ part of `assemble`.
   `process.argv.slice(2)` / `process.cwd()`); bash calls it, or just runs the module's top-level code (Node style).
   `main` may be `async`
   (return a promise); the exit code is `process.exitCode`, not `main`'s return value. Line-oriented programs use
-  `readline` / `process.stdin`; full-screen programs (`edit`) may still listen to raw `char`/`key` events — bash
-  pauses its own interface while a program runs. Node-style classes (`Console`, `readline.Interface`, the internal
+  `readline` / `process.stdin`; full-screen programs (`edit`) read keys from their TTY (`Term.readKey`, stdin
+  `'keydown'`) — bash pauses its own interface while a program runs. Node-style classes (`Console`, `readline.Interface`, the internal
   `EventEmitter`, `Timeout`/`Immediate`) are real `class`es; `Console` and the readline `Interface`s are exported
   through `/rom/lib/internal/callable`, so that, as in Node, they also work without `new`.
+- Argument checks in ROM code use `internal/validators` (`validateString`, `validateInteger(v, name, min, max)`,
+  `validateOneOf`, …) and the Node-style errors of `internal/errors` (`ERR_INVALID_ARG_TYPE`, `ERR_OUT_OF_RANGE`, …,
+  with Node's messages and `code`); both are internal, not public modules. Named constant groups are frozen
+  `UPPER_SNAKE` objects (`Key`, `KeyboardFlag`, `InputType`); event names stay string literals.
 - New source files carry the MPL-2.0 SPDX header (`average-web-dev`, current year).
 - Java style follows the surrounding upstream code (jspecify `@Nullable`, `var`, records).
 - After changing `@ScriptFunction` signatures, regenerate types (`:common:generateTsTypes`) and fix ROM TS errors.

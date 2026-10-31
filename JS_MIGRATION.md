@@ -418,11 +418,20 @@ Implement in strict dependency order. Each item is a separate file commit.
 
 #### Tier 0 — Pure utilities (no dependencies on other ROM files)
 
-- [ ] **11.3** `src/ts/rom/lib/colors.ts` — colour constants + pack/unpack/blit helpers
-- [ ] **11.4** `src/ts/rom/lib/keys.ts` — key-name constants (integer → name map)
-- [ ] **11.5** `src/ts/rom/lib/cc/expect.ts` — type-checking helpers (`expect`, `field`, `range`)
-- [ ] **11.6** `src/ts/rom/lib/cc/strings.ts` — `split`, `trim`, `contains`, `ensure_width`, `wrap`
-- [ ] **11.7** `src/ts/rom/lib/vector.ts` — 3D integer vector class (add, sub, mul, dot, cross, normalize, tostring)
+Done in #2 on top of the TTY model (#50), differently from the Lua ROM:
+
+- [x] **11.3** Colours: no `colors` module. Colours are ANSI indices 0–15 (`CSI.color(fg, bg)`, mapped one-to-one onto
+  the CC colours); `term` has `ColorIndex` (name → index) and `Term.setTextColor('orange')` takes names. Palette
+  changes: #54; bundled cables (colour sets): #53
+- [x] **11.4** Keys: `Key` constants (`KeyboardEvent.code` strings, exported by `tty` and `term`) for the browser-like
+  `'keydown'` / `'keyup'` events of `ReadStream` (kitty keyboard protocol in raw mode); the native `key` / `key_up` /
+  `char` events are internal now, Node's `'keypress'` is gone
+- [x] **11.5** `cc/expect` → internal `internal/validators` + `internal/errors` (Node-style codes and messages); not
+  public, programs check their own arguments
+- [x] **11.6** `cc/strings`: not ported (JS has `split`, `trim`, `includes`, `padEnd`); `Term.print` wraps, a shared
+  `wrap` helper comes with `window` / `textutils` if they need it
+- [x] **11.7** `geometry` (ROM core module): immutable `Point` (a position) and `Vector` (a direction / offset), typed
+  so points cannot be added; `Vector.NORTH` …, `Point.relative(direction, steps)`, `Vector.between(a, b)`
 
 #### Tier 1 — Terminal + formatting (depends on `term` native)
 
@@ -684,7 +693,7 @@ calls waiting for an event (Phase 1/2), which `fireNow` does not do.
 | `JSContext` main-thread task | `task_complete` | server thread (main-thread task) | cross-thread: must stay (wakes the `TaskCallback`, Phase 2) |
 | `TurtleBrain` command completion | `task_complete` | turtle update tick (server thread) | cross-thread: must stay (wakes `TaskCompletion.await`) |
 | `HttpRequest`, `CheckUrl`, `Websocket`, `WebsocketHandler` | `http_*`, `websocket_*` | Netty I/O threads | cross-thread: must stay |
-| `EventComputerInput` | `key`, `key_up`, `char`, `paste`, `mouse_*` | server network thread | cross-thread: must stay |
+| `EventComputerInput` | `paste`, `mouse_*` (keys and chars only go to the `Screen`'s TTY since #2) | server network thread | cross-thread: must stay |
 | `ComputerActionServerMessage` | `terminate` | server network thread | cross-thread: must stay |
 | `ServerInputState` | `file_transfer` | server network thread | cross-thread: must stay |
 | standalone `InputState` | `file_transfer`, `terminate` | emulator UI thread | cross-thread: must stay (now queues `CoreEvents` records instead of raw names) |
@@ -835,7 +844,7 @@ class that draws by writing ANSI. Branch `feature/tty-term`.
 - [x] **16.4** Monitors have a TTY (`monitor.getTty()`, touch → mouse reports), `tty_resize`
 - [x] **16.5** ROM `tty` (Node `ReadStream` / `WriteStream`, `TTY`, `CSI`, `decodeInput` + `InputType` /
   `MouseAction` / `MouseButton`) and `term` (`Term`: `write` clips, `print` wraps, colours, cursor, blit,
-  `readKey` / `readInput` / `readChar` / `readLine`, `KeyName`)
+  `readKey` / `readInput` / `readChar` / `readLine`, `Key`)
 - [x] **16.6** Jobs: a program's thread carries its job as context (`internal/loop.setContext`), so `process` (Node
   API, strict) is always the calling program's; `child_process` and `os.run`; bash on `spawnSync`; `process.exit()`
   ends a program at once (`exitContext`); the OS runs a shell on every free shown console, `chvt`, `exit` on
@@ -844,9 +853,11 @@ class that draws by writing ANSI. Branch `feature/tty-term`.
 - [x] **16.8** Tests: `TtyTest`, `TerminalEmulatorTest`, `InputEncoderTest`, `ScreenTest`, `PtyAPITest`,
   `ScreenAPITest`, `stdio/tty.ts`, `stdio/child_process.ts`, `StdioShellTest` (consoles, Ctrl+C, `exit`), gametest
   `Tty_renders_output`
-- [ ] **16.9** Follow-ups: Tier 0 (`Color` / `ColorSet` / `Key`, `Vector`, #2) on top of the TTY model; named
-  constant groups instead of magic strings/numbers; `edit` like vi/vim (#10); `window` as a native display with a TTY
-  (#3); docs on VitePress (#51)
+- [x] **16.9** Tier 0 (#2) on top of the TTY model: kitty keyboard protocol, `'keydown'` / `'keyup'` + `Key`, named
+  colours (`ColorIndex`), `geometry`, internal validators; named constant groups instead of magic strings/numbers
+  (#52: `CSI` in `internal/csi`, `GlfwKeys`)
+- [ ] **16.10** Follow-ups: `edit` like vi/vim (#10); `window` as a native display with a TTY (#3); docs on VitePress
+  (#51); bundled cables (#53); palette (#54); turtle facing (#55); `paste` / mouse through the TTY
 
 ---
 

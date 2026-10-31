@@ -175,7 +175,7 @@ on a later tick, where listeners may block. `events.emit` delivers a *script-def
 Node's `EventEmitter.emit`: the listeners run in registration order before `emit` returns, receive the arguments
 unchanged, and `emit` returns whether there were any. Details:
 
-- **Native names are reserved**: `emit('key')`, `emit('timer')`, `emit('task_complete')`, … throw an `Error` with
+- **Native names are reserved**: `emit('paste')`, `emit('timer')`, `emit('task_complete')`, … throw an `Error` with
   `code: 'ERR_RESERVED_EVENT'`, so a program cannot fake input, timers or another program's task completion. All
   other names are free. Declare your events' arguments by augmenting `CustomEventMap`
   (`declare global { interface CustomEventMap { my_event: [count: number]; } }`), which types `emit`, `on`, `once`
@@ -273,7 +273,7 @@ signals, memory usage, colour inspection, …) are absent rather than faked.
 | Member | Notes |
 |---|---|
 | `stdout`, `stderr` | `tty.WriteStream`-like: `write(chunk[, encoding][, cb])` (string or `Uint8Array`, Latin-1), `columns`/`rows`, `isTTY`, `cursorTo`/`moveCursor`/`clearLine`/`clearScreenDown`, `getWindowSize`, `hasColors`/`getColorDepth`. Text wraps at the right edge (VT pending-wrap) and scrolls; `\n \r \t \b` and ANSI sequences are interpreted: SGR colours map onto the 16 CC colours (ignored on monochrome terminals), plus CUU/CUD/CUF/CUB/CNL/CPL/CHA/CUP, ED, EL, SU/SD, save/restore, `?25h/l` (cursor blink). `stderr` writes in red. `'resize'` = the native `tty_resize` event for this TTY (monitors, virtual TTYs; the screen's consoles never resize). |
-| `stdin` | `tty.ReadStream`-like, fed by `char`/`key`/`paste`: `'data'`, `'keypress'` (`(sequence, key)` with `name`/`ctrl`/`meta`/`shift`), `'end'`; `setRawMode`, `isRaw`, `pause`/`resume`/`isPaused`, `readableFlowing`, `setEncoding` (always strings). **Cooked** (default): line discipline with echo, Backspace, Ctrl+U, Enter → `'data'` = line + `"\n"`, Ctrl+D on an empty line → `'end'` (the stream stays usable, like a terminal). **Raw**: each key as the VT sequence a terminal sends (`"\x1b[A"`, `"\r"`, `"\x7f"`, Ctrl+letter → control character). Nothing is read until the stream flows (a `'data'` listener or `resume()`); input arriving meanwhile is dropped. The cursor blinks while stdin flows. |
+| `stdin` | `tty.ReadStream` over the program's TTY: `'data'`, `'keydown'` / `'keyup'` (browser-like `TtyKeyInput`: `key`, `code`, `repeat`, `ctrlKey`/`shiftKey`/`altKey`/`metaKey`; compare `code` against `Key`; no Node `'keypress'`), `'end'`; `setKeyboardProtocol('kitty' \| 'legacy')` (kitty in raw mode by default: releases and repeats; `'data'` still gets legacy bytes); `setRawMode`, `isRaw`, `pause`/`resume`/`isPaused`, `readableFlowing`, `setEncoding` (always strings). **Cooked** (default): line discipline with echo, Backspace, Ctrl+U, Enter → `'data'` = line + `"\n"`, Ctrl+D on an empty line → `'end'` (the stream stays usable, like a terminal). **Raw**: each key as the VT sequence a terminal sends (`"\x1b[A"`, `"\r"`, `"\x7f"`, Ctrl+letter → control character). Nothing is read until the stream flows (a `'data'` listener or `resume()`); input arriving meanwhile is dropped. The cursor blinks while stdin flows. |
 | `argv`, `argv0`, `execArgv` | `['bash', '/path/program.js', ...args]` while bash runs a program (`argv.slice(2)` = arguments) |
 | `env` | live view of the `env` module (`PATH` mirrors `require.paths`); values are strings |
 | `cwd()`, `chdir(dir)` | the shell's working directory; Node errors (`ENOENT`, `ENOTDIR`) |
@@ -327,9 +327,10 @@ history, historySize, removeHistoryDuplicates, crlfDelay, tabSize })` (or positi
 `'line'`, `'close'`, `'pause'`, `'resume'`, `'history'`, `'SIGINT'` events, `prompt([preserveCursor])`,
 `setPrompt`/`getPrompt`, `question`, `pause`/`resume`, `write(data[, key])`, `close`, `line`/`cursor`/`history`,
 `getCursorPos()`, async iteration (`for await (const line of rl)`), and the module functions `cursorTo`,
-`moveCursor`, `clearLine`, `clearScreenDown`, `emitKeypressEvents`.
+`moveCursor`, `clearLine`, `clearScreenDown` (no `emitKeypressEvents`: there is no `'keypress'`).
 
-- Terminal mode (default when `output.isTTY`): raw mode + keypress events, editing with Left/Right, Home/End
+- Terminal mode (default when `output.isTTY`): raw mode, edits on `'keydown'` (other streams: decoded from `'data'`;
+  `write(data, key)` takes a `Partial<TtyKeyInput>`, e.g. `{ ctrlKey: true, code: Key.KEY_U }`), editing with Left/Right, Home/End
   (Ctrl+A/E), Backspace/Delete, Ctrl+B/F, word jumps (Ctrl+Left/Right, Meta+B/F), word deletion (Ctrl+W,
   Ctrl+Backspace, Meta+D), Ctrl+U/K, Ctrl+L, history (Up/Down, Ctrl+P/N, newest first, prefix search like Node,
   `historySize` default 30), tab completion via `completer` (sync, callback or promise; first Tab completes the common
@@ -413,14 +414,17 @@ There is no native `term` module and monitors no longer have drawing methods. Ou
 - `monitor.getTty()`: a monitor is a TTY; the peripheral keeps only `setTextScale` / `getTextScale`. Touches arrive
   in the TTY's stdin as mouse input (once enabled) and as `monitor_touch`.
 - `tty` (ROM, Node API): `ReadStream` / `WriteStream` (`process.stdin/stdout/stderr`), `TTY` (virtual or
-  `TTY.from(handle)`), `CSI` (escape sequences), `isatty`. `WriteStream` fires `'resize'` on the native
+  `TTY.from(handle)`), `CSI` (escape sequences: cursor, `color(fg, bg)` with ANSI indices 0–15, `sgr`, blit, mouse,
+  `pushKeyboardFlags`/`popKeyboardFlags`), `Key`, `KeyboardFlag`, `decodeInput` + `InputType` / `MouseAction` /
+  `MouseButton`, `isatty`. `WriteStream` fires `'resize'` on the native
   `tty_resize(tty)` event (monitors, virtual TTYs; the screen's consoles never resize).
 - `term` (ROM): `new Term(tty?)` draws by writing ANSI — `write`/`print`, `blit`, `clear`/`clearLine`, `scroll`,
   `getCursorPos`/`setCursorPos` (`{x, y}`, **0-based**), `getCursorBlink`/`setCursorBlink`, `getSize`/`setSize`,
-  `getTextColor`/`setTextColor`, `getBackgroundColor`/`setBackgroundColor`, `isColor`, `readKey`/`readChar`/
-  `readLine`; `KeyName` constants for `key.name`.
-- The palette functions (`getPaletteColor`, `setPaletteColor`, `nativePaletteColor`) are gone for now; colours will
-  come back with Tier 0 (`Color` / `ColorSet`).
+  `getTextColor`/`setTextColor`, `getBackgroundColor`/`setBackgroundColor` (colour names: `'orange'`, `'lightGray'`
+  …; `ColorIndex` maps them to ANSI indices), `isColor`, `readKey`/`readInput`/`readChar`/`readLine`; `Key`
+  constants for `event.code`.
+- `geometry` (ROM core module): immutable `Point` and `Vector` for world coordinates (see JS_ROM_FEATURES.md).
+- The palette functions (`getPaletteColor`, `setPaletteColor`, `nativePaletteColor`) are gone for now (#54).
 
 ---
 

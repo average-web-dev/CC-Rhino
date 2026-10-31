@@ -47,8 +47,9 @@ before `require.paths` and as `node:<name>`). Full API: JS_API_REDESIGN.md, "Nod
 **Feature contract**:
 - `process.stdout` / `process.stderr`: wrapped, scrolling terminal output with `\n \r \t \b` and ANSI sequences (SGR
   colours → CC colours, cursor movement, erasing); stderr in red. Replaces `write`/`print`/`printError`.
-- `process.stdin`: cooked (echo + line editing basics) or raw (VT sequences) input from `char`/`key`/`paste`,
-  `'keypress'` events, pause/resume. Listeners belong to the program that adds them.
+- `process.stdin`: cooked (echo + line editing basics) or raw (VT sequences) input from the TTY, browser-like
+  `'keydown'` / `'keyup'` events (compared against `Key`; no Node `'keypress'`), pause/resume. Listeners belong to the
+  program that adds them.
 - `console`: Node's Console (log/info/debug/warn/error/dir/table/time*/count*/group*/assert/trace/clear).
 - `util`: format, formatWithOptions, inspect, inherits, promisify, stripVTControlCharacters, styleText,
   isDeepStrictEqual. Replaces `textutils.serialize`-style debugging output and `cc.pretty`'s role for printing.
@@ -75,6 +76,11 @@ native `tty_resize` event of its TTY (monitors, virtual TTYs; the screen's conso
 ## APIs (`src/ts/rom/apis/`)
 
 ### colors / colours
+
+**Status**: not ported (#2). Colours are ANSI indices 0–15 (`tty.CSI.color(fg, bg)`, one-to-one onto the CC colours);
+`Term.setTextColor` / `setBackgroundColor` take names (`'orange'`, `'lightGray'`; `term.ColorIndex` maps them to
+indices); blit strings use the CC hex digits. Palette changes: #54. Colour sets for bundled cables: #53. The Lua
+contract below is kept for reference.
 
 **Summary**: Named colour constants and utility functions for combining, testing, and converting 16-terminal palette colours.
 
@@ -340,6 +346,12 @@ io.lines(filename?: string, ...formats): () => string | null
 
 ### keys
 
+**Status**: replaced (#2). Keys come from the TTY: `process.stdin` emits `'keydown'` / `'keyup'` (`TtyKeyInput`:
+`key`, `code`, `repeat`, `ctrlKey` …), `Term.readKey()` returns the next key press; programs compare `code` against
+the `Key` constants (`Key.ARROW_UP`, `Key.KEY_A`, …; `KeyboardEvent.code` strings, exported by `tty` and `term`). In
+raw mode the terminal reports keys with the kitty keyboard protocol (releases, repeats, modifier keys). The Lua
+contract below is kept for reference.
+
 **Summary**: Named constants for every keyboard keycode, plus a `getName` lookup.
 
 **Feature contract**:
@@ -538,11 +550,11 @@ settings.save(path?: string): boolean   // default ".settings"; serialises curre
   into a TTY (the calling program's `process.stdout` by default, or e.g. `TTY.from(monitor.getTty())`).
   `write` (cuts off at the edge), `print` (wraps), `blit`, `clear` / `clearLine`, `scroll`, `getCursorPos` /
   `setCursorPos` (`{x, y}`, 0-based), `getCursorBlink` / `setCursorBlink`, `getSize` / `setSize`, text and background
-  colour, `isColor`, `readKey` / `readInput` / `readChar` / `readLine`; constants `KeyName`, `InputType`,
-  `MouseAction`, `MouseButton`.
+  colour by name (`ColorIndex`), `isColor`, `readKey` / `readInput` / `readChar` / `readLine`; constants `Key`,
+  `InputType`, `MouseAction`, `MouseButton`.
 - "Redirecting" means running a program on another TTY (`child_process.spawn(prog, args, { stdio: tty })`,
   `os.run(prog, args, { tty })`), not swapping a global terminal object.
-- The palette functions are gone for now; colours come back with Tier 0 (`Color` / `ColorSet`, #2).
+- The palette functions are gone for now (#54).
 
 ### textutils
 
@@ -657,6 +669,12 @@ turtle.craft(limit?: number): boolean
 
 ### vector
 
+**Status**: replaced by the ROM core module `geometry` (#2): immutable `Point` (a position: `add(vector)`,
+`vectorTo(point)`, `relative(direction, steps)`, `distance`, `manhattan`) and `Vector` (a direction / offset: `add`,
+`sub`, `mul`, `div`, `dot`, `cross`, `length`, `normalize`, `round`; `Vector.NORTH` … `Vector.DOWN`,
+`Vector.between(a, b)`), `from({x, y, z} | [x, y, z])`, `equals` with an optional epsilon. The Lua contract below is
+kept for reference.
+
 **Summary**: Immutable 3D vector type for world-coordinate math.
 
 **Feature contract**:
@@ -747,6 +765,10 @@ top-level code.
 
 ### cc/expect
 
+**Status**: not ported (#2). ROM code checks arguments with the internal `internal/validators` (Node-style
+`ERR_INVALID_ARG_TYPE` & co. from `internal/errors`); programs check their own. The Lua contract below is kept for
+reference.
+
 **Summary**: Runtime argument type checking with clear error messages.
 
 **Feature contract**:
@@ -778,6 +800,9 @@ range(num: number, min?: number, max?: number): number
 ---
 
 ### cc/strings
+
+**Status**: not ported (#2): JS has `split`, `trim`, `includes`, `padEnd`; `Term.print` wraps. The Lua contract below
+is kept for reference.
 
 **Summary**: Text utility functions for wrapping, padding, and splitting strings.
 
@@ -1995,9 +2020,7 @@ Events that the ROM layer produces or consumes:
 
 | Event | Fields | Description |
 |-------|--------|-------------|
-| `key` | `keyCode: number, held: boolean` | Key pressed |
-| `key_up` | `keyCode: number` | Key released |
-| `char` | `char: string` | Character typed |
+| (`key`, `key_up`, `char`) | — | Internal since #2: keys reach programs through their TTY (`'keydown'` / `'keyup'`) |
 | `mouse_click` | `button: number, x: number, y: number` | Mouse button pressed (1-indexed coords) |
 | `mouse_up` | `button, x, y` | Mouse button released |
 | `mouse_scroll` | `direction: number, x, y` | Mouse wheel |
