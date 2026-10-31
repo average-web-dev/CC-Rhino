@@ -27,10 +27,22 @@ interface Term {
     setCursorPos(pos: CursorPosition): void;
     getCursorBlink(): boolean;
     setCursorBlink(blink: boolean): void;
-    getTextColor(): ColorName;
-    setTextColor(color: ColorName): void;
-    getBackgroundColor(): ColorName;
-    setBackgroundColor(color: ColorName): void;
+    getTextColor(): ColorIndex;
+    /** The color index (0–15, see ColorIndex) text is written in. */
+    setTextColor(index: ColorIndex): void;
+    getBackgroundColor(): ColorIndex;
+    /** The color index (0–15, see ColorIndex) behind the text. */
+    setBackgroundColor(index: ColorIndex): void;
+    /**
+     * Let color `index` (0–15) show `color` on the whole TTY, also what is already on screen, until resetPalette() (it
+     * stays after the program ends, as on Linux). A translucent color is taken over black: #ff0000 with alpha 0.5 is
+     * #7f0000.
+     */
+    setPaletteColor(index: ColorIndex, color: Color): void;
+    /** The color index `index` (0–15) shows on the device, or `undefined` on a virtual TTY. */
+    getPaletteColor(index: ColorIndex): Color | undefined;
+    /** Let color `index` (or, without one, every color) show its default again. */
+    resetPalette(index?: ColorIndex): void;
     /**
      * Write text at the cursor in this Term's colors, cut off at the right edge (never wraps, so drawing on the last row
      * does not scroll); `\n` starts a new row. The cursor moves behind the text, also past the edge.
@@ -61,18 +73,18 @@ interface Term {
 }
 
 /**
- * The 16 colors by name, with their index on the TTY (as CSI.color takes it). The TTY shows each index as one CC color;
- * changing what an index shows (the palette) is #54.
+ * The 16 color indices of a TTY (as CSI.color and Term.setTextColor take them), named after the CC color each shows by
+ * default; Term.setPaletteColor changes what an index shows.
  */
 interface ColorIndexMap {
-    readonly black: 0; readonly red: 1; readonly green: 2; readonly brown: 3; readonly blue: 4; readonly purple: 5;
-    readonly cyan: 6; readonly lightGray: 7; readonly lightGrey: 7; readonly gray: 8; readonly grey: 8;
-    readonly pink: 9; readonly lime: 10; readonly yellow: 11; readonly lightBlue: 12; readonly magenta: 13;
-    readonly orange: 14; readonly white: 15;
+    readonly BLACK: 0; readonly RED: 1; readonly GREEN: 2; readonly BROWN: 3; readonly BLUE: 4; readonly PURPLE: 5;
+    readonly CYAN: 6; readonly LIGHT_GRAY: 7; readonly LIGHT_GREY: 7; readonly GRAY: 8; readonly GREY: 8;
+    readonly PINK: 9; readonly LIME: 10; readonly YELLOW: 11; readonly LIGHT_BLUE: 12; readonly MAGENTA: 13;
+    readonly ORANGE: 14; readonly WHITE: 15;
 }
 
-/** A color's name (a key of ColorIndex), as Term's color methods take it. */
-type ColorName = keyof ColorIndexMap;
+/** A color index, 0–15 (one of the ColorIndex values): the type of Term's color methods, like a numeric enum. */
+type ColorIndex = ColorIndexMap[keyof ColorIndexMap];
 
 interface TermConstructor {
     /** A Term over `tty`, or (without one) over the calling program's process.stdin / process.stdout. */

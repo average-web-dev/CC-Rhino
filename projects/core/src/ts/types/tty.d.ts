@@ -80,11 +80,20 @@ interface TtyEscapes {
     readonly home: string;
     /** Back to the default colours. */
     readonly reset: string;
+    /** Select graphic rendition: SGR parameters such as `1` (bold), `31` (red text) or `39` (default text colour). */
+    sgr(...params: number[]): string;
     /**
      * Select colours by their index (0–15, as on a Linux terminal: 0 black … 7 white, 8–15 bright): text, and
      * optionally background.
      */
     color(fg: number, bg?: number): string;
+    /**
+     * Let color `index` (0–15, as color() takes it) show `color` on this TTY only, until resetPalette() (xterm's OSC 4).
+     * A terminal shows opaque colors, so a translucent one is taken over black: #ff0000 with alpha 0.5 is #7f0000.
+     */
+    setPaletteColor(index: number, color: Color): string;
+    /** Let color `index` (or, without one, every color) show its default again (xterm's OSC 104). */
+    resetPalette(index?: number): string;
     /** Scroll the contents up by `n` rows (down if negative). */
     scroll(n: number): string;
     /** Write `text` with one text and one background colour (blit digits) per character, without wrapping. */

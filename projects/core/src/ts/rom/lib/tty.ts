@@ -24,10 +24,11 @@
 import events from 'events';
 import loop from 'internal/loop';
 import pty from 'internal/pty';
+import { Color } from '/rom/lib/color';
 import { CSI } from '/rom/lib/internal/csi';
 import { decodeInput, InputType, toLegacy } from '/rom/lib/internal/keys';
 import { ERR_INVALID_ARG_TYPE } from '/rom/lib/internal/errors';
-import { validateFunction, validateOneOf } from '/rom/lib/internal/validators';
+import { validateFunction, validateInteger, validateOneOf } from '/rom/lib/internal/validators';
 
 /**
  * The other direction of CSI: decodeInput(data) splits what a TTY delivers into keyboard events (`keydown` / `keyup`,
@@ -173,6 +174,16 @@ export class WriteStream implements TtyWriteStream {
     }
 
     getColorDepth(): number { return this.#tty.isColor() ? 4 : 1; }
+
+    /**
+     * CC extension: the color index `index` (0–15) shows on the device (set with CSI.setPaletteColor, else the
+     * default), or undefined for a virtual TTY.
+     */
+    getPaletteColor(index: number): Color | undefined {
+        validateInteger(index, 'index', 0, 15);
+        let rgb = this.#tty.getPaletteColor(index);
+        return rgb === undefined ? undefined : Color.from(rgb);
+    }
 
     on(event: string, listener: Listener): this {
         if (event === RESIZE) this.#addResize(listener, false); else this.#local.add(event, listener);

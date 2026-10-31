@@ -22,7 +22,8 @@
 require('/rom/lib/internal/globals');
 
 (function (){
-  const term   = new (require('/rom/lib/term') as typeof import('/rom/lib/term')).Term();
+  const { Term, ColorIndex } = require('/rom/lib/term') as typeof import('/rom/lib/term');
+  const term   = new Term();
   const Key    = (require('/rom/lib/tty') as typeof import('/rom/lib/tty')).Key;
   const fs     = require('fs');
   const events = require('events');
@@ -107,19 +108,19 @@ require('/rom/lib/internal/globals');
       term.clear();
 
       term.setCursorPos({ x: 0, y: 0 });
-      if (canColor) term.setTextColor('white');
+      if (canColor) term.setTextColor(ColorIndex.WHITE);
       term.write("  CC: Rhino  Boot Selection");
 
       term.setCursorPos({ x: 0, y: 1 });
-      if (canColor) term.setTextColor('lightGray');
+      if (canColor) term.setTextColor(ColorIndex.LIGHT_GRAY);
       term.write("─".repeat(width));
 
       for (let i = 0; i < entries.length; i++) {
           let isSelected = i === selected;
           term.setCursorPos({ x: 0, y: 3 + i });
           if (canColor) {
-              term.setBackgroundColor(isSelected ? 'white' : 'black');
-              term.setTextColor(isSelected ? 'black' : 'white');
+              term.setBackgroundColor(isSelected ? ColorIndex.WHITE : ColorIndex.BLACK);
+              term.setTextColor(isSelected ? ColorIndex.BLACK : ColorIndex.WHITE);
           }
           let prefix   = isSelected ? " > " : "   ";
           let maxDetail = 22;
@@ -129,8 +130,8 @@ require('/rom/lib/internal/globals');
       }
 
       if (canColor) {
-          term.setBackgroundColor('black');
-          term.setTextColor('lightGray');
+          term.setBackgroundColor(ColorIndex.BLACK);
+          term.setTextColor(ColorIndex.LIGHT_GRAY);
       }
 
       term.setCursorPos({ x: 0, y: height - 2 });

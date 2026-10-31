@@ -14,7 +14,7 @@
 // (JS_MIGRATION Phase 11.28).
 
 import fs     from 'fs';
-import { Term, Key } from '/rom/lib/term';
+import { ColorIndex, Term, Key } from '/rom/lib/term';
 
 /** Shortcuts: the key pressed with Ctrl. */
 const SHORTCUT_SAVE = Key.KEY_S, SHORTCUT_QUIT = Key.KEY_Q;
@@ -91,8 +91,8 @@ export function main(args: string[], cwd: string): void {
 
     function drawBar(width: number, height: number): void {
         term.setCursorPos({ x: 0, y: height - 1 });
-        term.setBackgroundColor(canColor ? 'lightGray' : 'black');
-        term.setTextColor(canColor ? 'black' : 'white');
+        term.setBackgroundColor(canColor ? ColorIndex.LIGHT_GRAY : ColorIndex.BLACK);
+        term.setTextColor(canColor ? ColorIndex.BLACK : ColorIndex.WHITE);
         if (menuOpen) {
             let s = ' ';
             for (let i = 0; i < MENU.length; i++) {
@@ -107,15 +107,15 @@ export function main(args: string[], cwd: string): void {
             let room = Math.max(0, width - right.length - 1);
             term.write(pad(text, room) + ' ' + right);
         }
-        term.setBackgroundColor('black');
-        term.setTextColor('white');
+        term.setBackgroundColor(ColorIndex.BLACK);
+        term.setTextColor(ColorIndex.WHITE);
     }
 
     function draw(): void {
         const { width, height } = term.getSize();
         const editHeight = height - 1;
-        term.setBackgroundColor('black');
-        term.setTextColor('white');
+        term.setBackgroundColor(ColorIndex.BLACK);
+        term.setTextColor(ColorIndex.WHITE);
         for (let row = 0; row < editHeight; row++) {
             term.setCursorPos({ x: 0, y: row });
             let line = lines[scrollY + row] ?? '';
@@ -280,8 +280,8 @@ export function main(args: string[], cwd: string): void {
             onKey(key);
         }
     } finally {
-        term.setBackgroundColor('black');
-        term.setTextColor('white');
+        term.setBackgroundColor(ColorIndex.BLACK);
+        term.setTextColor(ColorIndex.WHITE);
         term.clear();
         term.setCursorPos({ x: 0, y: 0 });
         term.setCursorBlink(true);

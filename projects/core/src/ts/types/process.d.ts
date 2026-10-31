@@ -53,6 +53,11 @@ interface TtyWriteStream extends Writable {
     hasColors(count?: number | object): boolean;
     getColorDepth(): number;
     /**
+     * CC extension: the color index `index` (0–15) shows on the device (see Term.setPaletteColor), or `undefined` for
+     * a virtual TTY.
+     */
+    getPaletteColor(index: number): Color | undefined;
+    /**
      * `'resize'` fires when the TTY changes its size (the native `tty_resize` event: a monitor that grew or changed its
      * text scale, a virtual TTY given a new size; the consoles of the screen never change size). Its listeners belong
      * to the calling thread, like `events.on` listeners. Other events are accepted but never fired.

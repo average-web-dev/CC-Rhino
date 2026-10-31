@@ -7,13 +7,17 @@
 //   import { Term } from 'term';
 //   const term = new Term();                   // the program's own: process.stdout / process.stdin
 //   const mon = new Term(TTY.from(monitor.getTty()));
-//   term.setTextColor('red'); term.write('red'); term.setCursorPos({ x: 0, y: 2 }); term.blit('ab', '0e', 'ff');
+//   term.setTextColor(ColorIndex.RED); term.write('red'); term.setCursorPos({ x: 0, y: 2 }); term.blit('ab', '0e', 'ff');
+//   term.setPaletteColor(ColorIndex.BLUE, Color.from('#87ceeb'));   // index 4 now shows sky blue on this TTY
 //
 // A Term only writes ANSI escape sequences into its TTY (and reads from it): whatever shows the TTY (a console of the
 // screen, a monitor) draws them, and the same program works on a virtual TTY. So:
-// - Colors are named ('red', 'lightGray', … — the keys of ColorIndex, which maps them to the TTY's color indices). The
-//   colors set with setTextColor / setBackgroundColor apply to what is written through this Term only: each write
+// - Colors are the TTY's color indices 0–15 (ColorIndex names them after the default palette: ColorIndex.RED is 1).
+//   The colors set with setTextColor / setBackgroundColor apply to what is written through this Term only: each write
 //   selects its colors and resets them afterwards (other output, e.g. console.log, keeps the default colors).
+// - What an index shows is the TTY's palette: setPaletteColor changes it for everything on the TTY (also what is
+//   already on screen), until resetPalette; it stays after the program ends, as on Linux. getPaletteColor reads it
+//   from the device.
 // - The Term keeps track of its cursor itself (it knows what it wrote); others writing to the same TTY move the real
 //   cursor without it noticing, so setCursorPos before drawing is the safe pattern.
 // - write() cuts text off at the Term's width (the TTY's, unless set with setSize), so drawing never scrolls; print()
@@ -27,26 +31,24 @@
 
 import { TTY, CSI } from '/rom/lib/tty';
 import { decodeInput, stripMouse, toLegacy, Key, InputType, MouseAction, MouseButton } from '/rom/lib/internal/keys';
+import { Color } from '/rom/lib/color';
 import { ERR_INVALID_ARG_VALUE } from '/rom/lib/internal/errors';
-import { validateNumber, validateOneOf, validateString } from '/rom/lib/internal/validators';
+import { validateInteger, validateNumber, validateString } from '/rom/lib/internal/validators';
 
 /** The physical keys (`event.code`), and the constants for readInput()'s results. */
 export { Key, InputType, MouseAction, MouseButton };
 
-
 /**
- * The 16 colors by name, with their index on the TTY (as CSI.color takes it). The TTY shows each index as one CC color;
- * changing what an index shows (the palette) is #54.
+ * The 16 color indices of a TTY (as CSI.color and setTextColor take them), named after the CC color each shows by
+ * default; setPaletteColor changes what an index shows.
  */
 export const ColorIndex = Object.freeze({
-    black: 0, red: 1, green: 2, brown: 3, blue: 4, purple: 5, cyan: 6, lightGray: 7, lightGrey: 7,
-    gray: 8, grey: 8, pink: 9, lime: 10, yellow: 11, lightBlue: 12, magenta: 13, orange: 14, white: 15,
+    BLACK: 0, RED: 1, GREEN: 2, BROWN: 3, BLUE: 4, PURPLE: 5, CYAN: 6, LIGHT_GRAY: 7, LIGHT_GREY: 7,
+    GRAY: 8, GREY: 8, PINK: 9, LIME: 10, YELLOW: 11, LIGHT_BLUE: 12, MAGENTA: 13, ORANGE: 14, WHITE: 15,
 } as const);
 
-/** A color's name (a key of ColorIndex). */
-export type ColorName = keyof typeof ColorIndex;
-
-const COLOR_NAMES = Object.keys(ColorIndex) as ColorName[];
+/** A color index, 0–15 (one of the ColorIndex values): the type of Term's color methods, like a numeric enum. */
+export type ColorIndex = typeof ColorIndex[keyof typeof ColorIndex];
 
 /** A position on a terminal, starting at 0. */
 export interface CursorPosition { x: number; y: number; }
@@ -60,8 +62,8 @@ export class Term {
     #x = 0;
     #y = 0;
     #size: TermSize | null = null;
-    #fg: ColorName = 'white';
-    #bg: ColorName = 'black';
+    #fg: ColorIndex = ColorIndex.WHITE;
+    #bg: ColorIndex = ColorIndex.BLACK;
     #blink = false;
     /** Input read from the TTY but not consumed yet. */
     #text = '';
@@ -111,26 +113,44 @@ export class Term {
 
     // ── Colors ───────────────────────────────────────────────────────────────────
 
-    getTextColor(): ColorName { return this.#fg; }
+    getTextColor(): ColorIndex { return this.#fg; }
 
-    setTextColor(color: ColorName): void {
-        validateOneOf(color, 'color', COLOR_NAMES);
-        this.#fg = color;
+    /** The color index (0–15, see ColorIndex) text is written in. */
+    setTextColor(index: ColorIndex): void {
+        validateInteger(index, 'index', 0, 15);
+        this.#fg = index;
     }
 
-    getBackgroundColor(): ColorName { return this.#bg; }
+    getBackgroundColor(): ColorIndex { return this.#bg; }
 
-    setBackgroundColor(color: ColorName): void {
-        validateOneOf(color, 'color', COLOR_NAMES);
-        this.#bg = color;
+    /** The color index (0–15, see ColorIndex) behind the text. */
+    setBackgroundColor(index: ColorIndex): void {
+        validateInteger(index, 'index', 0, 15);
+        this.#bg = index;
     }
 
     /** The SGR sequence selecting this Term's colors ('' for the defaults). */
     #colors(): string {
-        let fg = ColorIndex[this.#fg];
-        let bg = ColorIndex[this.#bg];
-        if (fg === ColorIndex.white && bg === ColorIndex.black) return '';
-        return CSI.color(fg, bg);
+        if (this.#fg === ColorIndex.WHITE && this.#bg === ColorIndex.BLACK) return '';
+        return CSI.color(this.#fg, this.#bg);
+    }
+
+    // ── Palette ──────────────────────────────────────────────────────────────────
+
+    /** Let color `index` (0–15) show `color` on the whole TTY (a translucent color is taken over black). */
+    setPaletteColor(index: ColorIndex, color: Color): void {
+        this.#out(CSI.setPaletteColor(index, color));
+    }
+
+    /** The color index `index` (0–15) shows on the device, or undefined on a virtual TTY. */
+    getPaletteColor(index: ColorIndex): Color | undefined {
+        let color = this.#output.getPaletteColor(index);
+        return color === undefined ? undefined : Color.from(color);
+    }
+
+    /** Let color `index` (or, without one, every color) show its default again. */
+    resetPalette(index?: ColorIndex): void {
+        this.#out(CSI.resetPalette(index));
     }
 
     // ── Drawing ──────────────────────────────────────────────────────────────────

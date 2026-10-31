@@ -8,6 +8,7 @@ import * as prelude from './prelude';
 import asyncMod from 'async';
 import { CSI, TTY, ReadStream, WriteStream, isatty, decodeInput, InputType, MouseAction, MouseButton } from 'tty';
 import { Term, Key, ColorIndex } from 'term';
+import { Color } from 'color';
 
 const eq = prelude.eq, throws = prelude.throws;
 
@@ -184,21 +185,42 @@ same(term.getCursorPos(), { x: 0, y: 2 });
 term.setCursorPos({ x: 2, y: 1 });
 v.readOutput();
 
-term.setTextColor('red');
-term.setBackgroundColor('brown');
+term.setTextColor(ColorIndex.RED);
+term.setBackgroundColor(ColorIndex.BROWN);
 term.write('x');
 eq(v.readOutput(), '\x1b[38;5;1;48;5;3mx\x1b[0m', 'colors apply to this write only');
-eq(term.getTextColor(), 'red');
-eq(term.getBackgroundColor(), 'brown');
-throws(() => term.setTextColor(3 as any), 'ERR_INVALID_ARG_VALUE');
-throws(() => term.setTextColor('rot' as any), 'ERR_INVALID_ARG_VALUE');
-term.setTextColor('white');
-term.setBackgroundColor('black');
-eq(ColorIndex.grey, ColorIndex.gray, 'British spellings');
+eq(term.getTextColor(), 1);
+eq(term.getBackgroundColor(), 3);
+// @ts-expect-error: not a ColorIndex (TypeScript rejects it; plain JS gets the error).
+throws(() => term.setTextColor(16), 'ERR_OUT_OF_RANGE');
+const background: ColorIndex = term.getBackgroundColor();
+eq(background, ColorIndex.BROWN);
+throws(() => term.setTextColor('red' as any), 'ERR_INVALID_ARG_TYPE');
+term.setTextColor(ColorIndex.WHITE);
+term.setBackgroundColor(ColorIndex.BLACK);
+eq(ColorIndex.GREY, ColorIndex.GRAY, 'British spellings');
 eq(new Set(Object.values(ColorIndex)).size, 16, 'one index per color');
 eq(Object.isFrozen(ColorIndex), true);
 eq(CSI.color(15, 0), '\x1b[38;5;15;48;5;0m');
 throws(() => CSI.color(16), 'ERR_OUT_OF_RANGE');
+
+// The palette: what an index shows, set with OSC 4 and read back from the device.
+term.setPaletteColor(ColorIndex.BLUE, Color.from('#87ceeb'));
+term.setPaletteColor(ColorIndex.RED, new Color(255, 0, 0, 0.5));
+eq(v.readOutput(), '\x1b]4;4;rgb:87/ce/eb\x1b\\\x1b]4;1;rgb:7f/00/00\x1b\\', 'translucent: taken over black');
+term.resetPalette(4);
+term.resetPalette();
+eq(v.readOutput(), '\x1b]104;4\x1b\\\x1b]104\x1b\\');
+eq(term.getPaletteColor(4), undefined, 'a virtual TTY has no device');
+// @ts-expect-error: not a ColorIndex.
+throws(() => term.setPaletteColor(16, new Color(0, 0, 0)), 'ERR_OUT_OF_RANGE');
+throws(() => term.setPaletteColor(1, '#ff0000' as any), 'ERR_INVALID_ARG_TYPE', 'only Colors');
+const screenTerm = new Term(); // process.stdout: a console of the screen
+eq(String(screenTerm.getPaletteColor(ColorIndex.BLUE)), '#3366cc', 'the default');
+screenTerm.setPaletteColor(ColorIndex.BLUE, new Color(1, 2, 3));
+eq(String(screenTerm.getPaletteColor(ColorIndex.BLUE)), '#010203');
+screenTerm.resetPalette();
+eq(String(screenTerm.getPaletteColor(ColorIndex.BLUE)), '#3366cc');
 
 term.setCursorPos({ x: 0, y: 2 });
 term.blit('hi', '0e', 'ff');

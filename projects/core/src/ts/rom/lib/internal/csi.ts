@@ -5,6 +5,8 @@
 // /rom/lib/internal/csi.ts — the escape sequences the ROM writes to a TTY (like Node's CSI in
 // lib/internal/readline/utils.js). Public as `tty.CSI`; util and console use it from here, so they do not load tty.
 
+import { Color } from '/rom/lib/color';
+import { ERR_INVALID_ARG_TYPE } from '/rom/lib/internal/errors';
 import { validateInteger } from '/rom/lib/internal/validators';
 
 const ESC = '\x1b';
@@ -43,6 +45,26 @@ export const CSI = {
             out += `;48;5;${bg}`;
         }
         return out + 'm';
+    },
+    /**
+     * Let color `index` (0–15, as color() takes it) show `color` on this TTY only, until resetPalette() (xterm's OSC 4).
+     * A terminal shows opaque colors, so a translucent one is taken over black: #ff0000 with alpha 0.5 is #7f0000.
+     */
+    setPaletteColor(index: number, color: Color): string {
+        validateInteger(index, 'index', 0, 15);
+        if (!(color instanceof Color)) throw new ERR_INVALID_ARG_TYPE('color', 'Color', color);
+        let hex = (channel: number) => {
+            let n = Math.floor(channel * color.a);
+            return (n < 16 ? '0' : '') + n.toString(16);
+        };
+        let { r, g, b } = color;
+        return `${ESC}]4;${index};rgb:${hex(r)}/${hex(g)}/${hex(b)}${ESC}\\`;
+    },
+    /** Let color `index` (or, without one, every color) show its default again (xterm's OSC 104). */
+    resetPalette(index?: number): string {
+        if (index === undefined) return `${ESC}]104${ESC}\\`;
+        validateInteger(index, 'index', 0, 15);
+        return `${ESC}]104;${index}${ESC}\\`;
     },
     /** Scroll the contents up by `n` rows (down if negative). */
     scroll(n: number): string {
