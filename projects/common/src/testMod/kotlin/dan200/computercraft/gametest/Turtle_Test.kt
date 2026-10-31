@@ -9,6 +9,7 @@ import dan200.computercraft.api.ComputerCraftTags
 import dan200.computercraft.api.detail.ComponentDetailProvider
 import dan200.computercraft.api.detail.VanillaDetailRegistries
 import dan200.computercraft.api.scripting.Result as ScriptResult
+import dan200.computercraft.api.scripting.ScriptException
 import dan200.computercraft.api.turtle.ITurtleUpgrade
 import dan200.computercraft.api.turtle.TurtleSide
 import dan200.computercraft.api.upgrades.UpgradeData
@@ -51,6 +52,7 @@ import net.minecraft.world.level.block.BeehiveBlock
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.ComposterBlock
 import net.minecraft.world.level.block.FenceBlock
+import net.minecraft.world.level.block.StandingSignBlock
 import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import org.hamcrest.MatcherAssert.assertThat
@@ -101,6 +103,28 @@ class Turtle_Test {
     }
 
     /**
+     * Checks turtles place blocks as if looking the way they were asked to (any direction, like a player), and report
+     * which way they face.
+     *
+     * @see [#55](https://github.com/average-web-dev/CC-Rhino/issues/55)
+     */
+    @GameTest
+    fun Place_looking(helper: GameTestHelper) = helper.sequence {
+        thenOnComputer {
+            assertEquals(TurtleAPI.DirectionVector(0.0, 0.0, -1.0), turtle.getFacing(), "Faces north")
+            assertThrows(ScriptException::class.java) {
+                turtle.place(Optional.of(TurtleAPI.PlaceOptions(null, TurtleAPI.DirectionVector(0.0, 0.0, 0.0))))
+            }
+            turtle.place(Optional.of(TurtleAPI.PlaceOptions(null, TurtleAPI.DirectionVector(1.0, 0.0, -1.0))))
+                .awaitValue().assertResult(true, message = "Placed sign")
+        }
+        thenExecute {
+            // Looking north-east (yaw -135°): the standing sign turns towards the turtle, rotation step 2 of 16.
+            helper.assertBlockHas(BlockPos(2, 2, 1), StandingSignBlock.ROTATION, 2)
+        }
+    }
+
+    /**
      * Checks turtles can write to signs.
      *
      * @see [#1611](https://github.com/cc-tweaked/CC-Tweaked/issues/1611)
@@ -108,7 +132,7 @@ class Turtle_Test {
     @GameTest
     fun Place_sign(helper: GameTestHelper) = helper.sequence {
         thenOnComputer {
-            turtle.place(Optional.of("Test\nmessage")).awaitValue()
+            turtle.place(Optional.of(TurtleAPI.PlaceOptions("Test\nmessage", null))).awaitValue()
                 .assertResult(true, message = "Placed sign")
         }
         thenExecute {

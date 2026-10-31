@@ -17,6 +17,7 @@ import dan200.computercraft.shared.platform.EnergyHandle;
 import dan200.computercraft.shared.platform.PlatformHelper;
 import dan200.computercraft.shared.turtle.core.*;
 import dan200.computercraft.shared.util.DirectionUtil;
+import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
@@ -183,6 +184,19 @@ public class TurtleAPI implements IComputerAPI {
     }
 
     /**
+     * The direction the turtle faces in the world: north, south, east or west, as a vector ({@code { x: 0, y: 0, z: -1 }}
+     * is north). GPS tells a turtle where it is, this which way it looks; {@code Vector.from(turtle.getFacing())} makes
+     * it a {@code geometry} Vector.
+     *
+     * @return The direction the turtle faces.
+     */
+    @ScriptFunction
+    public final DirectionVector getFacing() {
+        var facing = turtle.getDirection();
+        return new DirectionVector(facing.getStepX(), facing.getStepY(), facing.getStepZ());
+    }
+
+    /**
      * Attempt to break the block in front of the turtle.
      * <p>
      * This requires a turtle tool capable of breaking the block. Diamond pickaxes
@@ -229,48 +243,90 @@ public class TurtleAPI implements IComputerAPI {
     }
 
     /**
+     * A direction in the world as a vector, as {@code geometry}'s {@code Vector} has it: east is +x, up +y, south +z
+     * (north is -z).
+     *
+     * @param x East (+) or west (-).
+     * @param y Up (+) or down (-).
+     * @param z South (+) or north (-).
+     * @cc-r.interface
+     */
+    public record DirectionVector(double x, double y, double z) {
+    }
+
+    /**
+     * Options for {@link #place}, {@link #placeUp} and {@link #placeDown}.
+     *
+     * @param text When placing a sign, set its contents to this text.
+     * @param look Place as if the turtle looked this way, like a player looking in that direction: any vector but the
+     *             zero vector (e.g. {@code Vector.EAST}, or {@code { x: 1, y: 0, z: -1 }} for north-east). The block
+     *             decides what that means, as for a player: a furnace faces back at the turtle, stairs face away, a
+     *             standing sign turns in 16 steps. Defaults to where the turtle looks (forwards, or up / down).
+     * @cc-r.interface
+     * @cc-r.options
+     */
+    public record PlaceOptions(@Nullable String text, @Nullable DirectionVector look) {
+    }
+
+    private MethodResult place(InteractDirection direction, Optional<PlaceOptions> options) throws ScriptException {
+        var text = options.map(PlaceOptions::text).orElse(null);
+        var look = options.map(PlaceOptions::look).orElse(null);
+        Vec3 lookVector = null;
+        if (look != null) {
+            lookVector = new Vec3(look.x(), look.y(), look.z());
+            if (!Double.isFinite(lookVector.lengthSqr()) || lookVector.lengthSqr() == 0) {
+                throw new ScriptException("look must be a finite, non-zero vector");
+            }
+        }
+        return trackCommand(new TurtlePlaceCommand(direction, text, lookVector));
+    }
+
+    /**
      * Place a block or item into the world in front of the turtle.
      * <p>
      * "Placing" an item allows it to interact with blocks and entities in front of the turtle. For instance, buckets
      * can pick up and place down fluids, and wheat can be used to breed cows. However, you cannot use {@link #place} to
      * perform arbitrary block interactions, such as clicking buttons or flipping levers.
      *
-     * @param text When placing a sign, set its contents to this text.
+     * @param options The sign text, and the direction to place the block looking in (see {@link PlaceOptions}).
      * @return The turtle command result.
+     * @throws ScriptException If {@code look} is the zero vector.
      * @cc-r.return Result
      * @cc.since 1.4
      */
     @ScriptFunction
-    public final MethodResult place(Optional<String> text) {
-        return trackCommand(new TurtlePlaceCommand(InteractDirection.FORWARD, text.orElse(null)));
+    public final MethodResult place(Optional<PlaceOptions> options) throws ScriptException {
+        return place(InteractDirection.FORWARD, options);
     }
 
     /**
      * Place a block or item into the world above the turtle.
      *
-     * @param text When placing a sign, set its contents to this text.
+     * @param options The sign text, and the direction to place the block looking in (see {@link PlaceOptions}).
      * @return The turtle command result.
+     * @throws ScriptException If {@code look} is the zero vector.
      * @cc-r.return Result
      * @cc.since 1.4
      * @see #place For more information about placing items.
      */
     @ScriptFunction
-    public final MethodResult placeUp(Optional<String> text) {
-        return trackCommand(new TurtlePlaceCommand(InteractDirection.UP, text.orElse(null)));
+    public final MethodResult placeUp(Optional<PlaceOptions> options) throws ScriptException {
+        return place(InteractDirection.UP, options);
     }
 
     /**
      * Place a block or item into the world below the turtle.
      *
-     * @param text When placing a sign, set its contents to this text.
+     * @param options The sign text, and the direction to place the block looking in (see {@link PlaceOptions}).
      * @return The turtle command result.
+     * @throws ScriptException If {@code look} is the zero vector.
      * @cc-r.return Result
      * @cc.since 1.4
      * @see #place For more information about placing items.
      */
     @ScriptFunction
-    public final MethodResult placeDown(Optional<String> text) {
-        return trackCommand(new TurtlePlaceCommand(InteractDirection.DOWN, text.orElse(null)));
+    public final MethodResult placeDown(Optional<PlaceOptions> options) throws ScriptException {
+        return place(InteractDirection.DOWN, options);
     }
 
     /**

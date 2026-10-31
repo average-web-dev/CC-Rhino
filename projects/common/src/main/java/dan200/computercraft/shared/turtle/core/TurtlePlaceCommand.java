@@ -39,10 +39,22 @@ import org.jspecify.annotations.Nullable;
 public class TurtlePlaceCommand implements TurtleCommand {
     private final InteractDirection direction;
     private final @Nullable String signText;
+    private final @Nullable Vec3 look;
 
     public TurtlePlaceCommand(InteractDirection direction, @Nullable String signText) {
+        this(direction, signText, null);
+    }
+
+    /**
+     * @param direction Where to place.
+     * @param signText  The text of a placed sign.
+     * @param look      The direction the turtle looks in while placing a block (any non-zero vector), or {@code null}
+     *                  for the direction it places in.
+     */
+    public TurtlePlaceCommand(InteractDirection direction, @Nullable String signText, @Nullable Vec3 look) {
         this.direction = direction;
         this.signText = signText;
+        this.look = look;
     }
 
     @Override
@@ -61,7 +73,7 @@ public class TurtlePlaceCommand implements TurtleCommand {
         // Do the deploying
         turtlePlayer.loadInventory(turtle);
         var message = new ErrorMessage();
-        var result = deploy(stack, turtle, turtlePlayer, direction, signText, message);
+        var result = deploy(stack, turtle, turtlePlayer, direction, signText, look, message);
         turtlePlayer.unloadInventory(turtle);
         if (result) {
             // Animate and return success
@@ -76,7 +88,7 @@ public class TurtlePlaceCommand implements TurtleCommand {
 
     private static boolean deploy(
         ItemStack stack, ITurtleAccess turtle, TurtlePlayer turtlePlayer, Direction direction,
-        @Nullable String signText, @Nullable ErrorMessage outErrorMessage
+        @Nullable String signText, @Nullable Vec3 look, @Nullable ErrorMessage outErrorMessage
     ) {
         // Deploy on an entity
         if (deployOnEntity(turtle, turtlePlayer)) return true;
@@ -86,13 +98,13 @@ public class TurtlePlaceCommand implements TurtleCommand {
 
         // Try to deploy against a block. Tries the following options:
         //     Deploy on the block immediately in front
-        return deployOnBlock(stack, turtle, turtlePlayer, newPosition, direction.getOpposite(), signText, true, outErrorMessage)
+        return deployOnBlock(stack, turtle, turtlePlayer, newPosition, direction.getOpposite(), signText, look, true, outErrorMessage)
             // Deploy on the block one block away
-            || deployOnBlock(stack, turtle, turtlePlayer, newPosition.relative(direction), direction.getOpposite(), signText, false, outErrorMessage)
+            || deployOnBlock(stack, turtle, turtlePlayer, newPosition.relative(direction), direction.getOpposite(), signText, look, false, outErrorMessage)
             // Deploy down on the block in front
-            || (direction.getAxis() != Direction.Axis.Y && deployOnBlock(stack, turtle, turtlePlayer, newPosition.below(), Direction.UP, signText, false, outErrorMessage))
+            || (direction.getAxis() != Direction.Axis.Y && deployOnBlock(stack, turtle, turtlePlayer, newPosition.below(), Direction.UP, signText, look, false, outErrorMessage))
             // Deploy back onto the turtle
-            || deployOnBlock(stack, turtle, turtlePlayer, position, direction, signText, false, outErrorMessage);
+            || deployOnBlock(stack, turtle, turtlePlayer, position, direction, signText, look, false, outErrorMessage);
     }
 
     private static boolean deployOnEntity(ITurtleAccess turtle, TurtlePlayer turtlePlayer) {
@@ -158,12 +170,14 @@ public class TurtlePlaceCommand implements TurtleCommand {
 
     private static boolean deployOnBlock(
         ItemStack stack, ITurtleAccess turtle, TurtlePlayer turtlePlayer, BlockPos position, Direction side,
-        @Nullable String signText, boolean adjacent, @Nullable ErrorMessage outErrorMessage
+        @Nullable String signText, @Nullable Vec3 look, boolean adjacent, @Nullable ErrorMessage outErrorMessage
     ) {
-        // Re-orient the fake player
+        // Re-orient the fake player, looking the requested way if there is one (the entity check before looked where
+        // the turtle places).
         var playerDir = side.getOpposite();
         var playerPosition = position.relative(side);
         turtlePlayer.setPosition(turtle, playerPosition, playerDir);
+        if (look != null) turtlePlayer.look(look);
 
         // Check if there's something suitable to place onto
         var hit = getHitResult(position, side);

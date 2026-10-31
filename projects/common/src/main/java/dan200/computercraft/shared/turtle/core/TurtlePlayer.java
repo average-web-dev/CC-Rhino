@@ -17,6 +17,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -82,6 +83,20 @@ public final class TurtlePlayer {
     private void setRotation(float y, float x) {
         player.setYRot(y);
         player.setXRot(x);
+    }
+
+    /**
+     * Look along {@code direction} (any non-zero vector), as a player would: the yaw and pitch of that direction. Looking
+     * straight up or down keeps the current yaw.
+     *
+     * @param direction The direction to look in.
+     */
+    public void look(Vec3 direction) {
+        var horizontal = Math.sqrt(direction.x * direction.x + direction.z * direction.z);
+        var yaw = horizontal == 0 ? player.getYRot() : (float) Math.toDegrees(Math.atan2(-direction.x, direction.z));
+        setRotation(yaw, (float) Math.toDegrees(Math.atan2(-direction.y, horizontal)));
+        player.xRotO = player.getXRot();
+        player.yHeadRotO = player.yHeadRot = player.yRotO = player.getYRot();
     }
 
     private void setState(ITurtleAccess turtle) {
