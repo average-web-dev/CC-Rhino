@@ -5,6 +5,7 @@
 // /rom/lib/system.ts — `system`: the computer. Everything of the native module `internal/system` (id, label, clock,
 // time, sleep, shutdown, timers, …), plus the running programs (#60):
 //
+//   system.formatTime(system.time())          the time of day as "6:30 PM" (or "18:30")
 //   system.processes()                        every running program (ProcessInfo: pid, ppid, argv, cwd, tty, …)
 //   system.process(pid)                       one of them, or undefined
 //   system.on('processStart', (p) => …)       a program started
@@ -18,6 +19,7 @@
 import native from 'internal/system';
 import events from 'events';
 import { validateInteger, validateOneOf } from '/rom/lib/internal/validators';
+import { ERR_INVALID_ARG_TYPE } from '/rom/lib/internal/errors';
 import type * as Jobs from '/rom/lib/internal/tty';
 
 export const startTimer = native.startTimer;
@@ -39,6 +41,19 @@ export const epoch = native.epoch;
 export const sleep = native.sleep;
 const yield_ = native.yield;
 export { yield_ as yield };
+
+/**
+ * A time of day (hours 0–24, as system.time() returns it; default: now) as "6:30 PM", or with `hour12` false as
+ * "18:30" (CraftOS's textutils.formatTime).
+ */
+export function formatTime(time: number = native.time(), hour12 = true): string {
+    if (typeof time !== 'number' || !isFinite(time)) throw new ERR_INVALID_ARG_TYPE('time', 'number', time);
+    let minutes = Math.floor(((time % 24) + 24) % 24 * 60);
+    let h = Math.floor(minutes / 60);
+    let m = String(minutes % 60).padStart(2, '0');
+    if (!hour12) return `${h}:${m}`;
+    return `${h % 12 === 0 ? 12 : h % 12}:${m} ${h < 12 ? 'AM' : 'PM'}`;
+}
 
 function jobs(): typeof Jobs {
     return require('/rom/lib/internal/tty') as typeof Jobs;

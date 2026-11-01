@@ -50,7 +50,7 @@ const expected: Record<string, [string, string[]]> = {
     'geometry': ['object', ['Point', 'Vector']],
     'color': ['object', ['Color', 'Dye']],
     'system': ['object', ['Signal', 'cancelAlarm', 'cancelTimer', 'clock', 'computerID', 'computerLabel', 'day',
-        'epoch', 'getComputerID', 'getComputerLabel', 'getHost', 'off', 'on', 'once', 'process', 'processes', 'reboot',
+        'epoch', 'formatTime', 'getComputerID', 'getComputerLabel', 'getHost', 'off', 'on', 'once', 'process', 'processes', 'reboot',
         'setAlarm', 'setComputerLabel', 'shutdown', 'sleep', 'startTimer', 'time', 'yield']],
     'system/promises': ['object', ['cancelAlarm', 'cancelTimer', 'clock', 'computerID', 'computerLabel', 'day',
         'epoch', 'getComputerID', 'getComputerLabel', 'getHost', 'process', 'processes', 'reboot', 'setAlarm',

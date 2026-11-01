@@ -33,7 +33,7 @@
 import { TTY, CSI } from '/rom/lib/tty';
 import { decodeFirst, stripMouse, toLegacy, Key, InputType, MouseAction, MouseButton } from '/rom/lib/internal/keys';
 import { Color } from '/rom/lib/color';
-import { ERR_INVALID_ARG_VALUE } from '/rom/lib/internal/errors';
+import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE } from '/rom/lib/internal/errors';
 import { validateInteger, validateNumber, validateString } from '/rom/lib/internal/validators';
 
 /** The physical keys (`event.code`), and the constants for readInput()'s results. */
@@ -247,6 +247,94 @@ export class Term {
     scroll(n: number): void {
         let sequence = CSI.scroll(n);
         if (sequence !== '') this.#out(sequence);
+    }
+
+    // ── Text layout ──────────────────────────────────────────────────────────────
+
+    /**
+     * Print lists of words in columns as wide as the longest word (like `ls`; CraftOS's textutils.tabulate): each list
+     * starts on a new row; a ColorIndex in between switches the text color for the lists after it. The Term's text
+     * color is restored afterwards.
+     */
+    tabulate(...groups: (readonly string[] | ColorIndex)[]): void {
+        let width = this.getSize().width;
+        let longest = 0;
+        for (let group of groups) {
+            if (typeof group === 'number') {
+                validateInteger(group, 'color', 0, 15);
+                continue;
+            }
+            if (!Array.isArray(group)) throw new ERR_INVALID_ARG_TYPE('groups', ['Array', 'number'], group);
+            for (let item of group) {
+                validateString(item, 'item');
+                longest = Math.max(longest, item.length);
+            }
+        }
+        // Columns at least an eighth of the width wide, one space between them.
+        let column = Math.max(width / 8, longest + 1);
+        let columns = Math.max(1, Math.floor(width / column));
+        let saved = this.#fg;
+        try {
+            for (let group of groups) {
+                if (typeof group === 'number') {
+                    this.#fg = group;
+                    continue;
+                }
+                for (let start = 0; start < group.length; start += columns) {
+                    let line = '';
+                    for (let i = 0; i < columns && start + i < group.length; i++) {
+                        line = line.padEnd(Math.floor(i * column), ' ') + group[start + i];
+                    }
+                    this.write(line + '\n');
+                }
+            }
+        } finally {
+            this.#fg = saved;
+        }
+    }
+
+    /**
+     * Print text a screen at a time (CraftOS's textutils.pagedPrint): after each screen full it asks to "Press any key
+     * to continue" and waits for a key (in raw mode for the moment). Returns false if `q` was pressed (the rest is not
+     * printed) or the input ended.
+     */
+    page(text: string): boolean {
+        validateString(text, 'text');
+        let { width, height } = this.getSize();
+        let rows = 0;
+        for (let line of text.split('\n')) {
+            let chunks: string[] = [];
+            for (let i = 0; i < line.length; i += width) chunks.push(line.slice(i, i + width));
+            if (chunks.length === 0) chunks.push('');
+            for (let chunk of chunks) {
+                if (rows >= height - 1) {
+                    if (!this.#waitForMore()) return false;
+                    rows = 0;
+                }
+                this.print(chunk);
+                rows++;
+            }
+        }
+        return true;
+    }
+
+    /** The pager's prompt: true to go on, false for `q` or the end of input. */
+    #waitForMore(): boolean {
+        let saved = this.#fg;
+        this.#fg = ColorIndex.LIGHT_GRAY;
+        this.write('Press any key to continue');
+        this.#fg = saved;
+        let raw = this.#input.isRaw;
+        if (!raw) this.#input.setRawMode(true);
+        let key: TtyKeyInput | undefined;
+        try {
+            key = this.readKey();
+        } finally {
+            if (!raw) this.#input.setRawMode(false);
+        }
+        this.write('\r');
+        this.clearLine();
+        return key !== undefined && key.key !== 'q' && key.key !== 'Q';
     }
 
     // ── Input ────────────────────────────────────────────────────────────────────

@@ -59,6 +59,16 @@ interface Term {
     /** Scroll the contents up by `n` rows (down if negative). */
     scroll(n: number): void;
     /**
+     * Print lists of words in columns as wide as the longest word (like `ls`): each list starts on a new row; a
+     * ColorIndex in between switches the text color for the lists after it (restored afterwards).
+     */
+    tabulate(...groups: (readonly string[] | ColorIndex)[]): void;
+    /**
+     * Print text a screen at a time, asking to "Press any key to continue" after each; false if `q` was pressed or the
+     * input ended.
+     */
+    page(text: string): boolean;
+    /**
      * Wait for the next input: a keyboard event ('keydown' / 'keyup') or (after `CSI.mouse(true)`) a mouse event, or
      * `undefined` at end of input. Compare `type` against InputType, `code` against Key, `action` against MouseAction,
      * `button` against MouseButton.

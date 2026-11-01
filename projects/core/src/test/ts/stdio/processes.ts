@@ -106,3 +106,15 @@ eq(killRun.status, 0, killRun.stderr);
 eq(waitExit(sleeper).join(), ',SIGKILL');
 eq(spawnSync('/rom/os/bin/kill', ['12345'], { stdio: 'pipe' }).stderr, 'kill: (12345) - No such process\n');
 eq(spawnSync('/rom/os/bin/kill', ['-l'], { stdio: 'pipe' }).stdout, '2) SIGINT  9) SIGKILL  15) SIGTERM\n');
+
+// ── system.formatTime: a time of day, 12- or 24-hour ───────────────────────────────────────────────────────────────
+
+eq(system.formatTime(0), '12:00 AM');
+eq(system.formatTime(6.5), '6:30 AM');
+eq(system.formatTime(18.5), '6:30 PM');
+eq(system.formatTime(12.25), '12:15 PM');
+eq(system.formatTime(24), '12:00 AM', 'wraps at 24');
+eq(system.formatTime(18.5, false), '18:30');
+eq(system.formatTime(0.05, false), '0:03');
+eq(typeof system.formatTime(), 'string', 'now by default');
+prelude.throws(() => system.formatTime('6' as any), 'ERR_INVALID_ARG_TYPE');

@@ -10,6 +10,7 @@ import { CSI, TTY, ReadStream, WriteStream, isatty, decodeInput, InputType, Mous
 import { Term, Key, ColorIndex } from 'term';
 import { Color } from 'color';
 import events from 'events';
+import util from 'util';
 
 const eq = prelude.eq, throws = prelude.throws;
 
@@ -286,3 +287,27 @@ b.stderr.write('\x07');
 events.off('tty_bell', bell);
 same(bells, [b.handle.getId(), b.handle.getId()], 'once per write, from stdout and stderr');
 eq(b.readOutput(), 'a\x07b\x07\x1b]4;1;rgb:ff/00/00\x07\x1b]104\x1b\\no bell', 'the BEL is still written');
+
+// ── Term.tabulate / Term.page ───────────────────────────────────────────────────────────────────────────────────────
+
+const tab = new TTY(20, 4);
+const tabTerm = new Term(tab);
+tabTerm.tabulate(['a', 'bb', 'ccc', 'dddd', 'e'], ColorIndex.LIME, ['x']);
+// Columns are max(20 / 8, 4 + 1) = 5 wide: four per row; the lime list starts a new row.
+eq(tab.readOutput(), 'a    bb   ccc  dddd\r\ne\r\n' + CSI.color(ColorIndex.LIME, ColorIndex.BLACK) + 'x\r\n' + CSI.reset);
+eq(tabTerm.getTextColor(), ColorIndex.WHITE, 'the text color is restored');
+prelude.throws(() => tabTerm.tabulate('x' as any), 'ERR_INVALID_ARG_TYPE');
+
+// page: a screen (height - 1 rows) at a time; any key goes on, q stops.
+const pager = new TTY(10, 3);
+const pagerTerm = new Term(pager);
+pager.stdin.setRawMode(true);
+pager.input(' ');
+eq(pagerTerm.page('one\ntwo\nthree'), true);
+let paged = util.stripVTControlCharacters(pager.readOutput() ?? '');
+eq(paged.indexOf('one\r\ntwo\r\nPress any ') >= 0, true, paged); // cut off at the width
+eq(paged.endsWith('three\r\n'), true, paged);
+pager.input('q');
+eq(pagerTerm.page('1\n2\n3\n4'), false, 'q stops');
+eq(util.stripVTControlCharacters(pager.readOutput() ?? '').indexOf('3') < 0, true, 'nothing after q');
+eq(pager.stdin.isRaw, true, 'raw mode stays as it was');

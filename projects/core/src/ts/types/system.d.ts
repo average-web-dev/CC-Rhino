@@ -48,6 +48,8 @@ interface SystemEventMap {
 interface SystemModule extends SystemAPI {
     /** The signals: Signal.SIGTERM (15), Signal.SIGINT (2), Signal.SIGKILL (9). */
     readonly Signal: SignalMap;
+    /** A time of day (hours 0–24, default: system.time()) as "6:30 PM", or with `hour12` false as "18:30". */
+    formatTime(time?: number, hour12?: boolean): string;
     /** The running programs, by pid (the root process, pid 0, first). */
     processes(): ProcessInfo[];
     /** The running program with `pid`, or undefined. */
