@@ -15,6 +15,7 @@ import { execute } from '/rom/lib/internal/vi/ex';
 import { firstNonBlank, runMotion, textObject } from '/rom/lib/internal/vi/motions';
 import { NormalMode } from '/rom/lib/internal/vi/normal';
 import { Registers } from '/rom/lib/internal/vi/registers';
+import { compile, search } from '/rom/lib/internal/vi/search';
 import { colAtDisplay, displayCol } from '/rom/lib/internal/vi/tabs';
 
 export type Mode = 'normal' | 'insert' | 'replace' | 'command' | 'visual';
@@ -100,14 +101,25 @@ interface InsertSession {
 }
 
 export class Editor {
-    readonly buffer: TextBuffer;
+    buffer: TextBuffer;
     readonly registers = new Registers();
     /** The file being edited (undefined: none yet, `:w name` sets it). */
     path: string | undefined;
     cursor: Position = { line: 0, col: 0 };
     mode: Mode = 'normal';
-    /** The command line being typed after ':'. */
+    /** The command line being typed after `prompt`: ':' for an ex command, '/' or '?' for a search. */
     command = '';
+    prompt: ':' | '/' | '?' = ':';
+    /** The options :set changes. */
+    options = {
+        number: false, relativenumber: false, ignorecase: false, smartcase: false, hlsearch: false, wrapscan: true,
+        shiftwidth: 4,
+    };
+    /** The last search (/, ?, *, #, :s) and whether its matches are highlighted ('hlsearch'; :noh stops it). */
+    lastSearch: { pattern: string; forward: boolean } | undefined;
+    highlight = false;
+    /** The last :s, for :s without a pattern and &. */
+    lastSubstitute: { pattern: string; replacement: string; flags: string } | undefined;
     /** The message shown on the last row (until the next key), and whether it is an error. */
     message = '';
     error = false;
@@ -134,6 +146,7 @@ export class Editor {
     /** The last left click (for double and triple clicks) and where a drag started. */
     #clicks = { count: 0, at: 0, line: -1, col: -1 };
     #drag: Position | undefined;
+    #commandFromVisual = false;
     #insert: InsertSession | undefined;
     /** In Replace mode: the characters overwritten, so that Backspace can restore them ('' for appended ones). */
     #replaced: string[] = [];
@@ -165,9 +178,63 @@ export class Editor {
 
     /** The size of the text area (the screen without the last row). */
     setSize(width: number, rows: number): void {
-        this.width = Math.max(1, width);
+        this.width = Math.max(1, width - this.gutter());
         this.rows = Math.max(1, rows);
         this.follow();
+    }
+
+    /** The width of the line numbers in front of the text ('number', 'relativenumber'), 0 without them. */
+    gutter(): number {
+        if (!this.options.number && !this.options.relativenumber) return 0;
+        return Math.max(3, String(this.buffer.lineCount).length) + 1;
+    }
+
+    // ── Search ───────────────────────────────────────────────────────────────────────────────────────────────────────
+
+    /** Start typing a command line: ':' (ex) or '/' / '?' (a search forward / backward). */
+    startCommand(prompt: ':' | '/' | '?', text = ''): void {
+        // A search typed in Visual mode moves the end of the selection: Visual mode goes on afterwards.
+        this.#commandFromVisual = this.mode === 'visual';
+        this.mode = 'command';
+        this.prompt = prompt;
+        this.command = text;
+    }
+
+    /**
+     * Search for `pattern` (forward or backward from the cursor, `count` matches on) and move the cursor to the match;
+     * false (with vim's message) if there is none. It becomes the last search, and its matches are highlighted if
+     * 'hlsearch' is on.
+     */
+    search(pattern: string, forward: boolean, count = 1, remember = true): boolean {
+        if (remember) this.lastSearch = { pattern, forward };
+        let regex = compile(pattern, this.options);
+        if (typeof regex === 'string') { this.fail(regex); return false; }
+        this.highlight = true;
+        let pos = this.cursor;
+        let wrapped = false;
+        for (let i = 0; i < count; i++) {
+            let found = search(this.buffer, regex, pos, forward, this.options.wrapscan);
+            if (found === undefined) {
+                this.fail(this.options.wrapscan ? `E486: Pattern not found: ${pattern}`
+                    : `E${forward ? 385 : 384}: Search hit ${forward ? 'BOTTOM' : 'TOP'} without match for: ${pattern}`);
+                return false;
+            }
+            pos = found.pos;
+            wrapped ||= found.wrapped;
+        }
+        this.cursor = this.mode === 'visual' ? pos : this.normalCol(pos);
+        this.wantHere();
+        this.message = wrapped
+            ? (forward ? 'search hit BOTTOM, continuing at TOP' : 'search hit TOP, continuing at BOTTOM')
+            : `${forward ? '/' : '?'}${pattern}`;
+        return true;
+    }
+
+    /** n / N: the last search again, in its direction (or the other one). */
+    searchAgain(reverse: boolean, count: number): void {
+        let last = this.lastSearch;
+        if (last === undefined) { this.fail('E35: No previous regular expression'); return; }
+        this.search(last.pattern, reverse ? !last.forward : last.forward, count, false);
     }
 
     /** Scroll so that the cursor is shown. */
@@ -422,6 +489,119 @@ export class Editor {
         }
     }
 
+    // ── Line operations (Normal mode, Visual mode and ex commands) ───────────────────────────────────────────────────
+
+    /** The text of lines `first` to `last`, joined with '\n'. */
+    linesText(first: number, last: number): string {
+        let lines: string[] = [];
+        for (let line = first; line <= last; line++) lines.push(this.buffer.line(line));
+        return lines.join('\n');
+    }
+
+    /** Remove lines `first` to `last` (at least one empty line stays); the cursor goes to the line after them. */
+    removeLines(first: number, last: number): void {
+        let buffer = this.buffer;
+        let lastEnd = { line: last, col: buffer.line(last).length };
+        if (last < buffer.lineCount - 1) {
+            buffer.delete({ line: first, col: 0 }, { line: last + 1, col: 0 }, this.cursor);
+        } else if (first > 0) {
+            // The last lines: the line break before them goes too.
+            buffer.delete({ line: first - 1, col: buffer.line(first - 1).length }, lastEnd, this.cursor);
+        } else {
+            buffer.delete({ line: 0, col: 0 }, lastEnd, this.cursor);
+        }
+        this.gotoLine(Math.min(first, buffer.lineCount - 1));
+    }
+
+    /** :d: delete lines `first` to `last` into `register`. */
+    deleteLines(first: number, last: number, register?: string): void {
+        this.registers.delete(register, { text: this.linesText(first, last), linewise: true });
+        this.removeLines(first, last);
+    }
+
+    /** :y: yank lines `first` to `last` into `register`. */
+    yankLines(first: number, last: number, register?: string): void {
+        this.registers.yank(register, { text: this.linesText(first, last), linewise: true });
+    }
+
+    /** > / <: shift lines `first` to `last` right or left by 'shiftwidth' spaces (a tab counts as one), `times` times. */
+    shiftLines(first: number, last: number, right: boolean, times: number): void {
+        let width = this.options.shiftwidth;
+        for (let line = first; line <= last; line++) {
+            let text = this.buffer.line(line);
+            if (right) {
+                if (text !== '') this.buffer.insert({ line, col: 0 }, ' '.repeat(width * times), this.cursor);
+                continue;
+            }
+            let remove = 0;
+            for (let i = 0; i < times; i++) {
+                let rest = text.slice(remove);
+                remove += rest.startsWith('\t') ? 1 : new RegExp(`^ {0,${width}}`).exec(rest)![0].length;
+            }
+            if (remove > 0) this.buffer.delete({ line, col: 0 }, { line, col: remove }, this.cursor);
+        }
+        this.gotoLine(first);
+    }
+
+    /**
+     * J / gJ / :j: join lines `first` to `last` into one. With `spaces` (J) the joined lines lose their indent and get
+     * one space between (none before ')' or after a blank); the cursor goes where the last join was.
+     */
+    joinLines(first: number, last: number, spaces: boolean): void {
+        let buffer = this.buffer;
+        if (first + 1 >= buffer.lineCount) return;
+        let joinCol = 0;
+        for (let i = first; i < last && first + 1 < buffer.lineCount; i++) {
+            let current = buffer.line(first);
+            let next = buffer.line(first + 1);
+            let indent = spaces ? /^\s*/.exec(next)![0].length : 0;
+            let rest = next.slice(indent);
+            let tight = !spaces || rest === '' || current === '' || /\s$/.test(current) || rest.startsWith(')');
+            buffer.delete({ line: first, col: current.length }, { line: first + 1, col: indent }, this.cursor);
+            if (!tight) buffer.insert({ line: first, col: current.length }, ' ');
+            joinCol = current.length;
+        }
+        this.cursor = this.normalCol({ line: first, col: joinCol });
+        this.wantHere();
+    }
+
+    /** :t / :m: copy (or move) lines `first` to `last` below line `after` (-1: above the first line). */
+    copyLines(first: number, last: number, after: number, move: boolean): void {
+        let text = this.linesText(first, last);
+        let count = last - first + 1;
+        let buffer = this.buffer;
+        let target = after;
+        if (move) {
+            this.removeLines(first, last);
+            if (after > last) target -= count;
+        }
+        if (target < 0) buffer.insert({ line: 0, col: 0 }, text + '\n', this.cursor);
+        else buffer.insert({ line: target, col: buffer.line(target).length }, '\n' + text, this.cursor);
+        this.gotoLine(target + count);
+    }
+
+    /** :e: edit `path` instead (the same file again: as it is on disk). */
+    open(path: string): void {
+        let text: string | undefined;
+        try {
+            text = this.#io.read(path);
+        } catch (e) {
+            this.fail(`"${path}" ${errorText(e)}`);
+            return;
+        }
+        this.message = text === undefined ? `"${path}" [New]` : `"${path}" ${describe(text)}`;
+        if (text !== undefined && text.endsWith('\n')) text = text.slice(0, -1);
+        this.buffer = new TextBuffer(text ?? '');
+        this.buffer.markSaved();
+        this.path = path;
+        this.cursor = { line: 0, col: 0 };
+        this.top = 0;
+        this.left = 0;
+        this.visual = undefined;
+        this.lastVisual = undefined;
+        this.wantHere();
+    }
+
     /** Enter Visual mode, selecting from `anchor` to the cursor. */
     startVisual(kind: VisualKind, anchor: Position): void {
         this.visual = { kind, anchor };
@@ -507,7 +687,7 @@ export class Editor {
     #positionAt(x: number, y: number): Position | undefined {
         if (y < 0 || y >= this.rows) return undefined;
         let line = Math.min(this.top + y, this.buffer.lineCount - 1);
-        return { line, col: colAtDisplay(this.buffer.line(line), this.left + Math.max(0, x)) };
+        return { line, col: colAtDisplay(this.buffer.line(line), this.left + Math.max(0, x - this.gutter())) };
     }
 
     /** Scroll the view by `lines`; the cursor moves just enough to stay on screen. */
@@ -545,21 +725,34 @@ export class Editor {
     #commandLine(name: string): void {
         switch (name) {
             case '<Esc>': case '<C-c>':
-                this.mode = 'normal';
+                this.mode = this.#commandFromVisual ? 'visual' : 'normal';
                 this.command = '';
                 return;
             case '<CR>': {
                 let command = this.command;
-                this.mode = 'normal';
+                this.mode = this.#commandFromVisual ? 'visual' : 'normal';
                 this.command = '';
                 this.message = '';
                 this.error = false;
-                execute(this, command);
-                this.cursor = this.normalCol(this.cursor);
+                if (this.prompt !== ':') {
+                    let forward = this.prompt === '/';
+                    let pattern = command !== '' ? command : this.lastSearch?.pattern;
+                    if (pattern === undefined) this.fail('E35: No previous regular expression');
+                    else this.search(pattern, forward);
+                    return;
+                }
+                // An ex command is one undo step.
+                this.buffer.begin(this.cursor);
+                try {
+                    execute(this, command);
+                } finally {
+                    this.buffer.end(this.cursor);
+                }
+                if (this.mode === 'normal') this.cursor = this.normalCol(this.cursor);
                 return;
             }
             case '<BS>':
-                if (this.command === '') this.mode = 'normal';
+                if (this.command === '') this.mode = this.#commandFromVisual ? 'visual' : 'normal';
                 else this.command = this.command.slice(0, -1);
                 return;
             default:

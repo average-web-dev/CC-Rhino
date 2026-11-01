@@ -24,6 +24,7 @@ import {
     firstNonBlank, motionName, motionTakesArg, runMotion, textObject, type MotionContext, type Target,
 } from '/rom/lib/internal/vi/motions';
 import { isRegisterName, type Register } from '/rom/lib/internal/vi/registers';
+import { wordPattern } from '/rom/lib/internal/vi/search';
 import { colAtDisplay, displayCol } from '/rom/lib/internal/vi/tabs';
 
 /** Operators: they change the text a motion or object covers (doubled: whole lines). */
@@ -35,11 +36,13 @@ const CHANGES = new Set(['x', 'X', 's', 'S', 'D', 'C', 'p', 'P', 'J', 'gJ', '~',
 
 /** Commands of their own (no motion). */
 const COMMANDS = new Set([...CHANGES, 'Y', 'u', '<C-r>', '.', ':', 'ZZ', 'ZQ', '<C-c>', '<Esc>', '<PageDown>',
-    '<PageUp>', '<C-f>', '<C-b>', '<C-d>', '<C-u>', '<C-e>', '<C-y>', 'v', 'V', '<C-v>', 'gv']);
+    '<PageUp>', '<C-f>', '<C-b>', '<C-d>', '<C-u>', '<C-e>', '<C-y>', 'v', 'V', '<C-v>', 'gv', '/', '?', 'n', 'N', '*',
+    '#']);
 
 /** What Visual mode does with the selection (besides moving its end). */
 const VISUAL_COMMANDS = new Set(['d', 'x', '<Del>', 'X', 'D', 'y', 'Y', 'c', 's', 'C', 'S', 'R', '>', '<', '~', 'u',
-    'U', 'g~', 'gu', 'gU', 'J', 'gJ', 'r', 'p', 'P', 'o', 'O', 'I', 'A', ':', 'v', 'V', '<C-v>', '<Esc>', '<C-c>']);
+    'U', 'g~', 'gu', 'gU', 'J', 'gJ', 'r', 'p', 'P', 'o', 'O', 'I', 'A', ':', 'v', 'V', '<C-v>', '<Esc>', '<C-c>',
+    'n', 'N', '*', '#', '/', '?']);
 
 /** Visual commands that change the text (for '.'). */
 const VISUAL_CHANGES = new Set(['d', 'x', '<Del>', 'X', 'D', 'c', 's', 'C', 'S', 'R', '>', '<', '~', 'u', 'U', 'g~',
@@ -50,9 +53,6 @@ const VISUAL_KEYS: Record<VisualKind, string> = { char: 'v', line: 'V', block: '
 
 /** Commands that take a character after them. */
 const TAKES_CHAR = new Set(['r']);
-
-/** The width of one shift (> and <). */
-const SHIFT = '    ';
 
 /** A complete command, parsed from its keys. */
 interface Command {
@@ -410,18 +410,7 @@ export class NormalMode {
             editor.wantHere();
             return;
         }
-        let first = region.start.line;
-        let last = region.end.line;
-        let lastEnd = { line: last, col: buffer.line(last).length };
-        if (last < buffer.lineCount - 1) {
-            buffer.delete({ line: first, col: 0 }, { line: last + 1, col: 0 }, editor.cursor);
-        } else if (first > 0) {
-            // The last lines: their line break before them goes too.
-            buffer.delete({ line: first - 1, col: buffer.line(first - 1).length }, lastEnd, editor.cursor);
-        } else {
-            buffer.delete({ line: 0, col: 0 }, lastEnd, editor.cursor);
-        }
-        editor.gotoLine(Math.min(first, buffer.lineCount - 1));
+        editor.removeLines(region.start.line, region.end.line);
     }
 
     #change(region: Region, register: string | undefined): void {
@@ -443,18 +432,7 @@ export class NormalMode {
     }
 
     #shift(region: Region, right: boolean): void {
-        let editor = this.#editor;
-        let buffer = editor.buffer;
-        for (let line = region.start.line; line <= region.end.line; line++) {
-            let text = buffer.line(line);
-            if (right) {
-                if (text !== '') buffer.insert({ line, col: 0 }, SHIFT);
-            } else {
-                let remove = text.startsWith('\t') ? 1 : /^ {0,4}/.exec(text)![0].length;
-                if (remove > 0) buffer.delete({ line, col: 0 }, { line, col: remove });
-            }
-        }
-        editor.gotoLine(region.start.line);
+        this.#editor.shiftLines(region.start.line, region.end.line, right, 1);
     }
 
     #changeCase(region: Region, operator: string): void {
@@ -529,7 +507,10 @@ export class NormalMode {
                 editor.wantHere();
                 return;
             }
-            case ':': editor.mode = 'command'; editor.command = ''; return;
+            case ':': editor.startCommand(':'); return;
+            case '/': case '?': editor.startCommand(command.name as '/' | '?'); return;
+            case 'n': case 'N': editor.searchAgain(command.name === 'N', count); return;
+            case '*': case '#': this.#searchWord(command.name === '*', count); return;
             case 'v': this.#startVisual('char'); return;
             case 'V': this.#startVisual('line'); return;
             case '<C-v>': this.#startVisual('block'); return;
@@ -552,6 +533,14 @@ export class NormalMode {
             case '<C-y>': this.#scroll(-count, false); return;
             default:
         }
+    }
+
+    /** * / #: search for the word under the cursor, forward / backward. */
+    #searchWord(forward: boolean, count: number): void {
+        let editor = this.#editor;
+        let pattern = wordPattern(editor.buffer.line(editor.cursor.line), editor.cursor.col);
+        if (pattern === undefined) { editor.fail('E348: No string under cursor'); return; }
+        editor.search(pattern, forward, count);
     }
 
     /** Scroll the view by `lines`; the cursor moves along (`withCursor`) or just stays on screen. */
@@ -617,26 +606,10 @@ export class NormalMode {
         editor.wantHere();
     }
 
-    /** J / gJ: join `count` lines; J removes the next line's indent and puts one space between (none before ')'). */
+    /** J / gJ: join `count` lines from the cursor's. */
     #join(count: number, spaces: boolean): void {
-        let editor = this.#editor;
-        let buffer = editor.buffer;
-        let line = editor.cursor.line;
-        if (line + 1 >= buffer.lineCount) return;
-        let joinCol = 0;
-        for (let i = 1; i < count && line + 1 < buffer.lineCount; i++) {
-            let current = buffer.line(line);
-            let nextText = buffer.line(line + 1);
-            let indent = spaces ? /^\s*/.exec(nextText)![0].length : 0;
-            let rest = nextText.slice(indent);
-            let tight = !spaces || rest === '' || current === '' || /\s$/.test(current) || rest.startsWith(')');
-            let gap = tight ? '' : ' ';
-            buffer.delete({ line, col: current.length }, { line: line + 1, col: indent }, editor.cursor);
-            if (gap !== '') buffer.insert({ line, col: current.length }, gap);
-            joinCol = current.length;
-        }
-        editor.cursor = editor.normalCol({ line, col: joinCol });
-        editor.wantHere();
+        let line = this.#editor.cursor.line;
+        this.#editor.joinLines(line, line + count - 1, spaces);
     }
 
     /** r{c}: replace `count` characters with c (r<CR> breaks the line instead). */
@@ -784,6 +757,9 @@ export class NormalMode {
                 return;
             }
             case 'gv': return;
+            case 'n': case 'N': editor.searchAgain(name === 'N', count); return;
+            case '*': case '#': this.#searchWord(name === '*', count); return;
+            case '/': case '?': editor.startCommand(name); return;
             case 'o': case 'O': {
                 let anchor = visual.anchor;
                 if (name === 'O' && block) {
@@ -803,8 +779,7 @@ export class NormalMode {
             }
             case ':':
                 this.#endVisual();
-                editor.mode = 'command';
-                editor.command = "'<,'>";
+                editor.startCommand(':', "'<,'>");
                 return;
             default:
         }

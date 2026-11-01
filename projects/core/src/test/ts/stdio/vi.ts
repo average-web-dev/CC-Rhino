@@ -26,6 +26,7 @@ interface Editor {
     handleKey(key: TtyKeyInput): void;
     handlePaste(text: string): void;
     handleMouse(mouse: TtyMouseInput): void;
+    gutter(): number;
     now: () => number;
 }
 // A plain require: an import would compile the ROM source into this test.
@@ -49,7 +50,7 @@ const SEQUENCES: Record<string, string> = {
 
 /** Type `keys` (characters, or vim names like '<Esc>') into `editor`, each key decoded as the terminal sends it. */
 function type(editor: Editor, keys: string): void {
-    for (let token of keys.match(/<[^>]+>|[\s\S]/g) ?? []) {
+    for (let token of keys.match(/<[A-Za-z-]+>|[\s\S]/g) ?? []) {
         let sequence = SEQUENCES[token] ?? token;
         for (let input of decodeInput(sequence)) if (input.type === 'keydown') editor.handleKey(input);
     }
@@ -485,3 +486,123 @@ eq(`${e.top} ${at(e)}`, '3 3,0', 'the wheel scrolls three lines; the cursor stay
 mouse(e, 'down', 0, 0);
 mouse(e, 'up', 0, 0);
 eq(`${e.top} ${at(e)}`, '3 6,0', 'scrolling back keeps the cursor where it is, if shown');
+
+// ── Search (phase 4) ────────────────────────────────────────────────────────────────────────────────────────────────
+
+e = open('one two\nthree two\nfour');
+type(e, '/two<CR>');
+eq(at(e), '0,4');
+eq(e.message, '/two');
+type(e, 'n');
+eq(at(e), '1,6');
+type(e, 'n');
+eq(at(e), '0,4', 'n wraps around');
+eq(e.message, 'search hit BOTTOM, continuing at TOP');
+type(e, 'N');
+eq(at(e), '1,6', 'N goes the other way');
+type(e, '?one<CR>');
+eq(at(e), '0,0');
+type(e, 'gg2n');
+eq(at(e), '0,0', '?one again, twice: around and back');
+type(e, '/<CR>');
+eq(at(e), '0,0', 'an empty pattern is the last one');
+type(e, '/xyz<CR>');
+eq(e.message, 'E486: Pattern not found: xyz');
+eq(e.error, true);
+type(e, '/(<CR>');
+eq(e.message, 'E383: Invalid search string: (');
+type(e, '/t\\w+<CR>');
+eq(at(e), '0,4', 'patterns are JavaScript regular expressions');
+
+e = open('foo bar foo foobar');
+type(e, '*');
+eq(at(e), '0,8', '* searches the word under the cursor, as a whole word');
+type(e, '*');
+eq(at(e), '0,0', 'foobar is another word');
+type(e, '#');
+eq(at(e), '0,8');
+
+e = open('One one ONE');
+type(e, '/one<CR>');
+eq(at(e), '0,4');
+type(e, ':set ic<CR>/one<CR>');
+eq(at(e), '0,8', 'ignorecase');
+type(e, ':set scs<CR>/One<CR>');
+eq(at(e), '0,0', 'smartcase: an upper-case letter makes it match case');
+type(e, ':set nows<CR>$/one<CR>');
+eq(e.message, 'E385: Search hit BOTTOM without match for: one');
+
+eq(after('a one b one c', 'v/one<CR>nd'), 'ne c', 'a search moves the end of a selection');
+
+// ── Ex commands ─────────────────────────────────────────────────────────────────────────────────────────────────────
+
+eq(after('aa\naa', ':%s/a/b/<CR>'), 'ba|ba');
+e = open('aa\naa');
+type(e, ':%s/a/b/g<CR>');
+eq(lines(e), 'bb|bb');
+eq(e.message, '4 substitutions on 2 lines');
+type(e, 'u');
+eq(lines(e), 'aa|aa', ':s is one undo step');
+type(e, ':s/x/y/<CR>');
+eq(e.message, 'E486: Pattern not found: x');
+eq(after('aa\naa\naa', ':2,3s/a/o/g<CR>'), 'aa|oo|oo');
+eq(after('hello world', ':s/(\\w+) (\\w+)/\\2 \\1/<CR>'), 'world hello', 'groups as \\1');
+eq(after('hello world', ':s/o/[&]/g<CR>'), 'hell[o] w[o]rld', '& is the match');
+eq(after('hello world', ':s/ /\\r/<CR>'), 'hello|world', '\\r breaks the line');
+eq(after('a/b', ':s#/#-#<CR>'), 'a-b', 'any separator');
+eq(after('a\na\na', 'Vj:s/a/b/<CR>'), 'b|b|a', "the Visual range '<,'>");
+eq(after('ab ab\nab', ':s/a/x/<CR>j:s<CR>'), 'xb ab|xb', ':s again');
+eq(after('ab ab\nab ab', ':s/a/x/g<CR>j:&&<CR>'), 'xb xb|xb xb', ':&& with the flags');
+
+eq(after('1\n2\n3\n4', ':d<CR>'), '2|3|4');
+eq(after('1\n2\n3\n4', ':2,3d<CR>'), '1|4');
+eq(after('1\n2\n3\n4', ':%d<CR>'), '');
+eq(after('1\n2\n3\n4', 'j:.,$d<CR>'), '1');
+eq(after('1\n2\n3\n4', ':.+1,$-1d<CR>'), '1|4');
+eq(after('1\n2', ':y a<CR>j"ap'), '1|2|1');
+eq(after('1\n2', ':%><CR>'), '    1|    2');
+eq(after('1\n2', ':>><CR>'), '        1|2');
+eq(after('        1', ':<<CR>'), '    1');
+eq(after('a\nb\nc', ':1,3j<CR>'), 'a b c');
+eq(after('a\nb\nc', ':j!<CR>'), 'ab|c');
+eq(after('a\nb\nc', ':m$<CR>'), 'b|c|a');
+eq(after('a\nb\nc', 'G:m0<CR>'), 'c|a|b');
+eq(after('a\nb\nc', ':t.<CR>'), 'a|a|b|c');
+eq(after('a\nb\nc', ':1,2co$<CR>'), 'a|b|c|a|b');
+eq(after('a\nb\nc', ':1,2t0<CR>'), 'a|b|a|b|c');
+
+e = open('1\n2\n3\n4\n5');
+type(e, ':4<CR>');
+eq(at(e), '3,0');
+type(e, ':.-2<CR>');
+eq(at(e), '1,0');
+type(e, ':9d<CR>');
+eq(e.message, 'E16: Invalid range');
+type(e, ":'<d<CR>");
+eq(e.message, 'E20: Mark not set');
+
+// Options.
+e = open('a\nb');
+eq(e.gutter(), 0);
+type(e, ':set nu<CR>');
+eq(e.gutter(), 4, 'line numbers: at least 3 digits and a space');
+type(e, ':set nu?<CR>');
+eq(e.message, 'number');
+type(e, ':set nonu rnu<CR>:set nu? rnu?<CR>');
+eq(e.message, 'nonumber  relativenumber');
+type(e, ':set sw=2<CR>>>');
+eq(lines(e), '  a|b', 'shiftwidth');
+type(e, ':set sw?<CR>');
+eq(e.message, 'shiftwidth=2');
+type(e, ':set foo<CR>');
+eq(e.message, 'E518: Unknown option: foo');
+
+// :e
+e = open('on disk\n', '/g.txt');
+type(e, 'xx');
+type(e, ':e<CR>');
+eq(e.message, 'E37: No write since last change (add ! to override)');
+type(e, ':e!<CR>');
+eq(lines(e), 'on disk', ':e! drops the changes');
+type(e, ':e /f.txt<CR>');
+eq(e.path, '/f.txt');
