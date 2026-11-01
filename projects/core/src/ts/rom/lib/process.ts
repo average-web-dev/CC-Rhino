@@ -16,7 +16,7 @@ import * as env from '/rom/lib/env';
 import fs from 'fs';
 import events from 'events';
 import system from 'system';
-import { validateString } from '/rom/lib/internal/validators';
+import { validateFunction, validateOneOf, validateString } from '/rom/lib/internal/validators';
 
 /** Normalise `p` against the current directory. */
 function resolvePath(p: string): string {
@@ -95,6 +95,30 @@ hrtime.bigint = function (): bigint {
     return BigInt(Date.now()) * BigInt(1000000);
 };
 
+/** The events `process` emits: only 'exit' (a computer has no signals). */
+const PROCESS_EVENTS = ['exit'] as const;
+
+type ExitListener = ((code: number) => void) & { listener?: (code: number) => void };
+
+function addListener(event: 'exit', listener: (code: number) => void): Process {
+    validateOneOf(event, 'event', PROCESS_EVENTS);
+    validateFunction(listener, 'listener');
+    jobs.current().exitListeners.push(listener);
+    return proc;
+}
+
+function removeListener(event: 'exit', listener: (code: number) => void): Process {
+    validateOneOf(event, 'event', PROCESS_EVENTS);
+    let listeners: ExitListener[] = jobs.current().exitListeners;
+    for (let i = listeners.length - 1; i >= 0; i--) {
+        if (listeners[i] === listener || listeners[i].listener === listener) {
+            listeners.splice(i, 1);
+            break;
+        }
+    }
+    return proc;
+}
+
 const proc: Process = {
     get stdin() { return jobs.current().tty.stdin; },
     get stdout() { return jobs.current().tty.stdout; },
@@ -119,6 +143,24 @@ const proc: Process = {
         // Outside of a program (the bios, the OS layer) the whole computer is the process.
         if (jobs.current() === jobs.root) system.shutdown();
         throw jobs.requestExit(exitCode);
+    },
+
+    on: addListener,
+    addListener,
+    once(event: 'exit', listener: (code: number) => void): Process {
+        validateFunction(listener, 'listener');
+        let wrapper: ExitListener = (code) => {
+            removeListener(event, wrapper);
+            listener(code);
+        };
+        wrapper.listener = listener;
+        return addListener(event, wrapper);
+    },
+    off: removeListener,
+    removeListener,
+    listenerCount(event: 'exit'): number {
+        validateOneOf(event, 'event', PROCESS_EVENTS);
+        return jobs.current().exitListeners.length;
     },
 
     nextTick: function (callback: (...args: any[]) => void, ...args: any[]): void {

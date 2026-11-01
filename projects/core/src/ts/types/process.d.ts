@@ -155,6 +155,18 @@ interface Process {
      * which the shell catches; outside of a program (shell, bios) it shuts the computer down.
      */
     exit(code?: number): never;
+    /**
+     * Call `listener` with the exit code when the program has ended (its code returned and nothing keeps it alive,
+     * process.exit(), a failure or Ctrl+C), as in Node. Listeners run synchronously, before the TTY is restored (raw
+     * mode, mouse, bracketed paste, the alternate screen; that needs no listener); they may set `exitCode` or call
+     * `exit(code)` to change the code. 'exit' is the only event (a computer has no signals).
+     */
+    on(event: "exit", listener: (code: number) => void): this;
+    addListener(event: "exit", listener: (code: number) => void): this;
+    once(event: "exit", listener: (code: number) => void): this;
+    off(event: "exit", listener: (code: number) => void): this;
+    removeListener(event: "exit", listener: (code: number) => void): this;
+    listenerCount(event: "exit"): number;
     /** Run `callback` as a microtask. */
     nextTick<A extends unknown[]>(callback: (...args: A) => void, ...args: A): void;
     /** `[seconds, nanoseconds]` (millisecond resolution), optionally relative to an earlier value. */

@@ -37,6 +37,18 @@ fs.writeFileSync('/progs/echo.js', `
 exports.main = function () {
     process.stdin.on('data', function (line) { process.stdout.write('got ' + line); process.exit(0); });
 };`);
+fs.writeFileSync('/progs/onexit.js', `
+exports.main = function (args) {
+    process.on('exit', function (code) { console.log('exit ' + code + ' ' + process.argv[2]); });
+    var gone = function () { console.log('removed'); };
+    process.on('exit', gone);
+    process.off('exit', gone);
+    process.once('exit', function (code) { if (args[0] === 'change') process.exitCode = 9; });
+    if (args[0] === 'exit') process.exit(2);
+    if (args[0] === 'fail') throw new Error('failed');
+    if (args[0] === 'listener') process.on('exit', function () { throw new Error('in listener'); });
+    if (args[0] === 'reexit') process.on('exit', function () { process.exit(7); });
+};`);
 fs.writeFileSync('/progs/forever.js', `exports.main = function () { require('system').sleep(100000); };`);
 fs.writeFileSync('/progs/exitlater.js', `
 exports.main = function () {
@@ -67,6 +79,25 @@ let later = spawnSync('/progs/exitlater.js', [], { stdio: 'pipe' });
 eq(later.status, 5, 'process.exit in a timer while main sleeps');
 eq(later.stdout, '');
 eq(spawnSync('/progs/exitthread.js', [], { stdio: 'pipe' }).status, 6, 'process.exit in a spawned thread');
+
+// process.on('exit'): called with the code when the program ends, in its context; it may change the code.
+let onExit = (arg: string) => spawnSync('/progs/onexit.js', [arg], { stdio: 'pipe' });
+let ended = onExit('normal');
+eq(ended.status, 0);
+eq(ended.stdout, 'exit 0 normal\n', "the listener runs once, as the program (process.argv); off() removed the other");
+eq(onExit('exit').stdout, 'exit 2 exit\n', 'after process.exit(2)');
+eq(onExit('change').status, 9, 'a listener may set process.exitCode');
+eq(onExit('reexit').status, 7, 'or call process.exit(code)');
+let failedExit = onExit('fail');
+eq(failedExit.status, 1);
+eq(failedExit.stdout, 'exit 1 fail\n', 'listeners also run when the program failed');
+eq(/failed/.test(failedExit.stderr), true, failedExit.stderr);
+let listenerFailed = onExit('listener');
+eq(listenerFailed.status, 1, 'a listener that throws fails the program');
+eq(/in listener/.test(listenerFailed.stderr), true, listenerFailed.stderr);
+let rejected = false;
+try { (process as any).on('SIGINT', () => {}); } catch (e: any) { rejected = e.code === 'ERR_INVALID_ARG_VALUE'; }
+eq(rejected, true, "'exit' is the only process event");
 
 let failed = spawnSync('/progs/fail.js', [], { stdio: 'pipe' });
 eq(failed.status, 1, 'a failing program exits with 1');

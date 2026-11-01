@@ -46,6 +46,8 @@ export class Job {
     failure: { error: unknown } | null = null;
     /** A shell: Ctrl+C while it waits for input does not end it (it reaches the programs it runs instead). */
     shell = false;
+    /** process.on('exit') listeners, called with the exit code when the program has ended. */
+    exitListeners: ((code: number) => void)[] = [];
 
     constructor(id: number, tty: TTY, argv: string[], cwd: string) {
         this.id = id;
@@ -212,6 +214,39 @@ function resetModes(tty: TTY): void {
     tty.stdout.write(CSI.mouse(false) + CSI.bracketedPaste(false) + CSI.alternateScreen(false));
 }
 
+/** How a job ended, from the error its thread ended with (undefined: none). */
+function resultOf(job: Job, error: unknown): JobResult {
+    let code = exitCodeOf(error);
+    if (error === undefined || code === null) return { code: job.exitCode ?? 0 };
+    if (code !== undefined) return { code };
+    return { code: 1, error };
+}
+
+/**
+ * Call the job's process.on('exit') listeners with its exit code, as Node does when a process ends (normal end,
+ * process.exit(), a failure, Ctrl+C), in a thread with the job as context (so `process` is still the program). They
+ * may set process.exitCode or call process.exit(code) to change the code; a listener that throws fails the program.
+ */
+function emitExit(job: Job, id: number, result: JobResult): JobResult {
+    let listeners = job.exitListeners;
+    if (listeners.length === 0) return result;
+    job.exitListeners = [];
+    job.exiting = false;
+    job.exitCode = result.code;
+    let error: unknown = undefined;
+    try {
+        parallel.waitForAll(() => {
+            loop.setContext(job, id);
+            for (let listener of listeners) listener(result.code);
+        });
+    } catch (e: unknown) {
+        error = e;
+    }
+    let after = resultOf(job, error);
+    // The program's own failure is the one worth reporting.
+    return result.error !== undefined ? { code: after.error !== undefined ? 1 : after.code, error: result.error } : after;
+}
+
 /** How to run a program (see run()). */
 export interface RunOptions {
     /**
@@ -257,17 +292,16 @@ export function run(job: Job, resolved: string, args: string[], options: RunOpti
                 error = e;
             }
         }
+        let result = emitExit(job, id, resultOf(job, error));
         // Before an error is reported: on the alternate screen it would vanish with it.
         resetModes(tty);
         modesReset = true;
-        let code = exitCodeOf(error);
-        if (error === undefined || code === null) return { code: job.exitCode ?? 0 };
-        if (code !== undefined) return { code };
+        if (result.error === undefined) return result;
         // The program failed: report it on its TTY, on a row of its own (it may have stopped mid-line, at its prompt).
         if ((tty.cursorColumn() ?? 0) > 0) tty.stderr.write('\n');
-        let message = (error as any)?.message === 'Terminated' ? 'Terminated' : formatError(resolved, error);
+        let message = (result.error as any)?.message === 'Terminated' ? 'Terminated' : formatError(resolved, result.error);
         tty.stderr.write(message + '\n');
-        return { code: 1, error };
+        return result;
     } finally {
         tty.stdin.removeListenersOf(job.id);
         if (!modesReset) resetModes(tty);

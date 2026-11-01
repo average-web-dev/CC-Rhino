@@ -878,7 +878,8 @@ class that draws by writing ANSI. Branch `feature/tty-term`.
   driven; `edit` stays the simple editor
 - [x] **16.16** Ending event-driven programs (#58): `edit` is event driven too; the alternate screen (`?1049`,
   `CSI.alternateScreen`) in the `TerminalEmulator`; a job's end leaves it (before an error is reported), so `vi` /
-  `edit` just call `process.exit()`; Node's `process.on('exit')` stays open
+  `edit` just call `process.exit()`; Node's `process.on('exit')` (the only event of `process`; listeners run in the
+  program's context after it ended and may change the exit code)
 
 ---
 

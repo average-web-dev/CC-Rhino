@@ -290,21 +290,30 @@ part of `assemble`.
   `finally` runs; native in Rhino). What is left: decorators and `using` are unsupported (a missing
   helper fails the build). Hand-written JS that bypasses the pipeline (Java text blocks, engine-test snippets) still
   has to respect Rhino: no `class`, no spread in calls, no `const` in loops.
-- Programs in `rom/bin` / `rom/os/bin` export `main(args, cwd)` (`export function main…`; same as
-  `process.argv.slice(2)` / `process.cwd()`); bash calls it, or just runs the module's top-level code (Node style).
-  `main` may be `async`
-  (return a promise); the exit code is `process.exitCode`, not `main`'s return value. Line-oriented programs use
-  `readline` / `process.stdin`; full-screen programs read keys from their TTY (stdin `'keydown'` / `'paste'` /
-  `'mouse'`, as `vi` and `edit` do) — bash pauses its own interface while a program runs.
-- **Prefer event-driven code**, as in Node: programs and libraries react to events (stdin `'keydown'` / `'data'`,
-  stdout `'resize'`, timers, `events.on`, promises) and return from `main`; the flowing stdin, pending timers and
-  operations keep the job alive, and a program ends with `process.exit()` (or by removing its listeners / pausing
-  stdin). No hand-written cleanup: the job's end drops its listeners, restores raw mode and the keyboard protocol,
-  switches mouse reports and bracketed paste off and leaves the alternate screen (`CSI.alternateScreen(true)`, which
-  full-screen programs use, so the shell's screen, cursor and colours come back as they were; #58). Blocking loops (`while (…) term.readInput()`, polling with
-  `sleep`) only where the work is truly sequential (a one-shot prompt, a script). Node-style classes (`Console`, `readline.Interface`, the internal
-  `EventEmitter`, `Timeout`/`Immediate`) are real `class`es; `Console` and the readline `Interface`s are exported
-  through `/rom/lib/internal/callable`, so that, as in Node, they also work without `new`.
+- **How programs run** (ROM programs and the pattern to recommend to users; #58):
+  - A program exports `main(args, cwd)` (`export function main…`; same as `process.argv.slice(2)` /
+    `process.cwd()`), or just has top-level code (Node style); bash calls it. `main` may be `async` (return a
+    promise). The exit code is `process.exitCode`, not `main`'s return value.
+  - **Event driven by default**, as in Node: `main` sets up state and listeners (stdin `'keydown'` / `'paste'` /
+    `'mouse'` / `'data'`, stdout `'resize'`, timers, `events.on`, promises) and **returns**. The flowing stdin, ref'd
+    timers and pending operations keep the job alive (#46); without them it ends.
+  - **Ending**: `process.exit(code?)`, from anywhere (a listener, a timer, another thread), or by letting the pending
+    work run out. No hand-written cleanup: the job's end drops every listener, timer and thread of the program,
+    restores raw mode and the keyboard protocol, switches mouse reports and bracketed paste off and leaves the
+    alternate screen, before an error is reported. Other cleanup (save state, a final message) goes into
+    `process.on('exit', (code) => …)`, which runs synchronously in the program's context, also after a failure or
+    Ctrl+C.
+  - **Full-screen programs** (`vi`, `edit`): `stdout.write(CSI.alternateScreen(true) + CSI.bracketedPaste(true)
+    [+ CSI.mouse(true)])`, `stdin.setRawMode(true)`, draw with a `Term`, react to stdin `'keydown'` / `'paste'` /
+    `'mouse'` and stdout `'resize'`, quit with `process.exit()`: the shell's screen, cursor and colours come back as
+    they were. Line-oriented programs use `readline` / `process.stdin`. Bash pauses its own interface while a program
+    runs.
+  - **One-shot tools** (`cat`, `ls`, `cp`, …) are straight-line code with the sync APIs; events gain nothing there.
+    Blocking loops (`while (…) term.readInput()`, polling with `sleep`) only where the work is truly sequential (a
+    one-shot prompt, a script).
+- Node-style classes (`Console`, `readline.Interface`, the internal `EventEmitter`, `Timeout`/`Immediate`) are real
+  `class`es; `Console` and the readline `Interface`s are exported through `/rom/lib/internal/callable`, so that, as in
+  Node, they also work without `new`.
 - Argument checks in ROM code use `internal/validators` (`validateString`, `validateInteger(v, name, min, max)`,
   `validateOneOf`, …) and the Node-style errors of `internal/errors` (`ERR_INVALID_ARG_TYPE`, `ERR_OUT_OF_RANGE`, …,
   with Node's messages and `code`); both are internal, not public modules. Named constant groups are frozen
