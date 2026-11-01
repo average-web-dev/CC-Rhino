@@ -12,14 +12,19 @@
 //
 // keys are collected until a sequence is complete (the bottom row shows them), then it runs. A command that changes
 // text is one undo step, and '.' repeats the last one (its keys, including what was typed in Insert mode).
+//
+// Visual mode (v, V, Ctrl+V; gv selects the last selection again): motions, counts and text objects move the cursor
+// end of the selection (o / O the other end), and commands act on it: d x X D y Y c s C S R > < ~ u U J gJ r p P,
+// I / A in a block (typed into each of its lines), ':' with the range '<,'>.
 
 import { before, type Position } from '/rom/lib/internal/vi/buffer';
-import type { Editor } from '/rom/lib/internal/vi/editor';
+import { isCharKey, type Editor, type Selection, type VisualKind } from '/rom/lib/internal/vi/editor';
 import { execute } from '/rom/lib/internal/vi/ex';
 import {
     firstNonBlank, motionName, motionTakesArg, runMotion, textObject, type MotionContext, type Target,
 } from '/rom/lib/internal/vi/motions';
-import { isRegisterName } from '/rom/lib/internal/vi/registers';
+import { isRegisterName, type Register } from '/rom/lib/internal/vi/registers';
+import { colAtDisplay, displayCol } from '/rom/lib/internal/vi/tabs';
 
 /** Operators: they change the text a motion or object covers (doubled: whole lines). */
 const OPERATORS = new Set(['d', 'c', 'y', '>', '<', 'g~', 'gu', 'gU']);
@@ -30,7 +35,18 @@ const CHANGES = new Set(['x', 'X', 's', 'S', 'D', 'C', 'p', 'P', 'J', 'gJ', '~',
 
 /** Commands of their own (no motion). */
 const COMMANDS = new Set([...CHANGES, 'Y', 'u', '<C-r>', '.', ':', 'ZZ', 'ZQ', '<C-c>', '<Esc>', '<PageDown>',
-    '<PageUp>', '<C-f>', '<C-b>', '<C-d>', '<C-u>', '<C-e>', '<C-y>']);
+    '<PageUp>', '<C-f>', '<C-b>', '<C-d>', '<C-u>', '<C-e>', '<C-y>', 'v', 'V', '<C-v>', 'gv']);
+
+/** What Visual mode does with the selection (besides moving its end). */
+const VISUAL_COMMANDS = new Set(['d', 'x', '<Del>', 'X', 'D', 'y', 'Y', 'c', 's', 'C', 'S', 'R', '>', '<', '~', 'u',
+    'U', 'g~', 'gu', 'gU', 'J', 'gJ', 'r', 'p', 'P', 'o', 'O', 'I', 'A', ':', 'v', 'V', '<C-v>', '<Esc>', '<C-c>']);
+
+/** Visual commands that change the text (for '.'). */
+const VISUAL_CHANGES = new Set(['d', 'x', '<Del>', 'X', 'D', 'c', 's', 'C', 'S', 'R', '>', '<', '~', 'u', 'U', 'g~',
+    'gu', 'gU', 'J', 'gJ', 'r', 'p', 'P', 'I', 'A']);
+
+/** The key that starts each kind of Visual mode. */
+const VISUAL_KEYS: Record<VisualKind, string> = { char: 'v', line: 'V', block: '<C-v>' };
 
 /** Commands that take a character after them. */
 const TAKES_CHAR = new Set(['r']);
@@ -125,6 +141,45 @@ function parse(keys: string[]): Command | typeof INCOMPLETE | typeof INVALID {
         return { register, count: count1, name };
     }
     return INVALID;
+}
+
+/** Parse the keys typed so far in Visual mode: a command, a motion, or i / a and a text object. */
+function parseVisual(keys: string[]): Command | typeof INCOMPLETE | typeof INVALID {
+    let i = 0;
+    let register: string | undefined;
+    if (keys[0] === '"') {
+        if (keys.length < 2) return INCOMPLETE;
+        if (!isRegisterName(keys[1])) return INVALID;
+        register = keys[1];
+        i = 2;
+    }
+    let [count, afterCount] = readCount(keys, i);
+    i = afterCount;
+    if (i >= keys.length) return INCOMPLETE;
+    let name = keys[i++];
+    if (name === 'g') {
+        if (i >= keys.length) return INCOMPLETE;
+        name += keys[i++];
+    }
+    if (name === 'i' || name === 'a') {
+        if (i >= keys.length) return INCOMPLETE;
+        return { register, count, name: 'object', object: { around: name === 'a', kind: keys[i] } };
+    }
+    if (VISUAL_COMMANDS.has(name)) {
+        if (name === 'r') {
+            if (i >= keys.length) return INCOMPLETE;
+            return { register, count, name, arg: keys[i] };
+        }
+        return { register, count, name };
+    }
+    if (name === 'gv') return { register, count, name };
+    let motion = motionName(name);
+    if (motion === undefined) return INVALID;
+    if (motionTakesArg(motion)) {
+        if (i >= keys.length) return INCOMPLETE;
+        return { register, count, name: motion, arg: keys[i] };
+    }
+    return { register, count, name: motion };
 }
 
 /** A region of text: from `start` to `end` (exclusive), or the whole lines `start.line` to `end.line`. */
@@ -274,7 +329,9 @@ export class NormalMode {
             return { start: { line: a, col: 0 }, end: { line: b, col: 0 }, linewise: true };
         }
         let [start, end] = before(target.pos, cursor) ? [target.pos, cursor] : [cursor, target.pos];
-        if (target.kind === 'inclusive') end = { line: end.line, col: Math.min(end.col + 1, buffer.line(end.line).length) };
+        if (target.kind === 'inclusive') {
+            end = { line: end.line, col: Math.min(end.col + 1, buffer.line(end.line).length) };
+        }
         else if (end.line > start.line && buffer.line(end.line).slice(0, end.col).trim() === '') {
             let line = end.line - 1;
             if (command.motion === 'w' || command.motion === 'W') {
@@ -335,7 +392,9 @@ export class NormalMode {
         let editor = this.#editor;
         editor.registers.yank(register, { text: this.#text(region), linewise: region.linewise });
         if (region.linewise) {
-            if (region.start.line !== editor.cursor.line) editor.cursor = { line: region.start.line, col: editor.cursor.col };
+            if (region.start.line !== editor.cursor.line) {
+                editor.cursor = { line: region.start.line, col: editor.cursor.col };
+            }
         } else {
             editor.cursor = region.start;
         }
@@ -404,7 +463,8 @@ export class NormalMode {
         let start = region.linewise ? { line: region.start.line, col: 0 } : region.start;
         let end = region.linewise ? { line: region.end.line, col: buffer.line(region.end.line).length } : region.end;
         let text = buffer.slice(start, end);
-        let changed = operator === 'gu' ? text.toLowerCase() : operator === 'gU' ? text.toUpperCase() : toggleCase(text);
+        let changed = operator === 'gu' ? text.toLowerCase()
+            : operator === 'gU' ? text.toUpperCase() : toggleCase(text);
         if (changed !== text) {
             buffer.delete(start, end, editor.cursor);
             buffer.insert(start, changed);
@@ -445,7 +505,8 @@ export class NormalMode {
             case 'I': editor.startInsert({ line, col: firstNonBlank(text) }, 'insert', count); return;
             case 'A': editor.startInsert({ line, col: text.length }, 'insert', count); return;
             case 'o':
-                editor.startInsert(buffer.insert({ line, col: text.length }, '\n', editor.cursor), 'insert', count, '\n');
+                let below = buffer.insert({ line, col: text.length }, '\n', editor.cursor);
+                editor.startInsert(below, 'insert', count, '\n');
                 return;
             case 'O':
                 buffer.insert({ line, col: 0 }, '\n', editor.cursor);
@@ -469,6 +530,17 @@ export class NormalMode {
                 return;
             }
             case ':': editor.mode = 'command'; editor.command = ''; return;
+            case 'v': this.#startVisual('char'); return;
+            case 'V': this.#startVisual('line'); return;
+            case '<C-v>': this.#startVisual('block'); return;
+            case 'gv': {
+                let last = editor.lastVisual;
+                if (last === undefined) return;
+                editor.visual = { kind: last.kind, anchor: editor.buffer.clamp(last.anchor) };
+                editor.cursor = editor.normalCol(last.cursor);
+                editor.mode = 'visual';
+                return;
+            }
             case 'ZZ': execute(editor, 'x'); return;
             case 'ZQ': execute(editor, 'q!'); return;
             case '<C-c>': editor.message = 'Type  :q!  and press <Enter> to abandon all changes and exit vi'; return;
@@ -494,14 +566,39 @@ export class NormalMode {
 
     /** p / P: the register's text after / before the cursor (its lines below / above the cursor's line). */
     #put(register: string | undefined, count: number, after: boolean): void {
-        let editor = this.#editor;
-        let buffer = editor.buffer;
-        let value = editor.registers.get(register ?? '"');
+        let value = this.#editor.registers.get(register ?? '"');
         if (value === undefined) {
-            editor.fail(`E353: Nothing in register ${register ?? '"'}`);
+            this.#editor.fail(`E353: Nothing in register ${register ?? '"'}`);
             return;
         }
+        this.#putValue(value, count, after);
+    }
+
+    /** Put `value` `count` times after / before the cursor (lines below / above, a block as a column). */
+    #putValue(value: Register, count: number, after: boolean): void {
+        let editor = this.#editor;
+        let buffer = editor.buffer;
         let { line, col } = editor.cursor;
+        if (value.block) {
+            let start = after && buffer.line(line).length > 0 ? col + 1 : col;
+            let x = displayCol(buffer.line(line), start);
+            let pieces = value.text.split('\n');
+            let width = Math.max(...pieces.map((piece) => piece.length));
+            pieces.forEach((piece, i) => {
+                let target = line + i;
+                if (target >= buffer.lineCount) {
+                    buffer.insert({ line: target - 1, col: buffer.line(target - 1).length }, '\n');
+                }
+                let text = buffer.line(target);
+                let shown = displayCol(text, text.length);
+                if (shown < x) buffer.insert({ line: target, col: text.length }, ' '.repeat(x - shown));
+                let at = colAtDisplay(buffer.line(target), x);
+                buffer.insert({ line: target, col: at }, piece.padEnd(width).repeat(count));
+            });
+            editor.cursor = { line, col: colAtDisplay(buffer.line(line), x) };
+            editor.wantHere();
+            return;
+        }
         if (value.linewise) {
             let lines = Array(count).fill(value.text).join('\n');
             if (after) {
@@ -532,7 +629,8 @@ export class NormalMode {
             let nextText = buffer.line(line + 1);
             let indent = spaces ? /^\s*/.exec(nextText)![0].length : 0;
             let rest = nextText.slice(indent);
-            let gap = !spaces || rest === '' || /\s$/.test(current) || rest.startsWith(')') || current === '' ? '' : ' ';
+            let tight = !spaces || rest === '' || current === '' || /\s$/.test(current) || rest.startsWith(')');
+            let gap = tight ? '' : ' ';
             buffer.delete({ line, col: current.length }, { line: line + 1, col: indent }, editor.cursor);
             if (gap !== '') buffer.insert({ line, col: current.length }, gap);
             joinCol = current.length;
@@ -558,6 +656,314 @@ export class NormalMode {
         buffer.insert({ line, col }, char.repeat(count));
         editor.cursor = { line, col: col + count - 1 };
         editor.wantHere();
+    }
+
+    // ── Visual mode ──────────────────────────────────────────────────────────────────────────────────────────────────
+
+    #startVisual(kind: VisualKind): void {
+        this.#editor.startVisual(kind, this.#editor.cursor);
+    }
+
+    #endVisual(): void {
+        this.#editor.endVisual();
+    }
+
+    /** Forget the keys of an incomplete command (a mouse click came in between). */
+    clear(): void {
+        this.#keys = [];
+    }
+
+    /** A key in Visual mode. */
+    feedVisual(key: string): void {
+        if (key === '<Esc>' && this.#keys.length > 0) { this.#keys = []; return; }
+        this.#keys.push(key);
+        let command = parseVisual(this.#keys);
+        if (command === INCOMPLETE) return;
+        let keys = this.#keys;
+        this.#keys = [];
+        if (command === INVALID) return;
+        let editor = this.#editor;
+        if (command.name === 'object') { this.#selectObject(command); return; }
+        if (!VISUAL_COMMANDS.has(command.name) && command.name !== 'gv') { this.#move(command); return; }
+        let selection = editor.selection()!;
+        let select = selectionKeys(selection);
+        editor.buffer.begin(editor.cursor);
+        try {
+            this.#visualCommand(command, selection);
+        } finally {
+            if (editor.mode === 'normal') editor.buffer.end(editor.cursor);
+        }
+        if (!VISUAL_CHANGES.has(command.name) || this.#replaying) return;
+        let entry = { keys: [...select, ...keys], count: undefined };
+        if (editor.mode === 'insert' || editor.mode === 'replace') this.#recording = entry;
+        else this.#dot = entry;
+    }
+
+    /** iw, a( … in Visual mode: select the object (or, with more already selected, extend to it). */
+    #selectObject(command: Command): void {
+        let editor = this.#editor;
+        let visual = editor.visual!;
+        let range = textObject(editor.buffer, editor.cursor, command.object!.around, command.object!.kind);
+        if (range === undefined) return;
+        let single = visual.anchor.line === editor.cursor.line && visual.anchor.col === editor.cursor.col;
+        if (range.linewise) {
+            visual.kind = 'line';
+            if (single) visual.anchor = range.start;
+            editor.cursor = { line: range.end.line, col: 0 };
+        } else {
+            if (single) visual.anchor = range.start;
+            let end = range.end;
+            editor.cursor = end.col > 0 ? { line: end.line, col: end.col - 1 }
+                : { line: end.line - 1, col: Math.max(0, editor.buffer.line(end.line - 1).length - 1) };
+        }
+        editor.wantHere();
+    }
+
+    /** The selection as a region (whole lines for V; a block is handled column by column). */
+    #selectionRegion(selection: Selection): Region {
+        let buffer = this.#editor.buffer;
+        if (selection.kind === 'line') {
+            let { start, end } = selection;
+            return { start: { line: start.line, col: 0 }, end: { line: end.line, col: 0 }, linewise: true };
+        }
+        let { line, col } = selection.end;
+        let length = buffer.line(line).length;
+        // The last character is selected too; on an empty line (or past the end) that is the line break.
+        let end = col < length ? { line, col: col + 1 }
+            : line < buffer.lineCount - 1 ? { line: line + 1, col: 0 } : { line, col: length };
+        return { start: selection.start, end, linewise: false };
+    }
+
+    /** The columns a block covers on `line`: [from, to). */
+    #blockCols(selection: Selection, line: number): [number, number] {
+        let text = this.#editor.buffer.line(line);
+        if (displayCol(text, text.length) <= selection.left) return [text.length, text.length];
+        let from = colAtDisplay(text, selection.left);
+        let to = selection.right === Infinity ? text.length
+            : Math.min(text.length, colAtDisplay(text, selection.right) + 1);
+        return [from, Math.max(from, to)];
+    }
+
+    #blockText(selection: Selection): string {
+        let buffer = this.#editor.buffer;
+        let pieces: string[] = [];
+        for (let line = selection.start.line; line <= selection.end.line; line++) {
+            let [from, to] = this.#blockCols(selection, line);
+            pieces.push(buffer.line(line).slice(from, to));
+        }
+        return pieces.join('\n');
+    }
+
+    /** Replace each line's part of the block with `change(part)`. */
+    #blockEach(selection: Selection, change: (part: string) => string): void {
+        let editor = this.#editor;
+        let buffer = editor.buffer;
+        for (let line = selection.start.line; line <= selection.end.line; line++) {
+            let [from, to] = this.#blockCols(selection, line);
+            let part = buffer.line(line).slice(from, to);
+            let changed = change(part);
+            if (changed === part) continue;
+            buffer.delete({ line, col: from }, { line, col: to }, editor.cursor);
+            buffer.insert({ line, col: from }, changed);
+        }
+        let [first] = this.#blockCols(selection, selection.start.line);
+        editor.cursor = { line: selection.start.line, col: first };
+    }
+
+    #visualCommand(command: Command, selection: Selection): void {
+        let editor = this.#editor;
+        let visual = editor.visual!;
+        let name = command.name;
+        let count = command.count ?? 1;
+        let block = selection.kind === 'block';
+        switch (name) {
+            case '<Esc>': case '<C-c>': this.#endVisual(); return;
+            case 'v': case 'V': case '<C-v>': {
+                let kind: VisualKind = name === 'v' ? 'char' : name === 'V' ? 'line' : 'block';
+                if (visual.kind === kind) this.#endVisual(); else visual.kind = kind;
+                return;
+            }
+            case 'gv': return;
+            case 'o': case 'O': {
+                let anchor = visual.anchor;
+                if (name === 'O' && block) {
+                    // The other corner on the same lines.
+                    let buffer = editor.buffer;
+                    let xa = displayCol(buffer.line(anchor.line), anchor.col);
+                    let xc = displayCol(buffer.line(editor.cursor.line), editor.cursor.col);
+                    visual.anchor = { line: anchor.line, col: colAtDisplay(buffer.line(anchor.line), xc) };
+                    let line = editor.cursor.line;
+                    editor.cursor = { line, col: colAtDisplay(buffer.line(line), xa) };
+                } else {
+                    visual.anchor = editor.cursor;
+                    editor.cursor = anchor;
+                }
+                editor.wantHere();
+                return;
+            }
+            case ':':
+                this.#endVisual();
+                editor.mode = 'command';
+                editor.command = "'<,'>";
+                return;
+            default:
+        }
+        this.#endVisual();
+        let region = this.#selectionRegion(selection);
+        let lines: Region = {
+            start: { line: selection.start.line, col: 0 }, end: { line: selection.end.line, col: 0 }, linewise: true,
+        };
+        let toEnd: Selection = { ...selection, right: Infinity };
+        let register = command.register;
+        switch (name) {
+            case 'd': case 'x': case '<Del>':
+                if (block) this.#blockDelete(selection, register); else this.#delete(region, register);
+                break;
+            case 'X': case 'D':
+                if (block && name === 'D') this.#blockDelete(toEnd, register); else this.#delete(lines, register);
+                break;
+            case 'y':
+                if (block) {
+                    editor.registers.yank(register, { text: this.#blockText(selection), linewise: false, block: true });
+                    let line = selection.start.line;
+                    editor.cursor = { line, col: this.#blockCols(selection, line)[0] };
+                } else {
+                    this.#yank(region, register);
+                }
+                break;
+            case 'Y': this.#yank(lines, register); break;
+            case 'c': case 's':
+                if (block) this.#blockInsert(selection, register, 'change'); else this.#change(region, register);
+                return;
+            case 'C': case 'S': case 'R':
+                if (block && name === 'C') this.#blockInsert(toEnd, register, 'change');
+                else this.#change(lines, register);
+                return;
+            case 'I': case 'A':
+                if (block) {
+                    this.#blockInsert(selection, register, name === 'I' ? 'before' : 'after');
+                } else if (name === 'I') {
+                    editor.startInsert(selection.kind === 'line'
+                        ? { line: selection.start.line, col: firstNonBlank(editor.buffer.line(selection.start.line)) }
+                        : selection.start);
+                } else {
+                    editor.startInsert(selection.kind === 'line'
+                        ? { line: selection.end.line, col: editor.buffer.line(selection.end.line).length }
+                        : editor.buffer.clamp(region.end));
+                }
+                return;
+            case '>': case '<':
+                for (let i = 0; i < count; i++) this.#shift(lines, name === '>');
+                break;
+            case '~': case 'u': case 'U': case 'g~': case 'gu': case 'gU': {
+                let operator = name === 'u' || name === 'gu' ? 'gu' : name === 'U' || name === 'gU' ? 'gU' : '~';
+                if (block) {
+                    let change = (part: string) => (operator === 'gu' ? part.toLowerCase()
+                        : operator === 'gU' ? part.toUpperCase() : toggleCase(part));
+                    this.#blockEach(selection, change);
+                } else {
+                    this.#changeCase(region, operator);
+                }
+                break;
+            }
+            case 'J': case 'gJ':
+                editor.cursor = { line: selection.start.line, col: 0 };
+                this.#join(Math.max(2, selection.end.line - selection.start.line + 1), name === 'J');
+                break;
+            case 'r': {
+                let char = command.arg!;
+                if (!isCharKey(char)) break;
+                if (block) {
+                    this.#blockEach(selection, (part) => char.repeat(part.length));
+                } else {
+                    let start = region.linewise ? { line: region.start.line, col: 0 } : region.start;
+                    let end = region.linewise
+                        ? { line: region.end.line, col: editor.buffer.line(region.end.line).length } : region.end;
+                    let text = editor.buffer.slice(start, end);
+                    editor.buffer.delete(start, end, editor.cursor);
+                    editor.buffer.insert(start, text.replace(/[^\n]/g, char));
+                    editor.cursor = start;
+                }
+                break;
+            }
+            case 'p': case 'P': {
+                let value = editor.registers.get(register ?? '"');
+                if (value === undefined) {
+                    editor.fail(`E353: Nothing in register ${register ?? '"'}`);
+                    break;
+                }
+                // The selection is replaced (p keeps it in the unnamed register, P throws it away, as in vim).
+                let lastLines = selection.end.line === editor.buffer.lineCount - 1 && selection.start.line > 0;
+                let discard = name === 'P' ? '_' : undefined;
+                if (block) this.#blockDelete(selection, discard); else this.#delete(region, discard);
+                if (value.linewise && !region.linewise) {
+                    let { line, col } = editor.cursor;
+                    editor.buffer.insert({ line, col }, '\n' + value.text + '\n');
+                    editor.gotoLine(line + 1);
+                } else if (!value.linewise && region.linewise) {
+                    editor.buffer.insert({ line: region.start.line, col: 0 }, value.text + '\n');
+                    editor.cursor = { line: region.start.line, col: 0 };
+                } else {
+                    this.#putValue(value, count, region.linewise && lastLines);
+                }
+                break;
+            }
+            default:
+        }
+        if (editor.mode === 'normal') editor.cursor = editor.normalCol(editor.cursor);
+    }
+
+    #blockDelete(selection: Selection, register: string | undefined): void {
+        let editor = this.#editor;
+        editor.registers.delete(register, { text: this.#blockText(selection), linewise: false, block: true });
+        this.#blockEach(selection, () => '');
+        editor.wantHere();
+    }
+
+    /** I / A / c in a block: Insert mode on its first line; Esc puts what was typed into the other lines. */
+    #blockInsert(selection: Selection, register: string | undefined, how: 'before' | 'after' | 'change'): void {
+        let editor = this.#editor;
+        let buffer = editor.buffer;
+        let first = selection.start.line;
+        if (how === 'change') this.#blockDelete(selection, register);
+        let x = how === 'after' ? (selection.right === Infinity ? Infinity : selection.right + 1) : selection.left;
+        let text = buffer.line(first);
+        let width = displayCol(text, text.length);
+        let col: number;
+        if (x === Infinity) {
+            col = text.length;
+        } else if (width < x) {
+            buffer.insert({ line: first, col: text.length }, ' '.repeat(x - width), editor.cursor);
+            col = buffer.line(first).length;
+        } else {
+            col = colAtDisplay(text, x);
+        }
+        editor.startInsert({ line: first, col }, 'insert', 1, '', {
+            first, last: selection.end.line, x, pad: how === 'after',
+        });
+    }
+}
+
+/** The keys that select, from the cursor, a selection as big as `selection` (so that '.' repeats on as much text). */
+function selectionKeys(selection: Selection): string[] {
+    let lines = selection.end.line - selection.start.line;
+    let down = lines > 0 ? [...String(lines), 'j'] : [];
+    switch (selection.kind) {
+        case 'line':
+            return ['V', ...down];
+        case 'block': {
+            let width = selection.right - selection.left;
+            let across = selection.right === Infinity ? ['$'] : width > 0 ? [...String(width), 'l'] : [];
+            return ['<C-v>', ...down, ...across];
+        }
+        default: {
+            if (lines === 0) {
+                let width = selection.end.col - selection.start.col;
+                return ['v', ...(width > 0 ? [...String(width), 'l'] : [])];
+            }
+            let end = selection.end.col;
+            return ['v', ...down, '0', ...(end > 0 ? [...String(end), 'l'] : [])];
+        }
     }
 }
 

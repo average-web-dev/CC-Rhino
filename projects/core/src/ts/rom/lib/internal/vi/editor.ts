@@ -4,7 +4,7 @@
 
 // /rom/lib/internal/vi/editor.ts — the state of the vi editor and what keys do to it, without any terminal: /rom/bin/vi
 // feeds it the decoded input and draws it with ./view.ts, and the tests drive it directly. Normal mode (commands,
-// motions, operators) is ./normal.ts; Insert, Replace and the command line are here.
+// motions, operators) and Visual mode are ./normal.ts; Insert, Replace and the command line are here.
 //
 // Keys are named as in vim's documentation: a typed character is itself ('a', 'A', ':'), others are '<Esc>', '<CR>',
 // '<BS>', '<Del>', '<Tab>', '<Up>' …, with Ctrl '<C-r>' / '<C-Left>', with Shift '<S-Left>'.
@@ -12,12 +12,43 @@
 import { TextBuffer, type Position } from '/rom/lib/internal/vi/buffer';
 import { Key } from '/rom/lib/internal/keys';
 import { execute } from '/rom/lib/internal/vi/ex';
-import { firstNonBlank, runMotion } from '/rom/lib/internal/vi/motions';
+import { firstNonBlank, runMotion, textObject } from '/rom/lib/internal/vi/motions';
 import { NormalMode } from '/rom/lib/internal/vi/normal';
 import { Registers } from '/rom/lib/internal/vi/registers';
 import { colAtDisplay, displayCol } from '/rom/lib/internal/vi/tabs';
 
-export type Mode = 'normal' | 'insert' | 'replace' | 'command';
+export type Mode = 'normal' | 'insert' | 'replace' | 'command' | 'visual';
+
+/** The kinds of Visual mode: characters (v), whole lines (V), a block of columns (Ctrl+V). */
+export type VisualKind = 'char' | 'line' | 'block';
+
+/** A Visual selection: where it started (the anchor, `o` swaps it with the cursor) and its kind. */
+export interface Visual {
+    kind: VisualKind;
+    anchor: Position;
+}
+
+/**
+ * The selected text: first and last position (both included), in text order; for a block also its screen columns
+ * (`right` Infinity after '$': to the end of every line).
+ */
+export interface Selection {
+    kind: VisualKind;
+    start: Position;
+    end: Position;
+    left: number;
+    right: number;
+}
+
+/** Text typed into a block (I, A, c in Visual block mode) goes into each of its lines when Insert mode ends. */
+export interface BlockInsert {
+    first: number;
+    last: number;
+    /** The screen column it goes to (Infinity: the end of each line). */
+    x: number;
+    /** Whether shorter lines are padded with spaces up to the column (A) or skipped (I). */
+    pad: boolean;
+}
 
 /** How the editor reads and writes files (fs in vi; a map in the tests). */
 export interface FileIO {
@@ -26,6 +57,9 @@ export interface FileIO {
     /** Write the file; throws if it cannot be written. */
     write(path: string, text: string): void;
 }
+
+/** How soon a second click counts as a double click. */
+const DOUBLE_CLICK_MS = 400;
 
 const NAMED_KEYS: Record<string, string> = {
     [Key.ESCAPE]: 'Esc', [Key.ENTER]: 'CR', [Key.NUMPAD_ENTER]: 'CR', [Key.BACKSPACE]: 'BS', [Key.DELETE]: 'Del',
@@ -62,6 +96,7 @@ interface InsertSession {
     prefix: string;
     /** The text typed (Backspace takes it back again). */
     typed: string;
+    block?: BlockInsert;
 }
 
 export class Editor {
@@ -87,9 +122,18 @@ export class Editor {
     want: number | 'end' = 0;
     /** The last f / t / F / T, for ; and ,. */
     lastFind: { motion: string; char: string } | undefined;
+    /** The Visual selection while in Visual mode, and the last one (gv selects it again). */
+    visual: Visual | undefined;
+    lastVisual: { kind: VisualKind; anchor: Position; cursor: Position } | undefined;
+
+    /** The time in milliseconds, for double clicks (the tests set their own). */
+    now: () => number = () => Date.now();
 
     readonly #io: FileIO;
     readonly #normal: NormalMode;
+    /** The last left click (for double and triple clicks) and where a drag started. */
+    #clicks = { count: 0, at: 0, line: -1, col: -1 };
+    #drag: Position | undefined;
     #insert: InsertSession | undefined;
     /** In Replace mode: the characters overwritten, so that Backspace can restore them ('' for appended ones). */
     #replaced: string[] = [];
@@ -172,6 +216,7 @@ export class Editor {
         if (this.mode === 'insert' || this.mode === 'replace') this.#normal.record(name);
         switch (this.mode) {
             case 'normal': this.#normal.feed(name); break;
+            case 'visual': this.#normal.feedVisual(name); break;
             case 'insert': case 'replace': this.#insertKey(name); break;
             case 'command': this.#commandLine(name); break;
         }
@@ -232,11 +277,13 @@ export class Editor {
      * Enter Insert (or Replace) mode with the cursor at `at`. The undo step started before the command (o, c …) goes on
      * until Esc; `count` and `prefix` say how Esc repeats the typed text (3ix, 2o).
      */
-    startInsert(at: Position, mode: 'insert' | 'replace' = 'insert', count = 1, prefix = ''): void {
+    startInsert(
+        at: Position, mode: 'insert' | 'replace' = 'insert', count = 1, prefix = '', block?: BlockInsert,
+    ): void {
         this.buffer.begin(this.cursor);
         this.cursor = at;
         this.mode = mode;
-        this.#insert = { count, prefix, typed: '' };
+        this.#insert = { count, prefix, typed: '', block };
         this.#replaced = [];
         this.wantHere();
     }
@@ -346,11 +393,146 @@ export class Editor {
             }
             this.cursor = this.buffer.insert(this.cursor, again);
         }
+        if (session?.block !== undefined && session.typed !== '' && session.typed.indexOf('\n') < 0) {
+            this.#fillBlock(session.block, session.typed);
+        }
         this.buffer.end(this.cursor);
         this.mode = 'normal';
         this.cursor = this.normalCol({ line: this.cursor.line, col: this.cursor.col - 1 });
         this.wantHere();
         this.#normal.insertDone();
+    }
+
+    /** Put the text typed on a block's first line into its other lines, at the same screen column. */
+    #fillBlock(block: BlockInsert, text: string): void {
+        for (let line = block.first + 1; line <= block.last; line++) {
+            let current = this.buffer.line(line);
+            let width = displayCol(current, current.length);
+            let col: number;
+            if (block.x === Infinity) {
+                col = current.length;
+            } else if (width < block.x) {
+                if (!block.pad) continue;
+                this.buffer.insert({ line, col: current.length }, ' '.repeat(block.x - width));
+                col = this.buffer.line(line).length;
+            } else {
+                col = colAtDisplay(current, block.x);
+            }
+            this.buffer.insert({ line, col }, text);
+        }
+    }
+
+    /** Enter Visual mode, selecting from `anchor` to the cursor. */
+    startVisual(kind: VisualKind, anchor: Position): void {
+        this.visual = { kind, anchor };
+        this.mode = 'visual';
+    }
+
+    /** Leave Visual mode, remembering the selection for gv. */
+    endVisual(): void {
+        let visual = this.visual;
+        if (visual !== undefined) this.lastVisual = { kind: visual.kind, anchor: visual.anchor, cursor: this.cursor };
+        this.visual = undefined;
+        if (this.mode === 'visual') this.mode = 'normal';
+    }
+
+    // ── Mouse ────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * A mouse report (vi asks for them, as vim with 'mouse=a'): a left click puts the cursor there (staying in Insert
+     * mode, ending a selection), dragging selects (Visual mode from where the button went down), a double click
+     * selects a word and a triple click a line; the wheel scrolls three lines.
+     */
+    handleMouse(mouse: TtyMouseInput): void {
+        if (mouse.action === 'scroll') {
+            this.#scrollBy(3 * mouse.direction);
+            return;
+        }
+        if (mouse.button !== 'left' && mouse.action !== 'release') return;
+        if (mouse.action === 'release') {
+            this.#drag = undefined;
+            return;
+        }
+        let pos = this.#positionAt(mouse.x, mouse.y);
+        if (pos === undefined) return;
+        this.message = '';
+        this.error = false;
+        if (mouse.action === 'press') {
+            this.#pressed(pos);
+        } else if (mouse.action === 'drag' && this.#drag !== undefined) {
+            if (this.mode === 'insert' || this.mode === 'replace') this.feed('<Esc>');
+            if (this.mode === 'command') return;
+            if (this.mode !== 'visual') this.startVisual('char', this.#drag);
+            this.cursor = this.normalCol(pos);
+            this.wantHere();
+        }
+        this.follow();
+    }
+
+    #pressed(pos: Position): void {
+        // A second or third press on the same cell soon after the first is a double or triple click.
+        let now = this.now();
+        let clicks = this.#clicks;
+        let again = now - clicks.at <= DOUBLE_CLICK_MS && clicks.line === pos.line && clicks.col === pos.col;
+        this.#clicks = { count: again ? clicks.count % 3 + 1 : 1, at: now, line: pos.line, col: pos.col };
+        this.#normal.clear();
+        if (this.mode === 'command') { this.mode = 'normal'; this.command = ''; }
+        switch (this.#clicks.count) {
+            case 2: {
+                if (this.mode === 'insert' || this.mode === 'replace') this.feed('<Esc>');
+                let word = textObject(this.buffer, pos, false, 'w');
+                if (word === undefined) return;
+                if (this.mode === 'visual') this.endVisual();
+                this.startVisual('char', word.start);
+                this.cursor = { line: word.end.line, col: Math.max(word.start.col, word.end.col - 1) };
+                this.#drag = undefined;
+                break;
+            }
+            case 3:
+                if (this.mode === 'visual') this.endVisual();
+                this.startVisual('line', { line: pos.line, col: 0 });
+                this.cursor = this.normalCol(pos);
+                this.#drag = undefined;
+                break;
+            default:
+                if (this.mode === 'visual') this.endVisual();
+                let typing = this.mode === 'insert' || this.mode === 'replace';
+                this.cursor = typing ? this.buffer.clamp(pos) : this.normalCol(pos);
+                this.#drag = this.cursor;
+        }
+        this.wantHere();
+    }
+
+    /** The text position shown at screen cell (x, y), or undefined for the last row. */
+    #positionAt(x: number, y: number): Position | undefined {
+        if (y < 0 || y >= this.rows) return undefined;
+        let line = Math.min(this.top + y, this.buffer.lineCount - 1);
+        return { line, col: colAtDisplay(this.buffer.line(line), this.left + Math.max(0, x)) };
+    }
+
+    /** Scroll the view by `lines`; the cursor moves just enough to stay on screen. */
+    #scrollBy(lines: number): void {
+        let last = this.buffer.lineCount - 1;
+        this.top = Math.max(0, Math.min(this.top + lines, last));
+        let line = Math.max(this.top, Math.min(this.cursor.line, this.top + this.rows - 1, last));
+        if (line !== this.cursor.line) {
+            let col = this.wantedCol(line);
+            this.cursor = this.mode === 'insert' || this.mode === 'replace'
+                ? this.buffer.clamp({ line, col }) : this.normalCol({ line, col });
+        }
+    }
+
+    /** The current Visual selection, or undefined outside Visual mode. */
+    selection(): Selection | undefined {
+        let visual = this.visual;
+        if (visual === undefined) return undefined;
+        let a = visual.anchor;
+        let b = this.cursor;
+        let [start, end] = a.line < b.line || (a.line === b.line && a.col <= b.col) ? [a, b] : [b, a];
+        let xa = displayCol(this.buffer.line(a.line), a.col);
+        let xb = displayCol(this.buffer.line(b.line), b.col);
+        let right = this.want === 'end' ? Infinity : Math.max(xa, xb);
+        return { kind: visual.kind, start, end, left: Math.min(xa, xb), right };
     }
 
     #moveTo(pos: Position): void {

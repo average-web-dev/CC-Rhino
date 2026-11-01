@@ -8,9 +8,9 @@
 //
 // Normal mode moves and changes text, Insert mode (i, a, o …) types it, ':' runs commands (:w, :q, :wq, :q!). The
 // editor itself is /rom/lib/internal/vi; this program connects it to the terminal, event driven as a Node program
-// is: main() puts stdin in raw mode with bracketed paste, listens to its 'keydown' / 'paste' events (and stdout's
-// 'resize') and returns. The flowing stdin keeps the program alive until the editor quits: then the listeners are
-// removed, stdin pauses and the TTY is put back as it was.
+// is: main() puts stdin in raw mode with bracketed paste and mouse reports, listens to its 'keydown' / 'paste' /
+// 'mouse' events (and stdout's 'resize') and returns. The flowing stdin keeps the program alive until the editor
+// quits: then the listeners are removed, stdin pauses and the TTY is put back as it was.
 
 import fs from 'fs';
 import { Term } from '/rom/lib/term';
@@ -45,15 +45,17 @@ export function main(args: string[], cwd: string): void {
     };
     let onKey = (key: TtyKeyInput) => { update(() => { editor.handleKey(key); }); };
     let onPaste = (paste: TtyPasteInput) => { update(() => { editor.handlePaste(paste.text); }); };
+    let onMouse = (mouse: TtyMouseInput) => { update(() => { editor.handleMouse(mouse); }); };
     let onResize = () => { update(() => { view.invalidate(); }); };
 
     /** Stop listening (so the program can end) and give the TTY back as the shell expects it. */
     let close = (): void => {
         stdin.off('keydown', onKey);
         stdin.off('paste', onPaste);
+        stdin.off('mouse', onMouse);
         stdout.off('resize', onResize);
         stdin.pause();
-        stdout.write(CSI.bracketedPaste(false));
+        stdout.write(CSI.mouse(false) + CSI.bracketedPaste(false));
         stdin.setRawMode(false);
         term.clear();
         term.setCursorPos({ x: 0, y: 0 });
@@ -61,10 +63,11 @@ export function main(args: string[], cwd: string): void {
     };
 
     stdin.setRawMode(true);
-    stdout.write(CSI.bracketedPaste(true));
+    stdout.write(CSI.bracketedPaste(true) + CSI.mouse(true));
     term.clear();
     view.draw();
     stdin.on('keydown', onKey);
     stdin.on('paste', onPaste);
+    stdin.on('mouse', onMouse);
     stdout.on('resize', onResize);
 }

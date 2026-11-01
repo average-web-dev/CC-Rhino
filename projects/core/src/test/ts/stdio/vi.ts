@@ -15,6 +15,7 @@ interface Editor {
     readonly buffer: { text(): string; line(i: number): string; readonly modified: boolean };
     readonly cursor: { line: number; col: number };
     readonly mode: string;
+    readonly command: string;
     readonly message: string;
     readonly error: boolean;
     readonly quit: boolean;
@@ -24,6 +25,8 @@ interface Editor {
     setSize(width: number, rows: number): void;
     handleKey(key: TtyKeyInput): void;
     handlePaste(text: string): void;
+    handleMouse(mouse: TtyMouseInput): void;
+    now: () => number;
 }
 // A plain require: an import would compile the ROM source into this test.
 const Editor: new (io: unknown, path?: string) => Editor = (require('/rom/lib/internal/vi/editor') as any).Editor;
@@ -41,6 +44,7 @@ const SEQUENCES: Record<string, string> = {
     '<Up>': '\x1b[A', '<Down>': '\x1b[B', '<Right>': '\x1b[C', '<Left>': '\x1b[D', '<Del>': '\x1b[3~',
     '<Home>': '\x1b[H', '<End>': '\x1b[F', '<PageDown>': '\x1b[6~', '<PageUp>': '\x1b[5~',
     '<C-Left>': '\x1b[1;5D', '<C-Right>': '\x1b[1;5C', '<C-w>': '\x17', '<C-u>': '\x15', '<C-d>': '\x04',
+    '<C-v>': '\x16',
 };
 
 /** Type `keys` (characters, or vim names like '<Esc>') into `editor`, each key decoded as the terminal sends it. */
@@ -346,3 +350,138 @@ eq(after('', 'ione two<C-w>X<Esc>'), 'one X');
 eq(after('', 'ione two<C-u>X<Esc>'), 'X');
 eq(after('one two', 'A<C-Left>X<Esc>'), 'one Xtwo');
 
+
+// ── Visual mode (phase 3) ───────────────────────────────────────────────────────────────────────────────────────────
+
+e = open('one two three');
+type(e, 'wv');
+eq(e.mode, 'visual');
+type(e, '<Esc>');
+eq(e.mode, 'normal');
+
+eq(after('one two three', 'wvlld'), 'one  three');
+eq(after('one two three', 'wviwd'), 'one  three', 'a text object selects it');
+eq(after('one two three', 'wvawd'), 'one three');
+eq(after('abcdef', 'lvllohd'), 'ef', 'o moves the other end');
+eq(after('one two', 'vey$p'), 'one twoone');
+eq(after('a\nb\nc', 'Vjd'), 'c');
+eq(after('a\nb\nc', 'Vj>'), '    a|    b|c');
+eq(after('a\nb\nc', 'Vj2>'), '        a|        b|c', 'a count shifts that often');
+eq(after('abcd', 'vll~'), 'ABCd');
+eq(after('ABC\nDEF', 'Vju'), 'abc|def');
+eq(after('abcd', 'vllU'), 'ABCd');
+eq(after('abcd', 'vllrx'), 'xxxd');
+eq(after('a\nb\nc', 'VjJ'), 'a b|c');
+eq(after('one two', 'yiwwviwp'), 'one one', 'p replaces the selection');
+eq(after('one two', 'yiwwviwp0viwp'), 'two one', '…and keeps what it replaced in the unnamed register');
+eq(after('a\nb\nc', 'yyjVp'), 'a|a|c', 'lines replace lines');
+eq(after('abcd', 'vly<Esc>gvd'), 'cd', 'gv selects the last selection again');
+eq(after('abcd', 'vlcX<Esc>'), 'Xcd');
+eq(after('a\nb\nc', 'VjcX<Esc>'), 'X|c');
+e = open('abc');
+type(e, 'vl:');
+eq(`${e.mode} ${e.command}`, "command '<,'>", ': in Visual mode starts with the range of the selection');
+
+// Visual block.
+eq(after('abcd\nefgh\nijkl', '<C-v>jld'), 'cd|gh|ijkl');
+eq(after('abcd\nefgh\nijkl', '<C-v>jIX<Esc>'), 'Xabcd|Xefgh|ijkl', 'I types into every line of the block');
+eq(after('abcd\nefgh\nijkl', 'l<C-v>jAY<Esc>'), 'abYcd|efYgh|ijkl');
+eq(after('abcd\nefgh\nijkl', '<C-v>jlcZ<Esc>'), 'Zcd|Zgh|ijkl');
+eq(after('ab\ncdef', '<C-v>j$A!<Esc>'), 'ab!|cdef!', 'after $: the end of every line');
+eq(after('abcdef\nab', 'llll<C-v>jAZ<Esc>'), 'abcdeZf|ab   Z', 'A pads short lines');
+eq(after('abcd\nefgh\nijkl', '<C-v>jly$p'), 'abcdab|efghef|ijkl', 'a block is put as a block');
+eq(after('abcd\nefgh', '<C-v>jlU'), 'ABcd|EFgh');
+eq(after('abcd\nefgh', 'l<C-v>jlrx'), 'axxd|exxh');
+eq(after('abcd\nefgh', '<C-v>jlO'.replace('O', 'Od')), 'cd|gh', 'O: the other corner');
+
+// '.' repeats a Visual change on as much text, from the cursor.
+eq(after('abcdef', 'vld.'), 'ef');
+eq(after('a\nb\nc', 'Vd.'), 'c');
+eq(after('abcd\nefgh\nijkl', '<C-v>jIX<Esc>j.'), 'Xabcd|XXefgh|Xijkl');
+
+// ── Mouse ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** A mouse report as the terminal sends it (SGR encoding; x and y from 0, as the screen cells). */
+function mouse(editor: Editor, kind: 'press' | 'release' | 'drag' | 'up' | 'down', x: number, y: number): void {
+    let code = kind === 'drag' ? 32 : kind === 'up' ? 64 : kind === 'down' ? 65 : 0;
+    let sequence = `\x1b[<${code};${x + 1};${y + 1}${kind === 'release' ? 'm' : 'M'}`;
+    for (let input of decodeInput(sequence)) if (input.type === 'mouse') editor.handleMouse(input);
+}
+let clock = 0;
+function clicked(text: string): Editor {
+    let editor = open(text);
+    editor.now = () => clock;
+    clock += 10000;
+    return editor;
+}
+function click(editor: Editor, x: number, y: number): void {
+    mouse(editor, 'press', x, y);
+    mouse(editor, 'release', x, y);
+}
+
+e = clicked('one two three\nfour');
+click(e, 5, 0);
+eq(at(e), '0,5', 'a click puts the cursor there');
+click(e, 9, 1);
+eq(at(e), '1,3', 'past the end of a line: its last character');
+click(e, 2, 3);
+eq(at(e), '1,2', "below the text ('~'): the last line");
+click(e, 2, 5);
+eq(at(e), '1,2', 'the last row (status, command line) is no text');
+type(e, 'A');
+click(e, 2, 0);
+eq(`${e.mode} ${at(e)}`, 'insert 0,2', 'Insert mode stays');
+type(e, '<Esc>');
+
+e = clicked('one two three\nfour');
+mouse(e, 'press', 0, 0);
+mouse(e, 'drag', 3, 0);
+mouse(e, 'drag', 6, 0);
+mouse(e, 'release', 6, 0);
+eq(e.mode, 'visual', 'dragging selects');
+type(e, 'd');
+eq(lines(e), ' three|four');
+
+e = clicked('one two three\nfour');
+type(e, 'A');
+mouse(e, 'press', 4, 0);
+mouse(e, 'drag', 6, 0);
+eq(e.mode, 'visual', 'dragging in Insert mode leaves it for Visual mode');
+type(e, 'y<Esc>');
+eq(e.registers.get()?.text, 'two');
+
+e = clicked('one two three\nfour');
+click(e, 5, 0);
+click(e, 5, 0);
+eq(e.mode, 'visual', 'a double click selects the word');
+type(e, 'd');
+eq(lines(e), 'one  three|four');
+
+e = clicked('one two three\nfour');
+click(e, 5, 0);
+click(e, 5, 0);
+click(e, 5, 0);
+type(e, 'd');
+eq(lines(e), 'four', 'a triple click selects the line');
+
+e = clicked('one two three\nfour');
+click(e, 5, 0);
+clock += 1000;
+click(e, 5, 0);
+eq(e.mode, 'normal', 'clicks far apart are two clicks');
+click(e, 6, 0);
+eq(e.mode, 'normal', 'and so are clicks on different cells');
+
+e = clicked('one two');
+type(e, 'vl');
+click(e, 5, 0);
+eq(`${e.mode} ${at(e)}`, 'normal 0,5', 'a click ends a selection');
+type(e, 'gvd');
+eq(lines(e), 'e two', '…which gv brings back');
+
+e = clicked(Array.from({ length: 30 }, (_, i) => `line ${i}`).join('\n'));
+mouse(e, 'down', 0, 0);
+eq(`${e.top} ${at(e)}`, '3 3,0', 'the wheel scrolls three lines; the cursor stays on screen');
+mouse(e, 'down', 0, 0);
+mouse(e, 'up', 0, 0);
+eq(`${e.top} ${at(e)}`, '3 6,0', 'scrolling back keeps the cursor where it is, if shown');

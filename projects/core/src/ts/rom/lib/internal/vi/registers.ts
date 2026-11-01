@@ -11,10 +11,11 @@
 //   "a – "z  named registers; "A – "Z append to them
 //   "_       the black hole: writing to it keeps everything else as it is
 
-/** A register's text (lines joined with '\n') and whether it holds whole lines. */
+/** A register's text (lines joined with '\n'), and whether it holds whole lines or a block (a column of text). */
 export interface Register {
     text: string;
     linewise: boolean;
+    block?: boolean;
 }
 
 export class Registers {
