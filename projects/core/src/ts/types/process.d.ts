@@ -13,6 +13,8 @@ interface Writable {
     readonly isTTY?: boolean;
     readonly columns?: number;
     readonly rows?: number;
+    /** Whether the stream shows colours (a colour TTY). */
+    hasColors?(count?: number): boolean;
     on?(event: string, listener: (...args: any[]) => void): unknown;
     removeListener?(event: string, listener: (...args: any[]) => void): unknown;
 }

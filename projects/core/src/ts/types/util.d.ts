@@ -9,7 +9,7 @@ interface InspectOptions {
     showHidden?: boolean;
     /** How many levels to recurse into (default 2; null or Infinity: all). */
     depth?: number | null;
-    /** Accepted for compatibility; inspect never colours its output. */
+    /** Colour the output with ANSI codes (inspect.styles, default false; console turns it on for colour TTYs). */
     colors?: boolean;
     /** Call `value[util.inspect.custom](depth, options, inspect)` when present (default true). */
     customInspect?: boolean;
@@ -33,6 +33,10 @@ interface InspectFunction {
     /** Symbol.for('nodejs.util.inspect.custom'). */
     readonly custom: symbol;
     defaultOptions: InspectOptions;
+    /** The style (a key of `colors`) of each kind of value: special, number, bigint, boolean, undefined, null, string, symbol, date, regexp, module. Mutable. */
+    styles: Record<string, string>;
+    /** The ANSI [open, close] codes of each style name, as used by styleText. Mutable. */
+    colors: Record<string, [number, number]>;
 }
 
 interface PromisifyFunction {

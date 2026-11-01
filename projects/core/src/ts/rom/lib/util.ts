@@ -6,8 +6,8 @@
 // meaningful on a computer: format / formatWithOptions, inspect (lib/internal/util/inspect.js: depth, circular
 // references, compact grouping, breakLength), inherits, promisify, stripVTControlCharacters and styleText.
 //
-// Differences from Node: no colours in inspect (`colors` is accepted and ignored — the terminal does understand the
-// ANSI colours styleText produces), no Proxy detection, and promise states cannot be inspected on Rhino.
+// inspect colours values with `colors: true` (inspect.styles / inspect.colors, as in Node; console does on a colour
+// TTY). Differences from Node: no Proxy detection, and promise states cannot be inspected on Rhino.
 
 import { CSI } from '/rom/lib/internal/csi';
 import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE } from '/rom/lib/internal/errors';
@@ -31,6 +31,7 @@ const defaultOptions = {
 
 interface Context {
     showHidden: boolean;
+    colors: boolean;
     depth: number;
     customInspect: boolean;
     maxArrayLength: number;
@@ -102,6 +103,25 @@ function invalidArgType(name: string, expected: string, actual: unknown): TypeEr
     return new ERR_INVALID_ARG_TYPE(name, expected, actual);
 }
 
+/** The style of each kind of value (Node's inspect.styles); the names are keys of inspect.colors. */
+const styles: Record<string, string> = {
+    special: 'cyan', number: 'yellow', bigint: 'yellow', boolean: 'yellow', undefined: 'grey', null: 'bold',
+    string: 'green', symbol: 'green', date: 'magenta', regexp: 'red', module: 'underline',
+};
+
+/** `str` in the colour of `styleType` when colours are on (Node's stylizeWithColor). */
+function stylize(ctx: Context, str: string, styleType: string): string {
+    if (!ctx.colors) return str;
+    let style = inspect.styles[styleType];
+    let codes = style === undefined ? undefined : inspect.colors[style];
+    return codes === undefined ? str : `${CSI.sgr(codes[0])}${str}${CSI.sgr(codes[1])}`;
+}
+
+/** The visible length of formatted output: colour codes take no room. */
+function width(ctx: Context, str: string): number {
+    return ctx.colors ? str.replace(ansiPattern, '').length : str.length;
+}
+
 function formatNumber(n: number): string {
     return Object.is(n, -0) ? '-0' : String(n);
 }
@@ -116,13 +136,13 @@ function formatPrimitive(ctx: Context, value: unknown): string {
                 str = str.slice(0, ctx.maxStringLength);
                 trailer = `... ${remaining} more character${remaining > 1 ? 's' : ''}`;
             }
-            return strEscape(str) + trailer;
+            return stylize(ctx, strEscape(str), 'string') + trailer;
         }
-        case 'number': return formatNumber(value as number);
-        case 'bigint': return `${String(value)}n`;
-        case 'boolean': return String(value);
-        case 'undefined': return 'undefined';
-        default: return String(value); // symbol
+        case 'number': return stylize(ctx, formatNumber(value as number), 'number');
+        case 'bigint': return stylize(ctx, `${String(value)}n`, 'bigint');
+        case 'boolean': return stylize(ctx, String(value), 'boolean');
+        case 'undefined': return stylize(ctx, 'undefined', 'undefined');
+        default: return stylize(ctx, String(value), 'symbol');
     }
 }
 
@@ -222,7 +242,7 @@ function formatError(err: Error, ctx: Context): string {
 
 function formatValue(ctx: Context, value: unknown, recurseTimes: number): string {
     if (typeof value !== 'object' && typeof value !== 'function') return formatPrimitive(ctx, value);
-    if (value === null) return 'null';
+    if (value === null) return stylize(ctx, 'null', 'null');
 
     if (ctx.customInspect) {
         let maybeCustom: unknown;
@@ -255,7 +275,7 @@ function formatValue(ctx: Context, value: unknown, recurseTimes: number): string
                 index = existing;
             }
         }
-        return `[Circular *${index}]`;
+        return stylize(ctx, `[Circular *${index}]`, 'special');
     }
 
     return formatRaw(ctx, value as object, recurseTimes);
@@ -296,31 +316,33 @@ function formatRaw(ctx: Context, value: object, recurseTimes: number): string {
         formatter = formatTypedArray;
         extrasType = kArrayExtrasType;
     } else if (typeof value === 'function') {
-        base = getFunctionBase(value, ctorName);
+        base = stylize(ctx, getFunctionBase(value, ctorName), 'special');
         if (keys.length === 0) return base;
     } else if (value instanceof RegExp) {
         base = RegExp.prototype.toString.call(value);
         if (ctorName !== 'RegExp') base = getPrefix(ctorName, 'RegExp') + base;
+        base = stylize(ctx, base, 'regexp');
         if (keys.length === 0) return base;
     } else if (value instanceof Date) {
         base = isNaN(value.getTime()) ? 'Invalid Date' : value.toISOString();
         if (ctorName !== 'Date') base = getPrefix(ctorName, 'Date') + base;
+        base = stylize(ctx, base, 'date');
         if (keys.length === 0) return base;
     } else if (isError(value)) {
         base = formatError(value, ctx);
         if (keys.length === 0) return base;
     } else if (value instanceof Number || value instanceof String || value instanceof Boolean) {
         let type = value instanceof Number ? 'Number' : value instanceof String ? 'String' : 'Boolean';
-        let primitive = formatPrimitive(ctx, value.valueOf());
-        base = `[${type}: ${primitive}]`;
+        let primitive = formatPrimitive({ ...ctx, colors: false }, value.valueOf());
+        base = stylize(ctx, `[${type}: ${primitive}]`, type === 'Number' ? 'number' : type === 'String' ? 'string' : 'boolean');
         if (value instanceof String) keys = nonIndexKeys(keys);
         if (keys.length === 0) return base;
     } else if (value instanceof Promise) {
         // Rhino gives no access to a promise's state.
         braces = [`${getPrefix(ctorName, 'Promise')}{`, '}'];
-        formatter = () => ['<unknown>'];
+        formatter = () => [stylize(ctx, '<unknown>', 'special')];
     } else if (value instanceof WeakSet || value instanceof WeakMap) {
-        return `${getPrefix(ctorName, value instanceof WeakSet ? 'WeakSet' : 'WeakMap')}{ <items unknown> }`;
+        return `${getPrefix(ctorName, value instanceof WeakSet ? 'WeakSet' : 'WeakMap')}{ ${stylize(ctx, '<items unknown>', 'special')} }`;
     } else {
         if (ctorName === 'Object') {
             if (keys.length === 0) return '{}';
@@ -332,7 +354,7 @@ function formatRaw(ctx: Context, value: object, recurseTimes: number): string {
 
     if (recurseTimes > ctx.depth) {
         let name = getPrefix(ctorName, 'Object').slice(0, -1);
-        return ctorName !== null ? `[${name}]` : name;
+        return stylize(ctx, ctorName !== null ? `[${name}]` : name, 'special');
     }
 
     recurseTimes += 1;
@@ -349,7 +371,7 @@ function formatRaw(ctx: Context, value: object, recurseTimes: number): string {
     if (ctx.circular !== undefined) {
         let index = ctx.circular.get(value);
         if (index !== undefined) {
-            let reference = `<ref *${index}>`;
+            let reference = stylize(ctx, `<ref *${index}>`, 'special');
             base = base === '' ? reference : `${reference} ${base}`;
         }
     }
@@ -377,7 +399,7 @@ function formatProperty(ctx: Context, value: any, recurseTimes: number, key: str
         let diff = ctx.compact !== true || type !== kObjectType ? 2 : 3;
         ctx.indentationLvl += diff;
         str = formatValue(ctx, descriptor.value, recurseTimes);
-        if (diff === 3 && ctx.breakLength < str.length) extra = `\n${' '.repeat(ctx.indentationLvl)}`;
+        if (diff === 3 && ctx.breakLength < width(ctx, str)) extra = `\n${' '.repeat(ctx.indentationLvl)}`;
         ctx.indentationLvl -= diff;
     } else if (descriptor.get !== undefined) {
         let label = descriptor.set !== undefined ? 'Getter/Setter' : 'Getter';
@@ -385,30 +407,31 @@ function formatProperty(ctx: Context, value: any, recurseTimes: number, key: str
             try {
                 let tmp = descriptor.get.call(value);
                 ctx.indentationLvl += 2;
-                str = tmp === null ? `[${label}: null]` :
-                    typeof tmp === 'object' ? `[${label}] ${formatValue(ctx, tmp, recurseTimes)}` :
-                        `[${label}: ${formatPrimitive(ctx, tmp)}]`;
+                str = tmp === null ? `${stylize(ctx, `[${label}:`, 'special')} ${stylize(ctx, 'null', 'null')}${stylize(ctx, ']', 'special')}` :
+                    typeof tmp === 'object' ? `${stylize(ctx, `[${label}]`, 'special')} ${formatValue(ctx, tmp, recurseTimes)}` :
+                        `${stylize(ctx, `[${label}:`, 'special')} ${formatPrimitive(ctx, tmp)}${stylize(ctx, ']', 'special')}`;
                 ctx.indentationLvl -= 2;
             } catch (err) {
-                str = `[${label}: <Inspection threw (${(err as any)?.message})>]`;
+                str = stylize(ctx, `[${label}: <Inspection threw (${(err as any)?.message})>]`, 'special');
             }
         } else {
-            str = `[${label}]`;
+            str = stylize(ctx, `[${label}]`, 'special');
         }
     } else if (descriptor.set !== undefined) {
-        str = '[Setter]';
+        str = stylize(ctx, '[Setter]', 'special');
     } else {
-        str = 'undefined';
+        str = stylize(ctx, 'undefined', 'undefined');
     }
 
     if (type === kArrayExtrasType && typeof key === 'number') return str;
 
     let name: string;
-    if (typeof key === 'symbol') name = `[${String(key)}]`;
+    if (typeof key === 'symbol') name = `[${stylize(ctx, String(key), 'symbol')}]`;
     else if (key === '__proto__') name = "['__proto__']";
-    else if (descriptor.enumerable === false) name = `[${keyStrRegExp.test(String(key)) ? key : strEscape(String(key))}]`;
-    else if (keyStrRegExp.test(String(key))) name = String(key);
-    else name = strEscape(String(key));
+    else if (descriptor.enumerable === false) {
+        name = `[${keyStrRegExp.test(String(key)) ? key : stylize(ctx, strEscape(String(key)), 'string')}]`;
+    } else if (keyStrRegExp.test(String(key))) name = String(key);
+    else name = stylize(ctx, strEscape(String(key)), 'string');
     return `${name}:${extra}${str}`;
 }
 
@@ -421,12 +444,12 @@ function formatArray(ctx: Context, value: unknown[], recurseTimes: number): stri
     for (let i = 0; i < len; i++) {
         if (!Object.prototype.hasOwnProperty.call(value, i)) { holes++; continue; }
         if (holes > 0) {
-            output.push(`<${holes} empty item${holes > 1 ? 's' : ''}>`);
+            output.push(stylize(ctx, `<${holes} empty item${holes > 1 ? 's' : ''}>`, 'undefined'));
             holes = 0;
         }
         output.push(formatProperty(ctx, value, recurseTimes, i, kArrayExtrasType));
     }
-    if (holes > 0) output.push(`<${holes} empty item${holes > 1 ? 's' : ''}>`);
+    if (holes > 0) output.push(stylize(ctx, `<${holes} empty item${holes > 1 ? 's' : ''}>`, 'undefined'));
     if (remaining > 0) output.push(`... ${remaining} more item${remaining > 1 ? 's' : ''}`);
     return output;
 }
@@ -471,7 +494,7 @@ function groupArrayElements(ctx: Context, output: string[], value: unknown): str
     let separatorSpace = 2;
     let dataLen: number[] = [];
     for (let i = 0; i < outputLength; i++) {
-        let len = output[i].length;
+        let len = width(ctx, output[i]);
         dataLen.push(len);
         totalLength += len + separatorSpace;
         if (maxLength < len) maxLength = len;
@@ -511,11 +534,11 @@ function groupArrayElements(ctx: Context, output: string[], value: unknown): str
             let j = i;
             for (; j < max - 1; j++) {
                 let cell = `${output[j]}, `;
-                let padding = maxLineLength[j - i];
+                let padding = maxLineLength[j - i] + cell.length - dataLen[j] - 2;
                 str += padStart ? cell.padStart(padding, ' ') : cell.padEnd(padding, ' ');
             }
             if (padStart) {
-                str += output[j].padStart(maxLineLength[j - i] - separatorSpace, ' ');
+                str += output[j].padStart(maxLineLength[j - i] - separatorSpace + output[j].length - dataLen[j], ' ');
             } else {
                 str += output[j];
             }
@@ -531,7 +554,7 @@ function isBelowBreakLength(ctx: Context, output: string[], start: number, base:
     let totalLength = output.length + start;
     if (totalLength + output.length > ctx.breakLength) return false;
     for (let i = 0; i < output.length; i++) {
-        totalLength += output[i].length;
+        totalLength += width(ctx, output[i]);
         if (totalLength > ctx.breakLength) return false;
     }
     return base === '' || base.indexOf('\n') === -1;
@@ -576,17 +599,19 @@ function toNumberOption(value: unknown, fallback: number): number {
  * Return a string representation of `value` for debugging, like Node's util.inspect. The legacy signature
  * `inspect(value, showHidden, depth, colors)` is accepted too.
  */
-export function inspect(value: unknown, opts?: InspectOptions | boolean, depth?: number | null, _colors?: boolean): string {
+export function inspect(value: unknown, opts?: InspectOptions | boolean, depth?: number | null, colors?: boolean): string {
     let options: InspectOptions = {};
     if (typeof opts === 'boolean') {
         options.showHidden = opts;
         if (depth !== undefined) options.depth = depth;
+        if (colors !== undefined) options.colors = colors;
     } else if (opts !== null && typeof opts === 'object') {
         options = opts;
     }
     let defaults = inspect.defaultOptions;
     let ctx: Context = {
         showHidden: options.showHidden ?? defaults.showHidden,
+        colors: !!(options.colors ?? defaults.colors),
         depth: toNumberOption(options.depth !== undefined ? options.depth : defaults.depth, 2),
         customInspect: options.customInspect ?? defaults.customInspect,
         maxArrayLength: toNumberOption(options.maxArrayLength !== undefined ? options.maxArrayLength : defaults.maxArrayLength, 100),
@@ -605,6 +630,7 @@ export function inspect(value: unknown, opts?: InspectOptions | boolean, depth?:
 }
 inspect.custom = customInspect;
 inspect.defaultOptions = defaultOptions;
+inspect.styles = styles;
 
 // ── format ───────────────────────────────────────────────────────────────────────
 
@@ -775,6 +801,9 @@ const STYLES: Record<string, [number, number]> = {
     bgBlackBright: [100, 49], bgRedBright: [101, 49], bgGreenBright: [102, 49], bgYellowBright: [103, 49],
     bgBlueBright: [104, 49], bgMagentaBright: [105, 49], bgCyanBright: [106, 49], bgWhiteBright: [107, 49],
 };
+
+// The ANSI codes of each colour name, used by inspect's styles (Node's inspect.colors; mutable, like styles).
+inspect.colors = STYLES;
 
 /**
  * Wrap `text` in the ANSI escape codes of `format` (a style name or an array of them), e.g.

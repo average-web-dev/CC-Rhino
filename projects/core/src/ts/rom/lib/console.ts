@@ -14,7 +14,7 @@ import * as util from '/rom/lib/util';
 import proc from 'process';
 import { callable } from '/rom/lib/internal/callable';
 import { CSI } from '/rom/lib/internal/csi';
-import { ERR_CONSOLE_WRITABLE_STREAM } from '/rom/lib/internal/errors';
+import { ERR_CONSOLE_WRITABLE_STREAM, ERR_INVALID_ARG_VALUE } from '/rom/lib/internal/errors';
 import { validateArray, validateInteger } from '/rom/lib/internal/validators';
 
 const kSecond = 1000;
@@ -60,11 +60,16 @@ function renderRow(row: string[], widths: number[]): string {
     let out = '| ';
     for (let i = 0; i < row.length; i++) {
         let cell = row[i];
-        let needed = (widths[i] - cell.length) / 2;
+        let needed = (widths[i] - visibleLength(cell)) / 2;
         out += ' '.repeat(Math.floor(needed)) + cell + ' '.repeat(Math.ceil(needed));
         if (i !== row.length - 1) out += ' | ';
     }
     return out + ' |';
+}
+
+/** The length of a cell on screen: colour codes take no room. */
+function visibleLength(text: string): number {
+    return util.stripVTControlCharacters(text).length;
 }
 
 function renderTable(head: string[], columns: string[][]): string {
@@ -73,13 +78,13 @@ function renderTable(head: string[], columns: string[][]): string {
     let longest = 0;
     for (let column of columns) if (column.length > longest) longest = column.length;
     for (let i = 0; i < head.length; i++) {
-        widths.push(head[i].length);
+        widths.push(visibleLength(head[i]));
         let column = columns[i];
         for (let j = 0; j < longest; j++) {
             if (rows[j] === undefined) rows[j] = [];
             let value = Object.prototype.hasOwnProperty.call(column, j) ? column[j] : '';
             rows[j][i] = value;
-            if (value.length > widths[i]) widths[i] = value.length;
+            if (visibleLength(value) > widths[i]) widths[i] = visibleLength(value);
         }
     }
     let dividers: string[] = [];
@@ -92,11 +97,22 @@ function renderTable(head: string[], columns: string[][]): string {
 
 // ── Console ──────────────────────────────────────────────────────────────────────
 
+/** Whether values written to `stream` are coloured (colorMode; 'auto': a colour TTY). */
+function colorsFor(self: Console, stream: ConsoleStream): boolean {
+    if (self._colorMode !== 'auto') return self._colorMode;
+    return stream.isTTY === true && typeof stream.hasColors === 'function' && stream.hasColors();
+}
+
 function inspectOptionsFor(self: Console, stream: ConsoleStream): InspectOptions | undefined {
-    if (self._inspectOptions !== undefined) return self._inspectOptions;
+    let colors = colorsFor(self, stream);
+    if (self._inspectOptions !== undefined) {
+        return self._inspectOptions.colors === undefined && colors ? { ...self._inspectOptions, colors } : self._inspectOptions;
+    }
+    let options: InspectOptions = {};
+    if (colors) options.colors = true;
     // Break lines at the terminal width rather than at 80 columns.
-    if (stream.isTTY && typeof stream.columns === 'number' && stream.columns > 0) return { breakLength: stream.columns };
-    return undefined;
+    if (stream.isTTY && typeof stream.columns === 'number' && stream.columns > 0) options.breakLength = stream.columns;
+    return Object.keys(options).length === 0 ? undefined : options;
 }
 
 function formatFor(self: Console, stream: ConsoleStream, args: unknown[]): string {
@@ -130,6 +146,7 @@ class Console {
     declare _stderr: ConsoleStream;
     declare _ignoreErrors: boolean;
     declare _inspectOptions: InspectOptions | undefined;
+    declare _colorMode: boolean | 'auto';
     declare _groupIndentation: number;
     declare _groupIndent: string;
     declare _counts: Map<string, number>;
@@ -155,6 +172,11 @@ class Console {
         hidden('_stderr', errStream);
         hidden('_ignoreErrors', opts.ignoreErrors !== false);
         hidden('_inspectOptions', opts.inspectOptions);
+        let colorMode = opts.colorMode === undefined ? 'auto' : opts.colorMode;
+        if (colorMode !== 'auto' && typeof colorMode !== 'boolean') {
+            throw new ERR_INVALID_ARG_VALUE('colorMode', colorMode, "must be 'auto', true or false");
+        }
+        hidden('_colorMode', colorMode);
         hidden('_groupIndentation', groupIndentation);
         hidden('_groupIndent', '');
         hidden('_counts', new Map());

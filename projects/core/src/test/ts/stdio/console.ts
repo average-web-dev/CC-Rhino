@@ -154,3 +154,22 @@ throws(function () { new console.Console({ stdout: broken, ignoreErrors: false }
 
 // Deliberately invalid options: there is no stdout.
 throws(function () { new console.Console({} as ConsoleOptions); }, 'ERR_CONSOLE_WRITABLE_STREAM');
+
+// ── colorMode: colours inspected values on a colour TTY ('auto'), always or never ─────────────────────────────────
+
+const colourTty = Object.assign(sink(80), { hasColors: () => true });
+new console.Console({ stdout: colourTty }).log({ a: 1 });
+eq(colourTty.out, '{ a: \x1b[33m1\x1b[39m }\n', "'auto' on a colour TTY");
+colourTty.out = '';
+new console.Console({ stdout: colourTty }).log('%s and %d', 'text', 5, [2]);
+eq(colourTty.out, 'text and 5 [ \x1b[33m2\x1b[39m ]\n', '%s and %d are not coloured (as in Node), extra values are');
+const mono = Object.assign(sink(80), { hasColors: () => false });
+new console.Console({ stdout: mono }).log({ a: 1 });
+eq(mono.out, '{ a: 1 }\n', "'auto' on a monochrome TTY");
+const plain = sink();
+new console.Console({ stdout: plain, colorMode: true }).log([1]);
+eq(plain.out, '[ \x1b[33m1\x1b[39m ]\n', 'colorMode true');
+colourTty.out = '';
+new console.Console({ stdout: colourTty, colorMode: false }).log([1]);
+eq(colourTty.out, '[ 1 ]\n', 'colorMode false');
+throws(() => new console.Console({ stdout: plain, colorMode: 'yes' as any }), 'ERR_INVALID_ARG_VALUE');

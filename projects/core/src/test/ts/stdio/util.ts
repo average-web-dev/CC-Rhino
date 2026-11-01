@@ -109,3 +109,32 @@ function fail(callback: (err: Error | null) => void) { callback(new Error('nope'
 eq(asyncMod.unwrap(util.promisify<number>(double)(21)), 42);
 const rejected = throws(function () { asyncMod.unwrap(util.promisify(fail)()); });
 eq(rejected.message, 'nope');
+
+// ── Colours: inspect.styles / inspect.colors, as in Node ─────────────────────────────────────────────────────────
+
+const coloured = (value: unknown) => util.inspect(value, { colors: true });
+eq(coloured(1), '\x1b[33m1\x1b[39m', 'manyNumbers yellow');
+eq(coloured('a'), "\x1b[32m'a'\x1b[39m", 'strings green');
+eq(coloured(null), '\x1b[1mnull\x1b[22m', 'null bold');
+eq(coloured(undefined), '\x1b[90mundefined\x1b[39m', 'undefined grey');
+eq(coloured(true), '\x1b[33mtrue\x1b[39m');
+eq(coloured(/x/g), '\x1b[31m/x/g\x1b[39m', 'regexps red');
+eq(coloured(function f() {}), '\x1b[36m[Function: f]\x1b[39m', 'functions are special: cyan');
+eq(coloured({ a: 1, 'b-c': 'x' }), "{ a: \x1b[33m1\x1b[39m, \x1b[32m'b-c'\x1b[39m: \x1b[32m'x'\x1b[39m }", 'quoted keys are strings');
+let selfRef: Record<string, unknown> = {};
+selfRef.self = selfRef;
+eq(coloured(selfRef), '\x1b[36m<ref *1>\x1b[39m { self: \x1b[36m[Circular *1]\x1b[39m }');
+eq(util.inspect(1, false, 2, true), '\x1b[33m1\x1b[39m', 'the legacy signature');
+eq(util.inspect(1), '1', 'no colours by default');
+// Colour codes take no room: the same line breaks as without colours.
+let wideObject = { alpha: 'aaaaaaaaaa', beta: 'bbbbbbbbbb', gamma: 'cccccccccc', delta: 'dddddddddd', epsilon: 'e' };
+eq(util.stripVTControlCharacters(util.inspect(wideObject, { colors: true, breakLength: 60 })),
+    util.inspect(wideObject, { breakLength: 60 }));
+let manyNumbers = Array.from({ length: 30 }, (_, i) => i * 7);
+eq(util.stripVTControlCharacters(util.inspect(manyNumbers, { colors: true })), util.inspect(manyNumbers), 'grouped arrays align');
+// The styles can be changed.
+const savedNumber = util.inspect.styles.number;
+util.inspect.styles.number = 'red';
+eq(coloured(2), '\x1b[31m2\x1b[39m');
+util.inspect.styles.number = savedNumber;
+eq(util.inspect.colors.green[0], 32);

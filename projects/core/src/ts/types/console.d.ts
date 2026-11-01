@@ -15,6 +15,11 @@ interface ConsoleOptions {
     ignoreErrors?: boolean;
     /** Options for util.inspect; by default lines break at the stream's width. */
     inspectOptions?: InspectOptions;
+    /**
+     * Colour inspected values: 'auto' (default) on a colour TTY (`stream.hasColors()`), or always / never. An explicit
+     * `inspectOptions.colors` wins.
+     */
+    colorMode?: boolean | 'auto';
     /** Spaces added per console.group() (default 2). */
     groupIndentation?: number;
 }
