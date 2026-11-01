@@ -4,9 +4,13 @@
 
 package dan200.computercraft.core.computer;
 
+import dan200.computercraft.api.peripheral.IComputerAccess;
+import dan200.computercraft.api.peripheral.IPeripheral;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.core.apis.events.RedstoneEvent;
 import dan200.computercraft.core.engine.JSSandboxTest;
 import dan200.computercraft.core.filesystem.MemoryMount;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -161,6 +165,70 @@ class StdioShellTest {
             h.key(KEY_DOWN);
             h.key(KEY_ENTER);
             h.waitForText("local boot ran");
+        }
+    }
+
+    /** The boot menu lists the disks with a boot.js (on any drive, by its label), not every disk with data. */
+    @Test
+    void boot_menu_lists_bootable_disks() {
+        var bootable = new MemoryMount().addFile("boot.js", "console.log('disk boot ran');\n").addFile(".label", "Rescue\n");
+        try (var h = TerminalHarness.boot(programs(), x -> {
+            x.getEnvironment().setPeripheral(ComputerSide.LEFT, new FakeDrive("mnt/disk", bootable));
+            x.getEnvironment().setPeripheral(ComputerSide.RIGHT, new FakeDrive("mnt/disk2", new MemoryMount().addFile("data.txt", "x")));
+        })) {
+            h.waitForText("Boot Selection");
+            assertTrue(h.screen().contains("Rescue"), h.screen());
+            assertFalse(h.screen().contains("mnt/disk2"), "a disk without boot.js is no entry: " + h.screen());
+            h.key(KEY_DOWN);
+            h.waitFor("the disk selected", x -> x.screen().contains(" > Rescue"));
+            h.key(KEY_ENTER);
+            h.waitForText("disk boot ran");
+        }
+    }
+
+    /** A disk drive with a disk: mounts it on attach, like the real one. */
+    public static final class FakeDrive implements IPeripheral {
+        private final String path;
+        private final MemoryMount disk;
+
+        FakeDrive(String path, MemoryMount disk) {
+            this.path = path;
+            this.disk = disk;
+        }
+
+        @Override
+        public void attach(IComputerAccess computer) {
+            computer.mount(path, disk);
+        }
+
+        @Override
+        public void detach(IComputerAccess computer) {
+            computer.unmount(path);
+        }
+
+        @ScriptFunction
+        public boolean hasData() {
+            return true;
+        }
+
+        @ScriptFunction
+        public @Nullable String getMountPath() {
+            return path;
+        }
+
+        @ScriptFunction
+        public @Nullable String getDiskLabel() {
+            return null;
+        }
+
+        @Override
+        public String getType() {
+            return "drive";
+        }
+
+        @Override
+        public boolean equals(@Nullable IPeripheral other) {
+            return this == other;
         }
     }
 

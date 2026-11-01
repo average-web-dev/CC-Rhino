@@ -23,6 +23,7 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.function.Consumer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -45,7 +46,8 @@ public final class TerminalHarness implements AutoCloseable {
     private final EventComputerInput input;
     private final Probe probe = new Probe();
 
-    private TerminalHarness(MemoryMount mount, @Nullable String bios, int width, int height, boolean colour) {
+    private TerminalHarness(MemoryMount mount, @Nullable String bios, int width, int height, boolean colour,
+                            Consumer<Computer> setup) {
         terminal = new Terminal(width, height, colour);
         mainThread = new MainThread(new MainThreadConfig.Basic(Integer.MAX_VALUE, Integer.MAX_VALUE));
         var environment = new BasicEnvironment(mount) {
@@ -61,17 +63,25 @@ public final class TerminalHarness implements AutoCloseable {
         computer = new Computer(context, environment, terminal, 0);
         input = new EventComputerInput(computer);
         computer.addApi(probe);
+        setup.accept(computer);
         computer.turnOn();
     }
 
     /** Boot the real bios (→ /rom/os → bash) with {@code mount} as the computer's drive. */
     public static TerminalHarness boot(MemoryMount mount) {
-        return new TerminalHarness(mount, null, 51, 19, true);
+        return boot(mount, x -> {
+        });
+    }
+
+    /** Boot the real bios with {@code mount} as the computer's drive, after {@code setup} (e.g. attach peripherals). */
+    public static TerminalHarness boot(MemoryMount mount, Consumer<Computer> setup) {
+        return new TerminalHarness(mount, null, 51, 19, true, setup);
     }
 
     /** Boot a custom bios, with the ROM mounted. */
     public static TerminalHarness boot(MemoryMount mount, String bios, int width, int height, boolean colour) {
-        return new TerminalHarness(mount, bios, width, height, colour);
+        return new TerminalHarness(mount, bios, width, height, colour, x -> {
+        });
     }
 
     public void tick() {

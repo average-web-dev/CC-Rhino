@@ -66,23 +66,21 @@ require('/rom/lib/internal/globals');
           });
       }
 
-      // Every drive with a disk, on a side or behind a wired modem.
+      // Every drive whose disk has a boot.js, on a side or behind a wired modem.
       for (let drive of peripheral.find('drive')) {
-          if (!drive.hasData()) {
+          let mountPath = drive.hasData() ? drive.getMountPath() : null;
+          if (mountPath === null) {
               continue;
           }
 
-          let mountPoint = drive.getMountPath();
-          let diskLabel = drive.getDiskLabel();
-
+          // getMountPath() is relative to the root ("mnt/disk"); require() needs an absolute path.
+          let mountPoint = '/' + mountPath;
           let script = `${mountPoint}/${DISK_BOOT_FILE}`;
-          let labelFile = `${mountPoint}/${DISK_LABEL_FILE}`;
-
-          let label = `Disk (${diskLabel ?? drive.id})`
-          if (fs.existsSync(labelFile)) {
-              label = readFirstLine(labelFile) ?? label
+          if (!fs.existsSync(script)) {
+              continue;
           }
 
+          let label = readFirstLine(`${mountPoint}/${DISK_LABEL_FILE}`) ?? `Disk (${drive.getDiskLabel() ?? drive.id})`;
           entries.push({
               label,
               detail: script,
