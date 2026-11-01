@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class JSTimersTest {
     private static final String PRELUDE = """
         var loop = require('internal/loop');
-        var system = require('system');
+        var system = require('internal/system');
         var events = require('events');
         var parallel = require('parallel');
         var probe = require('probe');
@@ -234,7 +234,7 @@ class JSTimersTest {
             parallel.waitForAll(function () {
                 loop.schedule(function () { at('timer'); }, 3, false, true);
                 var unref = loop.schedule(function () { at('unref'); }, 1, false, false);
-                require('system/promises').sleep(5).then(function () { at('promise'); });
+                require('internal/system/promises').sleep(5).then(function () { at('promise'); });
                 parallel.spawn(function () { system.sleep(7); at('child'); });
                 events.on('never', function () {});
                 var h = loop.handle();

@@ -24,8 +24,8 @@ const expected: Record<string, [string, string[]]> = {
     'console': ['object', ['assert', 'clear', 'count', 'countReset', 'debug', 'dir', 'dirxml', 'error', 'group',
         'groupCollapsed', 'groupEnd', 'info', 'log', 'table', 'time', 'timeEnd', 'timeLog', 'trace', 'warn']],
     'process': ['object', ['addListener', 'argv', 'argv0', 'chdir', 'cwd', 'emitWarning', 'env', 'execArgv', 'exit',
-        'exitCode', 'hrtime', 'listenerCount', 'nextTick', 'off', 'on', 'once', 'pid', 'platform', 'removeListener',
-        'stderr', 'stdin', 'stdout', 'uptime']],
+        'exitCode', 'hrtime', 'kill', 'listenerCount', 'nextTick', 'off', 'on', 'once', 'pid', 'platform', 'ppid',
+        'removeListener', 'stderr', 'stdin', 'stdout', 'uptime']],
     'readline': ['object', ['Interface', 'clearLine', 'clearScreenDown', 'createInterface', 'cursorTo',
         'moveCursor', 'promises']],
     'readline/promises': ['object', ['Interface', 'createInterface']],
@@ -37,7 +37,8 @@ const expected: Record<string, [string, string[]]> = {
     '/rom/lib/internal/callable': ['object', ['callable']],
     '/rom/lib/internal/emitter': ['object', ['EventEmitter']],
     '/rom/lib/internal/tty': ['object', ['CSI', 'Job', 'console', 'createJob', 'createVirtual', 'current',
-        'cursorColumn', 'exitCodeOf', 'formatError', 'inUse', 'requestExit', 'root', 'run', 'terminal', 'ttyOf']],
+        'cursorColumn', 'exitCodeOf', 'formatError', 'inUse', 'infoOf', 'kill', 'processOf', 'processes',
+        'requestExit', 'root', 'run', 'signalName', 'signalOf', 'terminal', 'ttyOf']],
     '/rom/lib/internal/keys': ['object', ['InputType', 'Key', 'MouseAction', 'MouseButton', 'decodeFirst',
         'decodeInput', 'isModifierKey', 'mouseReportAt', 'stripMouse', 'toLegacy']],
     '/rom/lib/internal/csi': ['object', ['CSI']],
@@ -48,6 +49,12 @@ const expected: Record<string, [string, string[]]> = {
     'os': ['object', ['run']],
     'geometry': ['object', ['Point', 'Vector']],
     'color': ['object', ['Color', 'Dye']],
+    'system': ['object', ['Signal', 'cancelAlarm', 'cancelTimer', 'clock', 'computerID', 'computerLabel', 'day',
+        'epoch', 'getComputerID', 'getComputerLabel', 'getHost', 'off', 'on', 'once', 'process', 'processes', 'reboot',
+        'setAlarm', 'setComputerLabel', 'shutdown', 'sleep', 'startTimer', 'time', 'yield']],
+    'system/promises': ['object', ['cancelAlarm', 'cancelTimer', 'clock', 'computerID', 'computerLabel', 'day',
+        'epoch', 'getComputerID', 'getComputerLabel', 'getHost', 'process', 'processes', 'reboot', 'setAlarm',
+        'setComputerLabel', 'shutdown', 'sleep', 'startTimer', 'time', 'yield']],
     '/rom/lib/internal/globals': ['object', []],
     '/rom/bin/bash': ['object', ['getCwd', 'getExitCode', 'main', 'run', 'setCwd', 'start']],
     '/rom/bin/edit': ['object', main],
@@ -61,6 +68,7 @@ const expected: Record<string, [string, string[]]> = {
     '/rom/os/bin/drive': ['object', main],
     '/rom/os/bin/echo': ['object', main],
     '/rom/os/bin/id': ['object', main],
+    '/rom/os/bin/kill': ['object', main],
     '/rom/os/bin/label': ['object', main],
     '/rom/os/bin/ls': ['object', main],
     '/rom/os/bin/mkdir': ['object', main],
@@ -68,6 +76,7 @@ const expected: Record<string, [string, string[]]> = {
     '/rom/os/bin/mount': ['object', main],
     '/rom/os/bin/mv': ['object', main],
     '/rom/os/bin/peripherals': ['object', main],
+    '/rom/os/bin/ps': ['object', main],
     '/rom/os/bin/programs': ['object', main],
     '/rom/os/bin/reboot': ['object', main],
     '/rom/os/bin/redstone': ['object', main],
@@ -85,6 +94,14 @@ for (const [name, [type, keys]] of Object.entries(expected)) {
     for (const key of keys) {
         // Everything is set, except the values that are undefined by design.
         if (!(name === 'process' && key === 'exitCode')) eq(m[key] !== undefined, true, name + '.' + key + ' is set');
+    }
+}
+
+// system passes on every function of the native module behind it (#60, #62).
+for (const [name, nativeName] of [['system', 'internal/system'], ['system/promises', 'internal/system/promises']]) {
+    let wrapper = require(name) as Record<string, unknown>;
+    for (const key of Object.keys(require(nativeName) as object)) {
+        eq(typeof wrapper[key], 'function', name + ' passes on ' + nativeName + '.' + key);
     }
 }
 

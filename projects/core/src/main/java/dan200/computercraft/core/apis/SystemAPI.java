@@ -22,7 +22,7 @@ import static dan200.computercraft.api.scripting.ScriptValues.checkFinite;
 /**
  * The {@link SystemAPI} API allows interacting with the current computer.
  *
- * @cc.module system
+ * @cc.module internal/system
  */
 public class SystemAPI implements IComputerAPI {
     private final IAPIEnvironment apiEnvironment;
@@ -43,7 +43,9 @@ public class SystemAPI implements IComputerAPI {
 
     @Override
     public String[] getNames() {
-        return new String[]{ "system" };
+        // Programs use the ROM module `system` (/rom/lib/system), which passes these functions on and adds the
+        // process table (#60).
+        return new String[]{ "internal/system" };
     }
 
     @Override

@@ -24,8 +24,9 @@ import events from 'events';
 import loop from 'internal/loop';
 import parallel from 'parallel';
 import screen from 'screen';
-import system from 'system';
+import system from 'internal/system';
 import { TTY, CSI as TTY_CSI } from '/rom/lib/tty';
+import { Signal } from '/rom/lib/system';
 
 export const CSI = TTY_CSI;
 
@@ -48,12 +49,17 @@ export class Job {
     shell = false;
     /** process.on('exit') listeners, called with the exit code when the program has ended. */
     exitListeners: ((code: number) => void)[] = [];
+    /** The pid of the program that started this one (process.ppid; 0: the root, i.e. the OS). */
+    readonly ppid: number;
+    /** When it was created, in milliseconds since the epoch (Date.now()). */
+    readonly startTime = Date.now();
 
-    constructor(id: number, tty: TTY, argv: string[], cwd: string) {
+    constructor(id: number, tty: TTY, argv: string[], cwd: string, ppid = 0) {
         this.id = id;
         this.tty = tty;
         this.argv = argv;
         this.cwd = cwd;
+        this.ppid = ppid;
     }
 }
 
@@ -194,7 +200,78 @@ export interface JobResult {
 
 /** Create a job (not started yet). */
 export function createJob(tty: TTY, argv: string[], cwd: string): Job {
-    return new Job(nextJob++, tty, argv, cwd);
+    return new Job(nextJob++, tty, argv, cwd, current().id);
+}
+
+// ── The process table ────────────────────────────────────────────────────────────
+// Every running program by pid (the root job, pid 0, included): system.processes(), process.kill(), ps and kill. A job
+// is in it from its start until its end; the events process_start (info) and process_end (info, code) say when
+// (system.on('processStart' | 'processEnd')).
+
+const table = new Map<number, Job>([[0, root]]);
+
+/**
+ * Tell listeners that `job` started or ended. A listener that throws is reported on the job's TTY: it must not keep
+ * the job from being run or cleaned up.
+ */
+function announce(job: Job, result?: JobResult): void {
+    try {
+        if (result === undefined) events.emit('process_start', infoOf(job));
+        else events.emit('process_end', infoOf(job), result.code);
+    } catch (error: unknown) {
+        job.tty.stderr.write(formatError('<process event>', error) + '\n');
+    }
+}
+
+/** A snapshot of `job` for programs (system.processes(), the process events). */
+export function infoOf(job: Job): ProcessInfo {
+    return Object.freeze({
+        pid: job.id, ppid: job.ppid, argv: Object.freeze([...job.argv]), cwd: job.cwd, tty: job.tty.handle.getId(),
+        startTime: job.startTime,
+    });
+}
+
+/** The running programs, by pid. */
+export function processes(): Job[] {
+    return [...table.values()].sort((a, b) => a.id - b.id);
+}
+
+/** The running program with `pid`, or undefined. */
+export function processOf(pid: number): Job | undefined {
+    return table.get(pid);
+}
+
+/** `signal` (a Signal number or Node's name) as a signal's name, or undefined if it names none. */
+export function signalName(signal: unknown): SignalName | undefined {
+    for (let [name, number] of Object.entries(Signal)) {
+        if (signal === name || signal === number) return name as SignalName;
+    }
+    return undefined;
+}
+
+const SIGNAL_MESSAGES: Record<SignalName, string> = { SIGINT: 'Interrupted', SIGKILL: 'Killed', SIGTERM: 'Terminated' };
+const SIGNAL = '__ccSignal';
+
+/** The signal `e` ends a program with (the error process.kill() fails it with), or undefined. */
+export function signalOf(e: unknown): SignalName | undefined {
+    if (e !== null && typeof e === 'object' && Object.prototype.hasOwnProperty.call(e, SIGNAL)) {
+        return (e as any)[SIGNAL] as SignalName;
+    }
+    return undefined;
+}
+
+/**
+ * Send `signal` to the program `job`: it ends at once, as with Ctrl+C, wherever it is blocked; its exit code is
+ * 128 + the signal's number and the shell reports the signal ("Terminated", "Killed", "Interrupted"). Its
+ * process.on('exit') listeners run, except for SIGKILL. Returns whether it was still running.
+ */
+export function kill(job: Job, signal: SignalName): boolean {
+    let error = new Error(SIGNAL_MESSAGES[signal]);
+    Object.defineProperty(error, SIGNAL, { value: signal });
+    let killed = loop.failContext(job, error);
+    // Killing the calling program itself: unwind the calling code too, as process.exit() does.
+    if (killed && job === current()) throw error;
+    return killed;
 }
 
 /** Wait until `thread` ended. */
@@ -216,6 +293,8 @@ function resetModes(tty: TTY): void {
 
 /** How a job ended, from the error its thread ended with (undefined: none). */
 function resultOf(job: Job, error: unknown): JobResult {
+    let signal = signalOf(error);
+    if (signal !== undefined) return { code: 128 + Signal[signal], error };
     let code = exitCodeOf(error);
     if (error === undefined || code === null) return { code: job.exitCode ?? 0 };
     if (code !== undefined) return { code };
@@ -229,7 +308,7 @@ function resultOf(job: Job, error: unknown): JobResult {
  */
 function emitExit(job: Job, id: number, result: JobResult): JobResult {
     let listeners = job.exitListeners;
-    if (listeners.length === 0) return result;
+    if (listeners.length === 0 || signalOf(result.error) === 'SIGKILL') return result;
     job.exitListeners = [];
     job.exiting = false;
     job.exitCode = result.code;
@@ -243,8 +322,10 @@ function emitExit(job: Job, id: number, result: JobResult): JobResult {
         error = e;
     }
     let after = resultOf(job, error);
-    // The program's own failure is the one worth reporting.
-    return result.error !== undefined ? { code: after.error !== undefined ? 1 : after.code, error: result.error } : after;
+    // The program's own failure (or the signal it was killed with) is the one worth reporting.
+    if (result.error === undefined) return after;
+    if (signalOf(result.error) !== undefined && after.error === undefined) return result;
+    return { code: after.error !== undefined ? 1 : after.code, error: result.error };
 }
 
 /** How to run a program (see run()). */
@@ -272,6 +353,9 @@ export function run(job: Job, resolved: string, args: string[], options: RunOpti
     tty.stdin.setKeyboardProtocol('kitty');
     tty.stdin.setFlowing(null);
     let modesReset = false;
+    table.set(job.id, job);
+    announce(job);
+    let ended: JobResult = { code: 1 };
     try {
         let body = () => {
             loop.setContext(job, id);
@@ -292,26 +376,55 @@ export function run(job: Job, resolved: string, args: string[], options: RunOpti
                 error = e;
             }
         }
-        let result = emitExit(job, id, resultOf(job, error));
+        let result = ended = emitExit(job, id, resultOf(job, error));
         // Before an error is reported: on the alternate screen it would vanish with it.
         resetModes(tty);
         modesReset = true;
         if (result.error === undefined) return result;
         // The program failed: report it on its TTY, on a row of its own (it may have stopped mid-line, at its prompt).
         if ((tty.cursorColumn() ?? 0) > 0) tty.stderr.write('\n');
-        let message = (result.error as any)?.message === 'Terminated' ? 'Terminated' : formatError(resolved, result.error);
+        let terminated = signalOf(result.error) !== undefined || (result.error as any)?.message === 'Terminated';
+        let message = terminated ? (result.error as Error).message : formatError(resolved, result.error);
         tty.stderr.write(message + '\n');
         return result;
     } finally {
+        // Programs this one ran (spawnSync, spawn) run in threads below its own: if it was killed, they died with it
+        // before their own run() could clean up. They end here, children first, then this one.
+        for (let orphan of descendantsOf(job).reverse()) {
+            orphan.tty.stdin.removeListenersOf(orphan.id);
+            endJob(orphan, ended);
+        }
         tty.stdin.removeListenersOf(job.id);
         if (!modesReset) resetModes(tty);
         tty.stdin.setKeyboardProtocol(savedProtocol);
         tty.setRawMode(savedRaw);
         tty.stdin.setFlowing(savedFlowing);
-        users[id] -= 1;
-        if (users[id] <= 0) {
-            delete users[id];
-            events.emit('tty_released', id);
+        endJob(job, ended);
+    }
+}
+
+/** The running programs `job` started, and theirs, … (parents before their children). */
+function descendantsOf(job: Job): Job[] {
+    let found: Job[] = [];
+    let parents = new Set([job.id]);
+    for (let other of processes()) {
+        // Pids grow, so a parent is always seen before its children.
+        if (other !== job && parents.has(other.ppid)) {
+            found.push(other);
+            parents.add(other.id);
         }
+    }
+    return found;
+}
+
+/** `job` has ended: out of the process table, announced, and its TTY released when nobody else uses it. */
+function endJob(job: Job, result: JobResult): void {
+    if (!table.delete(job.id)) return;
+    announce(job, result);
+    let id = job.tty.handle.getId();
+    users[id] -= 1;
+    if (users[id] <= 0) {
+        delete users[id];
+        events.emit('tty_released', id);
     }
 }

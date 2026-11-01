@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class JSEventLoopTimingTest {
     private static final String PRELUDE = """
-        var system = require('system');
+        var system = require('internal/system');
         var events = require('events');
         var parallel = require('parallel');
         var probe = require('probe');

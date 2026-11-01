@@ -157,8 +157,14 @@ part of `assemble`.
   (`/rom/lib/internal/globals`, also `require('process')` / `require('console')` / `require('timers')`, same
   objects; the list is pinned by `JSSandboxTest.BIOS_GLOBALS`). There is no `print`/`write`: use `console.log` /
   `process.stdout.write`. There is no global `sleep`: `require('system').sleep(ticks)`. Every computer API is a native module:
-  `require('fs')`, `require('system')`, `require('events')`, `require('turtle')` … Native modules only exist when
-  the hardware is present (e.g. `turtle` only on turtles).
+  `require('fs')`, `require('events')`, `require('turtle')` … Native modules only exist when
+  the hardware is present (e.g. `turtle` only on turtles). `system` is a ROM module (`/rom/lib/system.ts`) around the
+  native `internal/system` (`@cc.module internal/system`): it passes every native function on and adds the process
+  table (#60): `system.processes()` / `process(pid)` (`ProcessInfo`: pid, ppid, argv, cwd, tty, startTime),
+  `system.on('processStart' | 'processEnd')` (the bus events `process_start` / `process_end`, so listeners belong to
+  their thread) and `Signal` (`SIGINT` 2, `SIGKILL` 9, `SIGTERM` 15) for `process.kill(pid, signal)` /
+  `child.kill(signal)` (Node's names work too; exit code 128 + number; no `'exit'` listeners after SIGKILL); the
+  table lives in `internal/tty`. Other native modules get such wrappers too (#62).
 - TTYs (#50): a TTY is native (`core/tty`): a pair of pipes (`Pipe`) plus a line discipline (cooked:
   echo, editing, Ctrl+U/D/C; raw: passed through), created virtually (`internal/pty`) or owned by a device. A
   `TerminalEmulator` renders a TTY's output onto a `Terminal` grid (VT-style: pending wrap, scrolling, SGR colours →

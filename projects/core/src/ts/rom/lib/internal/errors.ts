@@ -117,6 +117,15 @@ export class ERR_OUT_OF_RANGE extends RangeError {
     }
 }
 
+/** A signal process.kill() does not know. */
+export class ERR_UNKNOWN_SIGNAL extends TypeError {
+    readonly code = 'ERR_UNKNOWN_SIGNAL';
+
+    constructor(signal: string) {
+        super(`Unknown signal: ${signal}`);
+    }
+}
+
 /** Required arguments that were not given. */
 export class ERR_MISSING_ARGS extends TypeError {
     readonly code = 'ERR_MISSING_ARGS';

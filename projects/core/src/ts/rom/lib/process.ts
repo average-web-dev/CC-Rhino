@@ -16,7 +16,9 @@ import * as env from '/rom/lib/env';
 import fs from 'fs';
 import events from 'events';
 import system from 'system';
-import { validateFunction, validateOneOf, validateString } from '/rom/lib/internal/validators';
+import { validateFunction, validateInteger, validateOneOf, validateString } from '/rom/lib/internal/validators';
+import { ERR_UNKNOWN_SIGNAL } from '/rom/lib/internal/errors';
+import { Signal } from '/rom/lib/system';
 
 /** Normalise `p` against the current directory. */
 function resolvePath(p: string): string {
@@ -95,7 +97,23 @@ hrtime.bigint = function (): bigint {
     return BigInt(Date.now()) * BigInt(1000000);
 };
 
-/** The events `process` emits: only 'exit' (a computer has no signals). */
+/** `signal` (a Signal or Node's name) as a signal's name; undefined for 0 (only test that the process exists). */
+function toSignalName(signal: unknown): SignalName | undefined {
+    if (signal === 0) return undefined;
+    let name = jobs.signalName(signal);
+    if (name !== undefined) return name;
+    if (typeof signal !== 'number') validateString(signal, 'signal');
+    throw new ERR_UNKNOWN_SIGNAL(String(signal));
+}
+
+/** A Node-style system error (`kill ESRCH`), with `code`, `errno` and `syscall`. */
+function systemError(code: 'ESRCH' | 'EPERM', syscall: string): Error {
+    let err = new Error(`${syscall} ${code}`);
+    Object.assign(err, { code, errno: code === 'ESRCH' ? -3 : -1, syscall });
+    return err;
+}
+
+/** The events `process` emits: only 'exit' (signals end a program, they are not delivered as events). */
 const PROCESS_EVENTS = ['exit'] as const;
 
 type ExitListener = ((code: number) => void) & { listener?: (code: number) => void };
@@ -131,6 +149,7 @@ const proc: Process = {
     env: envProxy,
     platform: 'computercraft',
     get pid() { return jobs.current().id; },
+    get ppid() { return jobs.current().ppid; },
     get exitCode() { return jobs.current().exitCode; },
     set exitCode(value: number | undefined) { jobs.current().exitCode = value; },
 
@@ -161,6 +180,17 @@ const proc: Process = {
     listenerCount(event: 'exit'): number {
         validateOneOf(event, 'event', PROCESS_EVENTS);
         return jobs.current().exitListeners.length;
+    },
+
+    kill(pid: number, signal: Signal | SignalName | 0 = Signal.SIGTERM): true {
+        validateInteger(pid, 'pid');
+        let name = toSignalName(signal);
+        let job = jobs.processOf(pid);
+        if (job === undefined) throw systemError('ESRCH', 'kill');
+        // Signal 0 only checks that the process exists (and may be signalled), as in Node.
+        if (pid === 0) throw systemError('EPERM', 'kill');
+        if (name !== undefined) jobs.kill(job, name);
+        return true;
     },
 
     nextTick: function (callback: (...args: any[]) => void, ...args: any[]): void {

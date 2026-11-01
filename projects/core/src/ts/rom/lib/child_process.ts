@@ -23,8 +23,9 @@ import { EventEmitter } from '/rom/lib/internal/emitter';
 import * as jobs from '/rom/lib/internal/tty';
 import { TTY, ReadStream } from '/rom/lib/tty';
 import parallel from 'parallel';
-import { ERR_INVALID_ARG_VALUE } from '/rom/lib/internal/errors';
-import { validateArray } from '/rom/lib/internal/validators';
+import { ERR_INVALID_ARG_VALUE, ERR_UNKNOWN_SIGNAL } from '/rom/lib/internal/errors';
+import { validateArray, validateString } from '/rom/lib/internal/validators';
+import { Signal } from '/rom/lib/system';
 
 /** Where a child's stdin/stdout/stderr go. */
 export type StdioOption = 'pipe' | 'inherit' | TTY | TtyHandle;
@@ -133,6 +134,7 @@ export class ChildProcess extends EventEmitter {
     exitCode: number | null = null;
     signalCode: string | null = null;
     killed = false;
+    #signal: SignalName = 'SIGTERM';
     #thread: ThreadHandle | undefined;
     #exited = false;
 
@@ -146,11 +148,22 @@ export class ChildProcess extends EventEmitter {
         this.stderr = piped ? new ReadStream(handle, { pipe: handle.getStderr() }) : null;
     }
 
-    /** Stop the child (its blocked calls end, nothing it started runs on). Returns false if it already exited. */
-    kill(_signal?: string): boolean {
+    /**
+     * Send the child a signal (default 'SIGTERM'; 'SIGINT', 'SIGKILL'), as process.kill(child.pid, signal): it ends at
+     * once. Returns false if it already exited.
+     */
+    kill(signal: Signal | SignalName = Signal.SIGTERM): boolean {
+        let name = jobs.signalName(signal);
+        if (name === undefined) {
+            if (typeof signal !== 'number') validateString(signal, 'signal');
+            throw new ERR_UNKNOWN_SIGNAL(String(signal));
+        }
         if (this.#exited) return false;
         this.killed = true;
-        if (this.#thread !== undefined) this.#thread.stop();
+        this.#signal = name;
+        let job = jobs.processOf(this.pid);
+        // Before its code runs, the child cannot be signalled yet: stop its thread instead.
+        if ((job === undefined || !jobs.kill(job, name)) && this.#thread !== undefined) this.#thread.stop();
         return true;
     }
 
@@ -163,8 +176,9 @@ export class ChildProcess extends EventEmitter {
     /** @internal */
     _exited(result: jobs.JobResult): void {
         this.#exited = true;
-        if (this.killed) {
-            this.signalCode = 'SIGTERM';
+        let signal = jobs.signalOf(result.error) ?? (this.killed ? this.#signal : undefined);
+        if (signal !== undefined) {
+            this.signalCode = signal;
         } else {
             this.exitCode = result.code;
         }

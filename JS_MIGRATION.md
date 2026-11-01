@@ -880,6 +880,11 @@ class that draws by writing ANSI. Branch `feature/tty-term`.
   `CSI.alternateScreen`) in the `TerminalEmulator`; a job's end leaves it (before an error is reported), so `vi` /
   `edit` just call `process.exit()`; Node's `process.on('exit')` (the only event of `process`; listeners run in the
   program's context after it ended and may change the exit code)
+- [x] **16.17** Process table (#60): `system` is a ROM module around the native `internal/system`, with
+  `processes()` / `process(pid)`, `on('processStart' | 'processEnd')` and `Signal`; `process.ppid`,
+  `process.kill(pid, signal)` (SIGTERM / SIGINT / SIGKILL, exit code 128 + number), `child.kill(signal)`; `ps` and
+  `kill` in `/rom/os/bin`; a killed program's own children end with it (process table, TTY released), and the first
+  console always gets a new shell when its shell ends
 
 ---
 

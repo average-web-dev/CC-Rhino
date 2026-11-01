@@ -38,8 +38,8 @@ interface ChildProcess {
     exitCode: number | null;
     signalCode: string | null;
     killed: boolean;
-    /** Stop the child. Returns false if it already exited. */
-    kill(signal?: string): boolean;
+    /** Send the child a signal (default 'SIGTERM'), as process.kill(child.pid, signal). False if it already exited. */
+    kill(signal?: Signal | SignalName): boolean;
     on(event: "exit" | "close", listener: (code: number | null, signal: string | null) => void): this;
     on(event: string, listener: (...args: any[]) => void): this;
     once(event: string, listener: (...args: any[]) => void): this;

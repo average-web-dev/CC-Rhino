@@ -97,6 +97,12 @@ class StdioLibraryTest {
         run("color.js");
     }
 
+    /** The process table, signals, ps and kill (#60). */
+    @Test
+    void processes() {
+        run("processes.js");
+    }
+
     /** The small programs in /rom/os/bin (#7). */
     @Test
     void programs() {

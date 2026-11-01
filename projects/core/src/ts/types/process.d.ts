@@ -147,6 +147,8 @@ interface Process {
     readonly platform: "computercraft";
     /** The id of the running program (0 outside of a program). */
     readonly pid: number;
+    /** The id of the program that started it (0: the OS). */
+    readonly ppid: number;
     /** Exit code of the running program; set by `exit(code)`. */
     exitCode: number | undefined;
     /** The program's working directory (a child starts in its parent's; chdir() does not move the parent). */
@@ -159,10 +161,18 @@ interface Process {
      */
     exit(code?: number): never;
     /**
+     * Send a signal to the program `pid` (see system.processes()): Signal.SIGTERM (the default, exit code 143,
+     * "Terminated"), Signal.SIGINT (130, "Interrupted") or Signal.SIGKILL (137, "Killed"; its process.on('exit')
+     * listeners do not run), from `system`; as in Node, the names ('SIGTERM') work too. It ends at once, wherever it is
+     * blocked. Signal 0 only checks that `pid` runs. Throws ESRCH if there is no such program, EPERM for the root
+     * process (pid 0), ERR_UNKNOWN_SIGNAL for others.
+     */
+    kill(pid: number, signal?: Signal | SignalName | 0): true;
+    /**
      * Call `listener` with the exit code when the program has ended (its code returned and nothing keeps it alive,
      * process.exit(), a failure or Ctrl+C), as in Node. Listeners run synchronously, before the TTY is restored (raw
      * mode, mouse, bracketed paste, the alternate screen; that needs no listener); they may set `exitCode` or call
-     * `exit(code)` to change the code. 'exit' is the only event (a computer has no signals).
+     * `exit(code)` to change the code. 'exit' is the only event (signals end a program, see kill()).
      */
     on(event: "exit", listener: (code: number) => void): this;
     addListener(event: "exit", listener: (code: number) => void): this;

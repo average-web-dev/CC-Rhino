@@ -68,8 +68,9 @@ klog('ok', 'Kernel ready - handing off to shell');
 // A shell runs on every console that is shown and not used by a program, like getty: on the first console at boot,
 // on another one when it is switched to (Alt+1 … Alt+9, chvt), and again on the visible console when a program that
 // used it ends. A program may run on another console (child_process.spawn with { stdio: tty.console(n) }); no shell
-// starts there while it does. `exit` in the shell of another console than the first clears that console and shows
-// the first one; the next shell starts there when it is shown again. On the first console a new shell starts at once.
+// starts there while it does. A shell that ends (`exit`, or killed: `kill <pid>`) on another console than the first
+// clears that console and shows the first one; the next shell starts there when it is shown again. The first console
+// always has a shell: when its shell ends, a new one starts at once, also while another console is shown.
 
 const FIRST_CONSOLE = 0;
 
@@ -100,13 +101,15 @@ events.on('console_show', (index: number) => ensureShell(index));
 events.on('tty_released', (id: number) => {
     let index = consoleOf(id);
     if (index < 0) return;
-    // The OS's shell holds its console as long as it runs, so the console is released when the shell ended (`exit`).
-    if (shells.delete(id) && index !== FIRST_CONSOLE) {
+    // The OS's shell holds its console as long as it runs, so the console is released when the shell ended (`exit`,
+    // or killed).
+    let shellEnded = shells.delete(id);
+    if (shellEnded && index !== FIRST_CONSOLE) {
         jobs.console(index).stdout.write(CSI.reset + CSI.clearScreen + CSI.home);
         if (screen.getVisible() === index) screen.show(FIRST_CONSOLE);
         return;
     }
-    if (screen.getVisible() === index) ensureShell(index);
+    if (index === FIRST_CONSOLE || screen.getVisible() === index) ensureShell(index);
 });
 
 // // Run the user startup script if one exists; silently skip if absent.

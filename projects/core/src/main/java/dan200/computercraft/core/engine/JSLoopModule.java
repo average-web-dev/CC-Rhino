@@ -120,6 +120,10 @@ final class JSLoopModule {
             eventLoop.exitContext(args.length == 0 ? Undefined.instance : args[0]);
             return Undefined.instance;
         }));
+        put(cx, scope, module, new NativeFunction("failContext", (c, s, args) -> {
+            if (args.length < 1 || args[0] == null || args[0] == Undefined.instance) return false;
+            return eventLoop.failContext(args[0], args.length < 2 ? Undefined.instance : args[1]);
+        }));
         put(cx, scope, module, new NativeFunction("setContext", (c, s, args) -> {
             var value = args.length == 0 || args[0] == Undefined.instance || args[0] == null ? null : args[0];
             var thread = eventLoop.currentThread();

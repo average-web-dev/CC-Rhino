@@ -208,6 +208,28 @@ public final class EventLoop {
         }
     }
 
+    /**
+     * Fail the program whose thread carries {@code context} (see {@link JSThread#context}) with {@code error}, as
+     * {@link #exitContext} does for the calling program: used by {@code process.kill(pid)}.
+     *
+     * @return Whether a running (non-root) thread with that context was found.
+     */
+    boolean failContext(Object context, Object error) {
+        var thread = findContext(root, context);
+        if (thread == null || thread.isRoot()) return false;
+        threadFailed(thread, error);
+        return true;
+    }
+
+    private @Nullable JSThread findContext(JSThread thread, Object context) {
+        if (thread.context == context && thread.state == JSThread.State.RUNNING) return thread;
+        for (var child : thread.children) {
+            var found = findContext(child, context);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
     /** Stop a thread: it and its descendants are killed and all their pending work is discarded. */
     void stop(JSThread thread) {
         if (thread.state == JSThread.State.RUNNING && !thread.isRoot()) kill(thread);

@@ -126,6 +126,11 @@ interface InternalLoopModule {
      * work are discarded), even if its main code is blocked. Used by process.exit().
      */
     exitContext(error: unknown): void;
+    /**
+     * End another program at once: the thread whose context is `context` fails with `error`, as with exitContext.
+     * Returns whether a running program had that context. Used by process.kill().
+     */
+    failContext(context: unknown, error: unknown): boolean;
     setContext(value: unknown, tty?: number): void;
 }
 

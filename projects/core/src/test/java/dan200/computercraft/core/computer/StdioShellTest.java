@@ -9,8 +9,11 @@ import dan200.computercraft.core.engine.JSSandboxTest;
 import dan200.computercraft.core.filesystem.MemoryMount;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
 
 import static dan200.computercraft.core.tty.GlfwKeys.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -487,6 +490,46 @@ class StdioShellTest {
             h.enter("cooked again");
             h.waitForText("> COOKED AGAIN");
         }
+    }
+
+    /** Killing the first console's shell (pid 1, see ps) starts a new one at once, also from another console. */
+    @Test
+    void killed_shell_is_restarted() {
+        try (var h = TerminalHarness.boot(programs())) {
+            waitForPrompt(h, "/");
+            h.enter("ps");
+            h.waitFor("bash as pid 1", x -> x.screen().matches("(?s).*\\n\\s*1\\s+0\\s+\\d+\\s+\\S+\\s+bash\\n.*"));
+            h.enter("kill 1");
+            h.waitForText("Terminated");
+            waitForPrompt(h, "/");
+            h.enter("echo alive");
+            h.waitForText("alive");
+
+            // From the second console: the first one gets a new shell although it is not shown.
+            h.alt('2');
+            waitForPrompt(h, "/");
+            var before = shellPids(h);
+            assertEquals(2, before.size(), "a shell on each console\n" + h.dump());
+            var first = before.get(0);
+            h.enter("kill -9 " + first);
+            h.ticks(5);
+            var after = shellPids(h);
+            assertEquals(2, after.size(), "the first console has a shell again\n" + h.dump());
+            assertFalse(after.contains(first), h.dump());
+        }
+    }
+
+    /** The pids of the shells the OS started (ppid 0, `bash`), oldest first, as ps lists them on a cleared screen. */
+    private static List<String> shellPids(TerminalHarness h) {
+        h.enter("clear");
+        h.ticks(2);
+        h.enter("ps");
+        h.waitFor("ps", x -> x.screen().contains("CMD"));
+        waitForPrompt(h, "/");
+        var pids = new ArrayList<String>();
+        var matcher = Pattern.compile("(?m)^\\s*(\\d+)\\s+0\\s+\\d+\\s+\\S+\\s+bash$").matcher(h.screen());
+        while (matcher.find()) pids.add(matcher.group(1));
+        return pids;
     }
 
     /**
