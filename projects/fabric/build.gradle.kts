@@ -155,13 +155,19 @@ loom {
             property("fabric-tag-conventions-v2.missingTagTranslationWarning", "VERBOSE")
         }
 
+        // The bios and ROM straight from :core:transpileTypeScript's output, read on every boot: a rebuilt ROM
+        // (./gradlew :core:transpileTypeScript --continuous) only needs a `reboot` in game.
+        val romDir = project(":core").layout.buildDirectory.dir("generated/js").getAbsolutePath()
+
         named("client") {
             configName = "Client"
+            property("cc-rhino.rom-dir", romDir)
         }
 
         named("server") {
             configName = "Server"
             runDir("run/server")
+            property("cc-rhino.rom-dir", romDir)
         }
 
         fun RunConfigSettings.configureForData(sourceSet: SourceSet) {

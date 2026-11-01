@@ -16,6 +16,7 @@ import dan200.computercraft.core.apis.tty.PtyAPI;
 import dan200.computercraft.core.apis.tty.ScreenAPI;
 import dan200.computercraft.core.computer.computerthread.ComputerScheduler;
 import dan200.computercraft.core.computer.computerthread.ComputerThread;
+import dan200.computercraft.core.filesystem.FileMount;
 import dan200.computercraft.core.filesystem.FileSystem;
 import dan200.computercraft.core.filesystem.FileSystemException;
 import dan200.computercraft.core.engine.IMachine;
@@ -32,6 +33,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
@@ -312,8 +315,23 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
         }
     }
 
+    /**
+     * For developing the ROM: a directory with {@code bios.js} and {@code rom/} (the output of
+     * {@code :core:transpileTypeScript}) to load instead of the mod's resources, read afresh on every boot. The dev run
+     * configurations set it, so a rebuilt ROM only needs a reboot of the computer. Never set in production.
+     */
+    private static final @Nullable Path DEV_ROM_DIR = devRomDir();
+
+    private static @Nullable Path devRomDir() {
+        var dir = System.getProperty("cc-rhino.rom-dir");
+        if (dir == null || dir.isEmpty()) return null;
+        LOG.info("Loading the bios and ROM from {} (cc-rhino.rom-dir)", dir);
+        return Path.of(dir);
+    }
+
     @Nullable
     private Mount getRomMount() {
+        if (DEV_ROM_DIR != null) return new FileMount(DEV_ROM_DIR.resolve("rom"));
         return computer.getGlobalEnvironment().createResourceMount("computercraft", "js/rom");
     }
 
@@ -357,7 +375,9 @@ final class ComputerExecutor implements ComputerScheduler.Worker {
         // Load the bios resource
         InputStream biosStream = null;
         try {
-            biosStream = computer.getGlobalEnvironment().createResourceFile("computercraft", "js/bios.js");
+            biosStream = DEV_ROM_DIR != null
+                ? Files.newInputStream(DEV_ROM_DIR.resolve("bios.js"))
+                : computer.getGlobalEnvironment().createResourceFile("computercraft", "js/bios.js");
         } catch (Exception e) {
             LOG.error("Failed to load BIOS", e);
         }

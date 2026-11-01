@@ -51,14 +51,20 @@ neoForge {
             loadedMods.add(computercraft)
         }
 
+        // The bios and ROM straight from :core:transpileTypeScript's output, read on every boot: a rebuilt ROM
+        // (./gradlew :core:transpileTypeScript --continuous) only needs a `reboot` in game.
+        val romDir = project.project(":core").layout.buildDirectory.dir("generated/js").getAbsolutePath()
+
         register("client") {
             client()
+            systemProperty("cc-rhino.rom-dir", romDir)
         }
 
         register("server") {
             server()
             gameDirectory = file("run/server")
             programArgument("--nogui")
+            systemProperty("cc-rhino.rom-dir", romDir)
         }
 
         fun RunModel.configureForData(mod: String, sourceSet: SourceSet) {

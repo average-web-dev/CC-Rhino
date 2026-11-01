@@ -41,6 +41,12 @@ JDK 25 is required (`JAVA_HOME=/usr/lib/jvm/java-25-openjdk-amd64`), plus Node â
 ./gradlew :forge:runClient / :fabric:runClient   # in-game testing
 ```
 
+Developing the bios / ROM in game: the `client` / `server` run configurations (Fabric and Forge) set
+`-Dcc-rhino.rom-dir=projects/core/build/generated/js`, so `ComputerExecutor` loads `bios.js` and mounts `/rom` from that
+directory (a `FileMount`, read on every boot) instead of the mod's resources. Keep
+`./gradlew :core:transpileTypeScript --continuous` running and `reboot` the computer after a change; only Java changes
+need a restart. The gametest runs and the built jar use the resources as before.
+
 CI (`.github/workflows/main-ci.yml`) runs `assemble`, `test` and `runGametest` on Linux and `:core:test` on Windows.
 The docs website, Lua lint and the TeaVM web emulator are disabled (`TODO(rhino)`, #17); `:web:docWebsite` is not
 part of `assemble`.
