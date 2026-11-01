@@ -702,16 +702,16 @@ public class FSAPI implements IComputerAPI {
         IFunction isFile, IFunction isDirectory, IFunction isSymbolicLink, IFunction isBlockDevice,
         IFunction isCharacterDevice, IFunction isFIFO, IFunction isSocket
     ) {
-        static Stats of(boolean directory, long size, long atime, long mtime, long birthtime, boolean readOnly) {
-            // S_IFDIR / S_IFREG with rwxr-xr-x / rw-r--r--, minus the write bits on read-only mounts.
-            var mode = directory ? 0040755 : 0100644;
+        static Stats of(boolean directory, boolean device, long size, long atime, long mtime, long birthtime, boolean readOnly) {
+            // S_IFDIR / S_IFCHR / S_IFREG with rwxr-xr-x / rw-r--r--, minus the write bits on read-only mounts.
+            var mode = directory ? 0040755 : device ? 0020644 : 0100644;
             if (readOnly) mode &= ~0222;
             return new Stats(
                 0, 0, mode, 1, 0, 0, 0,
                 size, 4096, (size + 511) / 512,
                 atime, mtime, mtime, birthtime,
                 readOnly,
-                is(!directory), is(directory), FALSE, FALSE, FALSE, FALSE, FALSE
+                is(!directory && !device), is(directory), FALSE, FALSE, is(device), FALSE, FALSE
             );
         }
     }
@@ -725,8 +725,10 @@ public class FSAPI implements IComputerAPI {
         IFunction isFile, IFunction isDirectory, IFunction isSymbolicLink, IFunction isBlockDevice,
         IFunction isCharacterDevice, IFunction isFIFO, IFunction isSocket
     ) {
-        static Dirent of(String name, String parentPath, boolean directory) {
-            return new Dirent(name, parentPath, parentPath, is(!directory), is(directory), FALSE, FALSE, FALSE, FALSE, FALSE);
+        static Dirent of(String name, String parentPath, boolean directory, boolean device) {
+            return new Dirent(
+                name, parentPath, parentPath, is(!directory && !device), is(directory), FALSE, FALSE, is(device), FALSE, FALSE
+            );
         }
     }
 
@@ -1042,7 +1044,8 @@ public class FSAPI implements IComputerAPI {
         for (var name : fs.list(dir)) {
             var child = fs.combine(dir, name);
             var directory = fs.isDir(child);
-            out.add(withFileTypes ? Dirent.of(name, abs(dir), directory) : prefix + name);
+            // A device file (/dev) is a character device: its attributes say "other".
+            out.add(withFileTypes ? Dirent.of(name, abs(dir), directory, !directory && fs.getAttributes(child).isOther()) : prefix + name);
             if (recursive && directory) listInto(fs, child, prefix + name + "/", withFileTypes, true, out, depth + 1);
         }
     }
@@ -1210,7 +1213,7 @@ public class FSAPI implements IComputerAPI {
             var attrs = fs.getAttributes(path);
             var modified = millis(attrs.lastModifiedTime());
             return Stats.of(
-                attrs.isDirectory(), attrs.isDirectory() ? 0L : attrs.size(),
+                attrs.isDirectory(), attrs.isOther(), attrs.isDirectory() ? 0L : attrs.size(),
                 attrs.lastAccessTime() != null ? millis(attrs.lastAccessTime()) : modified,
                 modified, millis(attrs.creationTime()), fs.isReadOnly(path)
             );

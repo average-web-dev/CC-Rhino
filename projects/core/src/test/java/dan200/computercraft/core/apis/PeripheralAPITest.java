@@ -113,6 +113,11 @@ public class PeripheralAPITest {
             computer.detachDevice("thing_7");
         }
 
+        @ScriptFunction
+        public final void attach9(IComputerAccess computer) {
+            computer.attachDevice("thing_9", new Thing("nine"));
+        }
+
         @Override
         public String getType() {
             return "hub";

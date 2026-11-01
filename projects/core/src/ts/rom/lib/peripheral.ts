@@ -9,14 +9,18 @@
 //   peripheral.get('monitor_0')             one of them, or undefined
 //   peripheral.wrap('/dev/monitor0')        its methods as an object (typed by the id / path), or undefined
 //   peripheral.find('speaker')              every device of a type, wrapped
+//   peripheral.on('attach', (device) => …)  a device was attached ('detach': went), as DeviceInfo
 //
 // A device has an id (`monitor_3`) that is the same on every computer and wherever it is attached: on a side or through
 // a wired network, both alike. Every function that takes a device accepts its id, its /dev path, or (for
-// compatibility) the side it is on.
+// compatibility) the side it is on. The OS names the devices (/dev/monitor0, …; /rom/lib/internal/devices); the events
+// are `device_attach` / `device_detach` on the event bus, so a listener belongs to the thread that added it.
 
 import native from 'internal/peripheral';
 import fs from 'fs';
-import { validateFunction, validateString } from '/rom/lib/internal/validators';
+import events from 'events';
+import { infoOf as namedInfoOf } from '/rom/lib/internal/devices';
+import { validateFunction, validateOneOf, validateString } from '/rom/lib/internal/validators';
 
 const DEV = '/dev/';
 
@@ -32,19 +36,10 @@ function idOf(idOrPath: string): string {
     }
 }
 
-/** The /dev path of a device, if the OS named it. */
-function pathOf(id: string): string | undefined {
-    let devices = fs.existsSync(DEV) ? fs.readdirSync(DEV) : [];
-    for (let name of devices) {
-        if (idOf(DEV + name) === id) return DEV + name;
-    }
-    return undefined;
-}
-
 function infoOf(id: string): DeviceInfo | undefined {
     let types = native.getType(id);
     if (types === null) return undefined;
-    let path = pathOf(id);
+    let path = namedInfoOf(id)?.path;
     let info: { id: string; types: readonly string[]; path?: string } = { id, types: Object.freeze(types) };
     if (path !== undefined) info.path = path;
     return Object.freeze(info);
@@ -114,6 +109,27 @@ export function find(type: string, filter?: (device: Device) => boolean): Device
         if (device !== undefined && (filter === undefined || filter(device))) found.push(device);
     }
     return found;
+}
+
+const EVENTS = { attach: 'device_attach', detach: 'device_detach' } as const;
+const EVENT_NAMES = Object.keys(EVENTS) as (keyof typeof EVENTS)[];
+
+export function on<K extends keyof PeripheralEventMap>(event: K, listener: (...args: PeripheralEventMap[K]) => void): PeripheralModule {
+    validateOneOf(event, 'event', EVENT_NAMES);
+    events.on(EVENTS[event], listener as any);
+    return module.exports as PeripheralModule;
+}
+
+export function once<K extends keyof PeripheralEventMap>(event: K, listener: (...args: PeripheralEventMap[K]) => void): PeripheralModule {
+    validateOneOf(event, 'event', EVENT_NAMES);
+    events.once(EVENTS[event], listener as any);
+    return module.exports as PeripheralModule;
+}
+
+export function off<K extends keyof PeripheralEventMap>(event: K, listener: (...args: PeripheralEventMap[K]) => void): PeripheralModule {
+    validateOneOf(event, 'event', EVENT_NAMES);
+    events.off(EVENTS[event], listener as any);
+    return module.exports as PeripheralModule;
 }
 
 // The exports implement the module's public type (types/peripheral.d.ts).

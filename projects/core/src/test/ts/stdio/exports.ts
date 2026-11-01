@@ -56,7 +56,8 @@ const expected: Record<string, [string, string[]]> = {
         'epoch', 'getComputerID', 'getComputerLabel', 'getHost', 'process', 'processes', 'reboot', 'setAlarm',
         'setComputerLabel', 'shutdown', 'sleep', 'startTimer', 'time', 'yield']],
     'peripheral': ['object', ['call', 'find', 'get', 'getDeviceOn', 'getMethods', 'getNames', 'getType', 'hasType',
-        'isPresent', 'list', 'wrap']],
+        'isPresent', 'list', 'off', 'on', 'once', 'wrap']],
+    '/rom/lib/internal/devices': ['object', ['infoOf', 'start']],
     'peripheral/promises': ['object', ['call', 'get', 'getDeviceOn', 'getMethods', 'getNames', 'getType', 'hasType',
         'isPresent', 'list']],
     '/rom/lib/internal/globals': ['object', []],
@@ -106,6 +107,8 @@ for (const [name, nativeName] of [['system', 'internal/system'], ['system/promis
     ['peripheral', 'internal/peripheral'], ['peripheral/promises', 'internal/peripheral/promises']]) {
     let wrapper = require(name) as Record<string, unknown>;
     for (const key of Object.keys(require(nativeName) as object)) {
+        // /dev is filled by the OS (internal/devices), not by programs.
+        if (key === 'setDeviceFile' || key === 'removeDeviceFile') continue;
         eq(typeof wrapper[key], 'function', name + ' passes on ' + nativeName + '.' + key);
     }
 }

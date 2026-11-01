@@ -12,7 +12,7 @@ interface DeviceInfo {
     readonly id: string;
     /** Its types: the primary type first, then any additional types. */
     readonly types: readonly string[];
-    /** Its device file (`/dev/monitor0`), once the OS named it. */
+    /** Its device file (`/dev/monitor0`), once the OS named it (/rom/lib/internal/devices). */
     readonly path?: string;
 }
 
@@ -46,7 +46,23 @@ type DeviceTypeOrNever<P extends string> = {
     [K in keyof PeripheralTypeMap]: P extends `/dev/${K}${number}` | `${K}_${number}` ? PeripheralTypeMap[K] : never
 }[keyof PeripheralTypeMap];
 
-interface PeripheralModule extends PeripheralAPI {
+/** The events of the `peripheral` module: a device was attached or detached (its /dev path is set). */
+interface PeripheralEventMap {
+    attach: [device: DeviceInfo];
+    detach: [device: DeviceInfo];
+}
+
+interface CustomEventMap {
+    /** A device was attached and named (emitted by the OS's device registry; peripheral.on('attach') listens to it). */
+    device_attach: [device: DeviceInfo];
+    /** A device was detached; its /dev file is gone. */
+    device_detach: [device: DeviceInfo];
+}
+
+/** The native functions for the OS (filling /dev), which `peripheral` does not pass on. */
+type PeripheralOsFunctions = 'setDeviceFile' | 'removeDeviceFile';
+
+interface PeripheralModule extends Omit<PeripheralAPI, PeripheralOsFunctions> {
     /** Every attached device, sorted by id. */
     list(): DeviceInfo[];
     /** A device by id or /dev path, or undefined if it is not attached. */
@@ -59,9 +75,16 @@ interface PeripheralModule extends PeripheralAPI {
     /** Every device of a type (primary or additional), wrapped; `filter` picks some of them. */
     find<K extends keyof PeripheralTypeMap>(type: K, filter?: (device: Device<PeripheralTypeMap[K]>) => boolean): Device<PeripheralTypeMap[K]>[];
     find(type: string, filter?: (device: Device) => boolean): Device[];
+    /**
+     * Listen to devices being attached ('attach') and detached ('detach'), on a side or through a cable. Like
+     * `events.on` (they are the events `device_attach` / `device_detach`): the listener belongs to the calling thread.
+     */
+    on<K extends keyof PeripheralEventMap>(event: K, listener: (...args: PeripheralEventMap[K]) => void): PeripheralModule;
+    once<K extends keyof PeripheralEventMap>(event: K, listener: (...args: PeripheralEventMap[K]) => void): PeripheralModule;
+    off<K extends keyof PeripheralEventMap>(event: K, listener: (...args: PeripheralEventMap[K]) => void): PeripheralModule;
 }
 
-interface PeripheralModulePromises extends PeripheralAPIPromises {
+interface PeripheralModulePromises extends Omit<PeripheralAPIPromises, PeripheralOsFunctions> {
     list(): Promise<DeviceInfo[]>;
     get(idOrPath: string): Promise<DeviceInfo | undefined>;
 }

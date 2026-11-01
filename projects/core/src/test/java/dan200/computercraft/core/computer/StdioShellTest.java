@@ -186,6 +186,25 @@ class StdioShellTest {
         }
     }
 
+    /** The OS names the devices in /dev: character devices describing the device, listed by `peripherals` too. */
+    @Test
+    void devices_are_named_in_dev() {
+        try (var h = TerminalHarness.boot(programs(), x -> {
+            x.getEnvironment().setPeripheral(ComputerSide.LEFT, new FakeDrive("mnt/disk", new MemoryMount()));
+            x.getEnvironment().setPeripheral(ComputerSide.RIGHT, new FakeDrive("mnt/disk2", new MemoryMount()));
+        })) {
+            waitForPrompt(h, "/");
+            h.enter("ls /dev");
+            h.waitFor("the device files", x -> x.screen().contains("drive0") && x.screen().contains("drive1"));
+            waitForPrompt(h, "/");
+            h.enter("cat /dev/drive1");
+            h.waitForText("{\"id\":\"drive_right\",\"types\":[\"drive\"]}");
+            waitForPrompt(h, "/");
+            h.enter("peripherals");
+            h.waitForText("drive_left: drive (/dev/drive0, left)");
+        }
+    }
+
     /** A disk drive with a disk: mounts it on attach, like the real one. */
     public static final class FakeDrive implements IPeripheral {
         private final String path;

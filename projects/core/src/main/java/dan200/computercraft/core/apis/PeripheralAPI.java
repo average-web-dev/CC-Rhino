@@ -13,10 +13,14 @@ import dan200.computercraft.api.scripting.*;
 import dan200.computercraft.core.apis.events.CoreEvents;
 import dan200.computercraft.core.computer.ComputerSide;
 import dan200.computercraft.core.computer.GuardedContext;
+import dan200.computercraft.core.filesystem.DevMount;
+import dan200.computercraft.core.filesystem.FileSystemException;
 import dan200.computercraft.core.methods.MethodSupplier;
 import dan200.computercraft.core.methods.PeripheralMethod;
 import dan200.computercraft.core.metrics.Metrics;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
@@ -30,6 +34,8 @@ import java.util.*;
  * @hidden
  */
 public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralChangeListener {
+    private static final Logger LOG = LoggerFactory.getLogger(PeripheralAPI.class);
+
     private final class PeripheralWrapper extends ComputerAccess implements GuardedContext.Guard {
         private final String id;
         private final IPeripheral peripheral;
@@ -210,6 +216,8 @@ public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralC
      */
     private final Map<String, List<PeripheralWrapper>> devices = new HashMap<>();
     private boolean running;
+    /** {@code /dev}, filled by the OS (a fresh one every boot). */
+    private DevMount devMount = new DevMount();
 
     public PeripheralAPI(IAPIEnvironment environment, MethodSupplier<PeripheralMethod> peripheralMethods) {
         this.environment = environment;
@@ -294,6 +302,13 @@ public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralC
 
     @Override
     public void startup() {
+        devMount = new DevMount();
+        try {
+            environment.getFileSystem().mount("dev", "dev", devMount);
+        } catch (FileSystemException e) {
+            LOG.error("Cannot mount /dev", e);
+        }
+
         synchronized (devices) {
             running = true;
             for (var attachments : List.copyOf(devices.values())) {
@@ -343,6 +358,37 @@ public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralC
             var device = sides[side.ordinal()];
             return device == null ? null : device.id;
         }
+    }
+
+    /**
+     * Create or replace a device file in {@code /dev}. For the OS, which names the devices.
+     *
+     * @param name     The file's name ({@code monitor0}).
+     * @param contents Its contents.
+     * @throws ScriptException If the name is not a plain file name.
+     */
+    @ScriptFunction
+    public final void setDeviceFile(String name, String contents) throws ScriptException {
+        devMount.put(deviceFileName(name), contents);
+    }
+
+    /**
+     * Remove a device file from {@code /dev}. For the OS.
+     *
+     * @param name The file's name.
+     * @return Whether there was such a file.
+     * @throws ScriptException If the name is not a plain file name.
+     */
+    @ScriptFunction
+    public final boolean removeDeviceFile(String name) throws ScriptException {
+        return devMount.remove(deviceFileName(name));
+    }
+
+    private static String deviceFileName(String name) throws ScriptException {
+        if (name.isEmpty() || name.contains("/") || name.equals(".") || name.equals("..")) {
+            throw new ScriptException("Bad device file name: " + name);
+        }
+        return name;
     }
 
     /**

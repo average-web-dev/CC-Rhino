@@ -14,6 +14,7 @@ import events from 'events';
 import * as jobs from '/rom/lib/internal/tty';
 import { spawn } from '/rom/lib/child_process';
 import { CSI } from '/rom/lib/tty';
+import * as devices from '/rom/lib/internal/devices';
 
 // ── Kernel log ─────────────────────────────────────────────────────────────────
 // Inspired by Linux dmesg / systemd service lines. The tag colours are ANSI styles, which process.stdout maps onto the
@@ -60,6 +61,13 @@ try {
     fs.mkdirSync('/mnt', { recursive: true });
 } catch (error: any) {
     klog('fail', 'Cannot create /mnt: ' + (error?.message ?? error));
+}
+
+try {
+    let count = devices.start();
+    klog('ok', `Devices: ${count} in /dev`);
+} catch (error: any) {
+    klog('fail', 'Cannot name the devices: ' + (error?.message ?? error));
 }
 
 klog('ok', 'Kernel ready - handing off to shell');
