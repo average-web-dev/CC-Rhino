@@ -274,4 +274,6 @@ declare module "internal/pty/promises" { const ptyPromises: PtyAPIPromises; expo
 interface CustomEventMap {
     /** The last program running on a TTY ended (emitted by the ROM's job control; `tty` is the native TTY id). */
     tty_released: [tty: number];
+    /** A program wrote a BEL (`\x07`) to a TTY (emitted by tty.WriteStream; the OS plays it on a speaker). */
+    tty_bell: [tty: number];
 }

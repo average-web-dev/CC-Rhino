@@ -123,7 +123,19 @@ interface ResizeListener {
     native: (tty: number) => void;
 }
 
-/** Node's tty.WriteStream: what programs write to a TTY (`stdout` or `stderr`). */
+/**
+ * Whether written text rings the terminal bell: a BEL (`\x07`) outside an OSC sequence (`ESC ] … BEL` ends one). The
+ * emulator ignores BEL; the OS plays it on a speaker (`tty_bell`).
+ */
+function hasBell(data: string): boolean {
+    if (data.indexOf('\x07') < 0) return false;
+    return data.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '').indexOf('\x07') >= 0;
+}
+
+/**
+ * Node's tty.WriteStream: what programs write to a TTY (`stdout` or `stderr`). A BEL in the output emits the bus event
+ * `tty_bell` (once per write), which the OS turns into a sound.
+ */
 export class WriteStream implements TtyWriteStream {
     readonly fd: number;
     readonly isTTY = true as const;
@@ -144,7 +156,9 @@ export class WriteStream implements TtyWriteStream {
 
     write(chunk: string | Uint8Array, encoding?: string | ((err: Error | null) => void), callback?: (err: Error | null) => void): boolean {
         if (typeof encoding === 'function') { callback = encoding; encoding = undefined; }
-        this.#pipe.write(chunkToString(chunk));
+        let data = chunkToString(chunk);
+        this.#pipe.write(data);
+        if (hasBell(data)) events.emit('tty_bell', this.#tty.getId());
         later(callback);
         return true;
     }

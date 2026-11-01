@@ -15,6 +15,7 @@ import * as jobs from '/rom/lib/internal/tty';
 import { spawn } from '/rom/lib/child_process';
 import { CSI } from '/rom/lib/tty';
 import * as devices from '/rom/lib/internal/devices';
+import peripheral from 'peripheral';
 
 // ── Kernel log ─────────────────────────────────────────────────────────────────
 // Inspired by Linux dmesg / systemd service lines. The tag colours are ANSI styles, which process.stdout maps onto the
@@ -69,6 +70,23 @@ try {
 } catch (error: any) {
     klog('fail', 'Cannot name the devices: ' + (error?.message ?? error));
 }
+
+// The terminal bell: a BEL a program writes plays a note on the first speaker, at most once per tick (the emit's
+// listeners cannot call a device, so the note is played from a timer in the OS's thread).
+let bellPending = false;
+events.on('tty_bell', () => {
+    if (bellPending) return;
+    bellPending = true;
+    setTimeout(() => {
+        bellPending = false;
+        let speaker = peripheral.find('speaker')[0];
+        try {
+            speaker?.playNote('bell', 1, 12);
+        } catch {
+            // Detached meanwhile, or too many notes this tick: no bell.
+        }
+    }, 0);
+});
 
 klog('ok', 'Kernel ready - handing off to shell');
 

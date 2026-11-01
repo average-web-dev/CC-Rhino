@@ -16,7 +16,9 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.TreeSet;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.regex.Pattern;
 
 import static dan200.computercraft.core.tty.GlfwKeys.*;
@@ -202,6 +204,40 @@ class StdioShellTest {
             waitForPrompt(h, "/");
             h.enter("peripherals");
             h.waitForText("drive_left: drive (/dev/drive0, left)");
+        }
+    }
+
+    /** A BEL a program writes rings the bell: the OS plays a note on the first speaker. */
+    @Test
+    void bell_plays_on_a_speaker() {
+        var speaker = new FakeSpeaker();
+        var mount = programs().addFile("bell.js", "process.stdout.write('ding\\x07\\n');\n");
+        try (var h = TerminalHarness.boot(mount, x -> x.getEnvironment().setPeripheral(ComputerSide.TOP, speaker))) {
+            waitForPrompt(h, "/");
+            h.enter("/bell.js");
+            h.waitForText("ding");
+            h.waitFor("the bell", x -> !speaker.notes.isEmpty());
+            assertEquals(List.of("bell 1.0 12.0"), speaker.notes);
+        }
+    }
+
+    /** A speaker that records the notes it plays. */
+    public static final class FakeSpeaker implements IPeripheral {
+        final List<String> notes = new CopyOnWriteArrayList<>();
+
+        @ScriptFunction
+        public void playNote(String instrument, Optional<Double> volume, Optional<Double> pitch) {
+            notes.add(instrument + " " + volume.orElse(1.0) + " " + pitch.orElse(12.0));
+        }
+
+        @Override
+        public String getType() {
+            return "speaker";
+        }
+
+        @Override
+        public boolean equals(@Nullable IPeripheral other) {
+            return this == other;
         }
     }
 

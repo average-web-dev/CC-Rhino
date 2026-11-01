@@ -9,6 +9,7 @@ import asyncMod from 'async';
 import { CSI, TTY, ReadStream, WriteStream, isatty, decodeInput, InputType, MouseAction, MouseButton } from 'tty';
 import { Term, Key, ColorIndex } from 'term';
 import { Color } from 'color';
+import events from 'events';
 
 const eq = prelude.eq, throws = prelude.throws;
 
@@ -271,3 +272,17 @@ v.setRawMode(false);
 v.input('first\rsecond\r');
 eq(term.readLine(), 'first');
 eq(term.readLine(), 'second');
+
+// ── The terminal bell: a BEL in the output emits tty_bell (the OS plays it), not one ending an OSC ─────────────────
+
+const bells: number[] = [];
+const bell = (id: number) => bells.push(id);
+events.on('tty_bell', bell);
+const b = new TTY(5, 2);
+b.stdout.write('a\x07b\x07');
+b.stdout.write('\x1b]4;1;rgb:ff/00/00\x07');
+b.stdout.write('\x1b]104\x1b\\no bell');
+b.stderr.write('\x07');
+events.off('tty_bell', bell);
+same(bells, [b.handle.getId(), b.handle.getId()], 'once per write, from stdout and stderr');
+eq(b.readOutput(), 'a\x07b\x07\x1b]4;1;rgb:ff/00/00\x07\x1b]104\x1b\\no bell', 'the BEL is still written');
