@@ -262,6 +262,31 @@ class TerminalEmulatorTest {
         assertFalse(terminal.getMouseReporting());
     }
     @Test
+    void alternate_screen_hides_and_restores_the_normal_screen() {
+        emulator.writeOut("shell $\u001b[34m");
+        terminal.setCursorBlink(true);
+        emulator.writeOut("\u001b[?1049h");
+        assertTrue(emulator.alternateScreen());
+        assertEquals("          ", line(0), "the alternate screen starts cleared");
+        emulator.writeOut("\u001b[H\u001b[?25l\u001b[31;47meditor\u001b[3;1Hbottom");
+        assertEquals("editor    ", line(0));
+
+        emulator.writeOut("\u001b[?1049l");
+        assertFalse(emulator.alternateScreen());
+        assertEquals("shell $   ", line(0), "the shell's output is back");
+        assertEquals("          ", line(2));
+        assertCursor(7, 0);
+        assertTrue(terminal.getCursorBlink(), "the cursor blinks again");
+        assertEquals(TerminalEmulator.BLUE, terminal.getTextColour(), "the colours are the shell's again");
+        assertEquals(TerminalEmulator.BLACK, terminal.getBackgroundColour());
+
+        emulator.writeOut("\u001b[?1049l");
+        assertEquals("shell $   ", line(0), "leaving twice changes nothing");
+        emulator.writeOut("\u001b[?1049h\u001bc");
+        assertFalse(emulator.alternateScreen(), "ESC c leaves it too");
+    }
+
+    @Test
     void unknown_osc_sequences_are_swallowed() {
         emulator.writeOut("a\u001b]0;window title\u0007b\u001b]52;c;Zm9v\u001b\\c");
         assertEquals("abc       ", line(0));

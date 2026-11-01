@@ -81,6 +81,13 @@ export const CSI = {
     bracketedPaste(on: boolean): string {
         return on ? `${ESC}[?2004h` : `${ESC}[?2004l`;
     },
+    /**
+     * Show the alternate screen (a cleared one, as full-screen programs like vi use; the cursor and colours are saved),
+     * or the normal screen again as it was. A program's end leaves it.
+     */
+    alternateScreen(on: boolean): string {
+        return on ? `${ESC}[?1049h` : `${ESC}[?1049l`;
+    },
     /** Ask for mouse reports in stdin (SGR encoding, presses, releases and drags), or stop them. */
     mouse(on: boolean): string {
         return on ? `${ESC}[?1002;1006h` : `${ESC}[?1002;1006l`;

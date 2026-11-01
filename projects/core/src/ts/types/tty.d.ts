@@ -102,6 +102,11 @@ interface TtyEscapes {
      * Ask for pasted text bracketed (`ESC [ 200 ~ … ESC [ 201 ~`: a 'paste' event instead of typed text), or stop it.
      */
     bracketedPaste(on: boolean): string;
+    /**
+     * Show the alternate screen (a cleared one, as full-screen programs like vi use; the cursor and colours are saved),
+     * or the normal screen again as it was. A program's end leaves it.
+     */
+    alternateScreen(on: boolean): string;
     /** Ask for mouse reports in stdin (SGR encoding, presses, releases and drags), or stop them. */
     mouse(on: boolean): string;
     /**

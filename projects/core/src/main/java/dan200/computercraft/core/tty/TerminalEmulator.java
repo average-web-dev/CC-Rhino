@@ -28,7 +28,9 @@ import java.util.function.Consumer;
  *   {@code ESC 8}), full reset ({@code ESC c});</li>
  *   <li>DEC private modes ({@code ESC [ ? n h/l}): 25 (cursor blink), 1000/1002/1003 (mouse reporting) and 1006 (SGR
  *   mouse encoding), which {@link #mouseMode()} reports to the input side (and {@link Terminal#getMouseReporting()} to
- *   the client), and 2004 (bracketed paste, {@link #bracketedPaste()});</li>
+ *   the client), 2004 (bracketed paste, {@link #bracketedPaste()}) and 1049 (the alternate screen, as in xterm: the
+ *   cursor, colours and cursor blink are saved and a cleared screen is shown; leaving it shows the saved screen again,
+ *   so a full-screen program leaves the shell's output as it was);</li>
  *   <li>the kitty keyboard protocol's flags ({@code CSI > flags u} push, {@code CSI < n u} pop, {@code CSI = flags ;
  *   mode u} change, {@code CSI ? u} query, answered in the TTY's input), which {@link #keyboardFlags()} reports to the
  *   input side (see {@link InputEncoder});</li>
@@ -89,11 +91,20 @@ public final class TerminalEmulator {
     private MouseMode mouseMode = MouseMode.NONE;
     private boolean sgrMouse;
     private boolean bracketedPaste;
+    /** The normal screen while the alternate one is shown ({@code ESC [ ? 1049 h}), or {@code null}. */
+    private @Nullable SavedScreen normalScreen;
     /** The kitty keyboard flags pushed by programs; the top one applies. */
     private final ArrayDeque<Integer> keyboardFlags = new ArrayDeque<>();
     /** Answers to queries, sent to {@link #replyTo} once the output is rendered. */
     private final StringBuilder replies = new StringBuilder();
     private @Nullable Consumer<String> replyTo;
+
+    /** What the alternate screen hides: the normal screen's rows, cursor and colours. */
+    private record SavedScreen(
+        String[] text, String[] textColour, String[] backgroundColour,
+        int cursorX, int cursorY, boolean cursorBlink, int fg, int bg
+    ) {
+    }
 
     /** Per-stream state: the default text colour and any escape sequence split across writes. */
     private static final class Stream {
@@ -138,6 +149,11 @@ public final class TerminalEmulator {
     /** Whether mouse events should use the SGR encoding ({@code ESC [ < … M/m}) rather than the X10 one. */
     public synchronized boolean sgrMouse() {
         return sgrMouse;
+    }
+
+    /** Whether the alternate screen is shown ({@code ESC [ ? 1049 h}). */
+    public synchronized boolean alternateScreen() {
+        return normalScreen != null;
     }
 
     /** Whether pasted text should be wrapped in {@code ESC [ 200 ~} … {@code ESC [ 201 ~} (the program asked for it). */
@@ -394,6 +410,7 @@ public final class TerminalEmulator {
         setMouseMode(MouseMode.NONE);
         sgrMouse = false;
         bracketedPaste = false;
+        normalScreen = null;
         keyboardFlags.clear();
         resetPalette(-1);
     }
@@ -553,10 +570,48 @@ public final class TerminalEmulator {
                 case 1003 -> setMouseMode(set ? MouseMode.ANY : MouseMode.NONE);
                 case 1006 -> sgrMouse = set;
                 case 2004 -> bracketedPaste = set;
+                case 1049 -> {
+                    if (set) enterAlternateScreen(); else leaveAlternateScreen();
+                }
                 default -> {
                 }
             }
         }
+    }
+
+    private void enterAlternateScreen() {
+        if (normalScreen != null) return;
+        var height = terminal.getHeight();
+        var text = new String[height];
+        var textColour = new String[height];
+        var backgroundColour = new String[height];
+        for (var y = 0; y < height; y++) {
+            text[y] = terminal.getLine(y).toString();
+            textColour[y] = terminal.getTextColourLine(y).toString();
+            backgroundColour[y] = terminal.getBackgroundColourLine(y).toString();
+        }
+        normalScreen = new SavedScreen(
+            text, textColour, backgroundColour, terminal.getCursorX(), terminal.getCursorY(), terminal.getCursorBlink(),
+            terminal.getTextColour(), terminal.getBackgroundColour()
+        );
+        terminal.clear();
+    }
+
+    /** Show the normal screen again; rows and columns the terminal gained since are blank. */
+    private void leaveAlternateScreen() {
+        var saved = normalScreen;
+        if (saved == null) return;
+        normalScreen = null;
+        terminal.setTextColour(saved.fg());
+        terminal.setBackgroundColour(saved.bg());
+        terminal.clear();
+        for (var y = 0; y < Math.min(saved.text().length, terminal.getHeight()); y++) {
+            terminal.setLine(y, saved.text()[y], saved.textColour()[y], saved.backgroundColour()[y]);
+        }
+        terminal.setCursorPos(
+            clamp(saved.cursorX(), 0, terminal.getWidth()), clamp(saved.cursorY(), 0, terminal.getHeight() - 1)
+        );
+        terminal.setCursorBlink(saved.cursorBlink());
     }
 
     private void setMouseMode(MouseMode mode) {

@@ -1352,7 +1352,8 @@ multishell.setFocus(id: number): boolean
 
 **Status**: done (#10): `/rom/bin/vi.ts` (and `vim.ts`), the editor in `/rom/lib/internal/vi/` (no terminal in it;
 tested by `stdio/vi.ts`). `edit` stays the simple editor (as nano next to vim). Event driven: stdin `'keydown'` /
-`'paste'` / `'mouse'` and stdout `'resize'`; raw mode, bracketed paste and mouse reports while it runs.
+`'paste'` / `'mouse'` and stdout `'resize'`; the alternate screen, raw mode, bracketed paste and mouse reports while
+it runs. Quitting is `process.exit()`: the job's end restores the TTY and the shell's screen.
 
 **Feature contract** (as vim):
 - `vi [file]`; the file's final line break is no line of its own and is written back.

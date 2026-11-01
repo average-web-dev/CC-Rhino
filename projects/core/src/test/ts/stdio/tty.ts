@@ -177,6 +177,8 @@ same(decodeInput('a\x1b[200~x\x1b[Ay\ry\x1b[201~b').map(keyOf),
 same(decodeInput('\x1b[200~open').map(keyOf), ['paste "open"']);
 eq(CSI.bracketedPaste(true), '\x1b[?2004h');
 eq(CSI.bracketedPaste(false), '\x1b[?2004l');
+eq(CSI.alternateScreen(true), '\x1b[?1049h');
+eq(CSI.alternateScreen(false), '\x1b[?1049l');
 eq(Object.isFrozen(Key), true);
 eq(CSI.pushKeyboardFlags(27), '\x1b[>27u');
 eq(CSI.popKeyboardFlags(2), '\x1b[<2u');

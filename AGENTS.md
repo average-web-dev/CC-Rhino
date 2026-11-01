@@ -157,7 +157,7 @@ part of `assemble`.
   echo, editing, Ctrl+U/D/C; raw: passed through), created virtually (`internal/pty`) or owned by a device. A
   `TerminalEmulator` renders a TTY's output onto a `Terminal` grid (VT-style: pending wrap, scrolling, SGR colours →
   CC colours plus the CC extension `38/48;6;i`, cursor/erase sequences, the blit sequence `ESC P cc-blit;fg;bg;text
-  ESC \`, mouse modes, the kitty keyboard flag stack); an `InputEncoder` turns keys/chars/mouse into what a terminal
+  ESC \`, mouse modes, the alternate screen `?1049`, the kitty keyboard flag stack); an `InputEncoder` turns keys/chars/mouse into what a terminal
   sends: legacy VT bytes, or the kitty keyboard protocol (`CSI code;mods:event;text u`: presses, repeats, releases)
   when a program pushed flags (`CSI.pushKeyboardFlags`; only in raw mode). GLFW key codes: `core/tty/GlfwKeys`. Colours
   are ANSI indices 0–15, mapped one-to-one onto the 16 CC colours (`TerminalEmulator.ANSI_COLOURS`, VGA order with
@@ -298,8 +298,10 @@ part of `assemble`.
   `'mouse'`, as `vi` and `edit` do) — bash pauses its own interface while a program runs.
 - **Prefer event-driven code**, as in Node: programs and libraries react to events (stdin `'keydown'` / `'data'`,
   stdout `'resize'`, timers, `events.on`, promises) and return from `main`; the flowing stdin, pending timers and
-  operations keep the job alive, and a program ends by removing its listeners / pausing stdin (cleanup in one
-  `close()` that also runs when a handler throws). Blocking loops (`while (…) term.readInput()`, polling with
+  operations keep the job alive, and a program ends with `process.exit()` (or by removing its listeners / pausing
+  stdin). No hand-written cleanup: the job's end drops its listeners, restores raw mode and the keyboard protocol,
+  switches mouse reports and bracketed paste off and leaves the alternate screen (`CSI.alternateScreen(true)`, which
+  full-screen programs use, so the shell's screen, cursor and colours come back as they were; #58). Blocking loops (`while (…) term.readInput()`, polling with
   `sleep`) only where the work is truly sequential (a one-shot prompt, a script). Node-style classes (`Console`, `readline.Interface`, the internal
   `EventEmitter`, `Timeout`/`Immediate`) are real `class`es; `Console` and the readline `Interface`s are exported
   through `/rom/lib/internal/callable`, so that, as in Node, they also work without `new`.

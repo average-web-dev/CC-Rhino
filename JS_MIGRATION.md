@@ -876,6 +876,9 @@ class that draws by writing ANSI. Branch `feature/tty-term`.
   `'mouse'`; the native `paste` / `mouse_*` events are internal
 - [x] **16.15** `vi` (#10): a modal editor like vim on the TTY (raw mode, kitty keys, bracketed paste, mouse), event
   driven; `edit` stays the simple editor
+- [x] **16.16** Ending event-driven programs (#58): `edit` is event driven too; the alternate screen (`?1049`,
+  `CSI.alternateScreen`) in the `TerminalEmulator`; a job's end leaves it (before an error is reported), so `vi` /
+  `edit` just call `process.exit()`; Node's `process.on('exit')` stays open
 
 ---
 

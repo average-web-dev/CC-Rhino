@@ -5,9 +5,9 @@
 //
 //   edit <path>   — open (or create) a file for editing.
 //
-// Event driven, like vi: main() puts stdin in raw mode with bracketed paste, listens to its 'keydown' / 'paste'
-// events (and stdout's 'resize'), draws through a Term and returns; the flowing stdin keeps the program alive until
-// the editor exits, then close() removes the listeners and gives the TTY back. Esc opens the menu (Save / Exit;
+// Event driven, like vi: main() switches to the alternate screen, puts stdin in raw mode with bracketed paste, listens
+// to its 'keydown' / 'paste' events (and stdout's 'resize'), draws through a Term and returns; the flowing stdin keeps
+// the program alive until the editor exits with process.exit(), and the end of the job gives the TTY back. Esc opens the menu (Save / Exit;
 // arrows to select, Enter to invoke); Ctrl+S saves, Ctrl+Q exits.
 //
 // MVP scope: load/edit/save plaintext, scrolling, paste, resize. Syntax
@@ -272,43 +272,20 @@ export function main(args: string[], cwd: string): void {
     const stdin = process.stdin;
     const stdout = process.stdout;
 
-    /** Apply an input, then close when the editor exited (also when the handler failed). */
+    /** Apply an input, then end the program when the editor exited. */
     function update(change: () => void): void {
-        try {
-            change();
-        } catch (e) {
-            close();
-            throw e;
-        }
-        if (!running) close();
-    }
-    const onKeydown = (key: TtyKeyInput) => { update(() => { onKey(key); }); };
-    const onPaste = (paste: TtyPasteInput) => {
-        update(() => { if (!menuOpen) { status = ''; insertText(paste.text.replace(/\r\n?/g, '\n')); } });
-    };
-    const onResize = () => { update(refresh); };
-
-    /** Stop listening (so the program can end) and give the TTY back as the shell expects it. */
-    function close(): void {
-        stdin.off('keydown', onKeydown);
-        stdin.off('paste', onPaste);
-        stdout.off('resize', onResize);
-        stdin.pause();
-        stdout.write(CSI.bracketedPaste(false));
-        stdin.setRawMode(false);
-        term.setBackgroundColor(ColorIndex.BLACK);
-        term.setTextColor(ColorIndex.WHITE);
-        term.clear();
-        term.setCursorPos({ x: 0, y: 0 });
-        term.setCursorBlink(true);
+        change();
+        if (!running) process.exit();
     }
 
     load();
+    stdout.write(CSI.alternateScreen(true) + CSI.bracketedPaste(true));
     stdin.setRawMode(true);
-    stdout.write(CSI.bracketedPaste(true));
     term.clear();
     draw();
-    stdin.on('keydown', onKeydown);
-    stdin.on('paste', onPaste);
-    stdout.on('resize', onResize);
+    stdin.on('keydown', (key) => { update(() => { onKey(key); }); });
+    stdin.on('paste', (paste) => {
+        update(() => { if (!menuOpen) { status = ''; insertText(paste.text.replace(/\r\n?/g, '\n')); } });
+    });
+    stdout.on('resize', () => { update(refresh); });
 }

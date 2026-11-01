@@ -166,14 +166,20 @@ class StdioShellTest {
     void vi_edits_and_writes_a_file() {
         try (var h = TerminalHarness.boot(programs())) {
             waitForPrompt(h, "/");
+            h.enter("echo before vi");
+            h.waitForText("before vi");
+            waitForPrompt(h, "/");
             h.enter("vi /notes.txt");
             h.waitForText("[New]");
+            assertEquals(-1, h.rowOf("before vi"), "vi shows the alternate screen\n" + h.dump());
             h.type("ihello");
             h.key(KEY_ESCAPE);
             h.waitForText("1,5");
             h.type(":wq");
             h.key(KEY_ENTER);
             waitForPrompt(h, "/");
+            assertTrue(h.rowOf("before vi") >= 0, "the shell's screen is back\n" + h.dump());
+            assertEquals(-1, h.rowOf("[New]"), h.dump());
             h.enter("cat /notes.txt");
             h.waitFor("the written file", x -> count(x, "hello") == 1);
             waitForPrompt(h, "/");
@@ -184,11 +190,16 @@ class StdioShellTest {
         }
     }
 
-    /** A program that ends without switching the mouse and bracketed paste off again does not leave them on. */
+    /**
+     * A program that ends without switching the mouse, bracketed paste and the alternate screen off again does not
+     * leave them on; an error on the alternate screen is reported on the shell's screen.
+     */
     @Test
-    void job_end_resets_mouse_and_bracketed_paste() {
+    void job_end_resets_terminal_modes() {
         var mount = programs()
             .addFile("modes.js", "process.stdout.write('\\x1b[?1002;1006h\\x1b[?2004h'); console.log('modes on');\n")
+            .addFile("alt.js", "process.stdout.write('\\x1b[?1049h'); console.log('on the alternate screen');"
+                + " throw new Error('alt failed');\n")
             .addFile("raw.js", """
                 process.stdin.setRawMode(true);
                 process.stdin.on('data', function (d) { console.log(JSON.stringify(d)); process.stdin.pause(); });
@@ -203,6 +214,11 @@ class StdioShellTest {
             h.ticks(5);
             h.paste("x");
             h.waitForText("\"x\"");
+            waitForPrompt(h, "/");
+            h.enter("/alt.js");
+            h.waitForText("alt failed");
+            assertEquals(-1, h.rowOf("on the alternate screen"), h.dump());
+            assertTrue(h.rowOf("/ $ /alt.js") >= 0, "the shell's screen is back\n" + h.dump());
         }
     }
 
@@ -461,6 +477,7 @@ class StdioShellTest {
             h.waitForText("Saved /notes.txt");
             h.ctrl('Q');
             waitForPrompt(h, "/");
+            assertTrue(h.rowOf("/ $ edit /notes.txt") >= 0, "the shell's screen is back\n" + h.dump());
             h.enter("cat /notes.txt");
             h.waitForText("world pasted");
             assertTrue(h.screen().contains("hello"), h.dump());
