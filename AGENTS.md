@@ -295,7 +295,7 @@ part of `assemble`.
   `main` may be `async`
   (return a promise); the exit code is `process.exitCode`, not `main`'s return value. Line-oriented programs use
   `readline` / `process.stdin`; full-screen programs read keys from their TTY (stdin `'keydown'` / `'paste'` /
-  `'mouse'`, as `vi` does; `edit` still blocks in `Term.readKey`) — bash pauses its own interface while a program runs.
+  `'mouse'`, as `vi` and `edit` do) — bash pauses its own interface while a program runs.
 - **Prefer event-driven code**, as in Node: programs and libraries react to events (stdin `'keydown'` / `'data'`,
   stdout `'resize'`, timers, `events.on`, promises) and return from `main`; the flowing stdin, pending timers and
   operations keep the job alive, and a program ends by removing its listeners / pausing stdin (cleanup in one

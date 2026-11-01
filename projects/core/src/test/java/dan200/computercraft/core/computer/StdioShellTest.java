@@ -445,7 +445,7 @@ class StdioShellTest {
         }
     }
 
-    /** edit reads keys through a Term on process.stdin: typing, Ctrl+S saves, Ctrl+Q exits. */
+    /** edit listens to stdin's keys and pastes: typing, pasting, Ctrl+S saves, Ctrl+Q exits and gives the TTY back. */
     @Test
     void edit_saves_and_exits() {
         try (var h = TerminalHarness.boot(programs())) {
@@ -455,14 +455,20 @@ class StdioShellTest {
             h.type("hello");
             h.key(KEY_ENTER);
             h.type("world");
-            h.waitFor("the typed text", x -> x.line(1).startsWith("world"));
+            h.paste(" pasted");
+            h.waitFor("the typed and pasted text", x -> x.line(1).startsWith("world pasted"));
             h.ctrl('S');
             h.waitForText("Saved /notes.txt");
             h.ctrl('Q');
             waitForPrompt(h, "/");
             h.enter("cat /notes.txt");
-            h.waitForText("world");
+            h.waitForText("world pasted");
             assertTrue(h.screen().contains("hello"), h.dump());
+            waitForPrompt(h, "/");
+            h.enter("/upper.js");
+            h.ticks(5);
+            h.enter("cooked again");
+            h.waitForText("> COOKED AGAIN");
         }
     }
 

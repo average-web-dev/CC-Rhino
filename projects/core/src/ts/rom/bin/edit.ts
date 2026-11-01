@@ -5,9 +5,10 @@
 //
 //   edit <path>   — open (or create) a file for editing.
 //
-// Interactive program model: main() reads keys from process.stdin (in raw mode)
-// through a Term and draws with it, until the editor exits. Esc opens the menu
-// (Save / Exit; arrows to select, Enter to invoke); Ctrl+S saves, Ctrl+Q exits.
+// Event driven, like vi: main() puts stdin in raw mode with bracketed paste, listens to its 'keydown' / 'paste'
+// events (and stdout's 'resize'), draws through a Term and returns; the flowing stdin keeps the program alive until
+// the editor exits, then close() removes the listeners and gives the TTY back. Esc opens the menu (Save / Exit;
+// arrows to select, Enter to invoke); Ctrl+S saves, Ctrl+Q exits.
 //
 // MVP scope: load/edit/save plaintext, scrolling, paste, resize. Syntax
 // highlighting (term.blit) and require-name tab completion are follow-ups
@@ -15,6 +16,7 @@
 
 import fs     from 'fs';
 import { ColorIndex, Term, Key } from '/rom/lib/term';
+import { CSI } from '/rom/lib/tty';
 
 /** Shortcuts: the key pressed with Ctrl. */
 const SHORTCUT_SAVE = Key.KEY_S, SHORTCUT_QUIT = Key.KEY_Q;
@@ -267,23 +269,46 @@ export function main(args: string[], cwd: string): void {
 
     // ── Lifecycle ───────────────────────────────────────────────────────────────
 
-    load();
-    process.stdin.setRawMode(true);
-    term.clear();
-    draw();
+    const stdin = process.stdin;
+    const stdout = process.stdout;
 
-    // Ctrl+T makes the read throw "Terminated"; the finally still restores the terminal.
-    try {
-        while (running) {
-            let key = term.readKey();
-            if (key === undefined) break;
-            onKey(key);
+    /** Apply an input, then close when the editor exited (also when the handler failed). */
+    function update(change: () => void): void {
+        try {
+            change();
+        } catch (e) {
+            close();
+            throw e;
         }
-    } finally {
+        if (!running) close();
+    }
+    const onKeydown = (key: TtyKeyInput) => { update(() => { onKey(key); }); };
+    const onPaste = (paste: TtyPasteInput) => {
+        update(() => { if (!menuOpen) { status = ''; insertText(paste.text.replace(/\r\n?/g, '\n')); } });
+    };
+    const onResize = () => { update(refresh); };
+
+    /** Stop listening (so the program can end) and give the TTY back as the shell expects it. */
+    function close(): void {
+        stdin.off('keydown', onKeydown);
+        stdin.off('paste', onPaste);
+        stdout.off('resize', onResize);
+        stdin.pause();
+        stdout.write(CSI.bracketedPaste(false));
+        stdin.setRawMode(false);
         term.setBackgroundColor(ColorIndex.BLACK);
         term.setTextColor(ColorIndex.WHITE);
         term.clear();
         term.setCursorPos({ x: 0, y: 0 });
         term.setCursorBlink(true);
     }
+
+    load();
+    stdin.setRawMode(true);
+    stdout.write(CSI.bracketedPaste(true));
+    term.clear();
+    draw();
+    stdin.on('keydown', onKeydown);
+    stdin.on('paste', onPaste);
+    stdout.on('resize', onResize);
 }
