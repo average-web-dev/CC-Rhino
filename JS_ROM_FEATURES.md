@@ -1347,6 +1347,36 @@ multishell.setFocus(id: number): boolean
 
 ---
 
+
+### vi
+
+**Status**: done (#10): `/rom/bin/vi.ts` (and `vim.ts`), the editor in `/rom/lib/internal/vi/` (no terminal in it;
+tested by `stdio/vi.ts`). `edit` stays the simple editor (as nano next to vim). Event driven: stdin `'keydown'` /
+`'paste'` / `'mouse'` and stdout `'resize'`; raw mode, bracketed paste and mouse reports while it runs.
+
+**Feature contract** (as vim):
+- `vi [file]`; the file's final line break is no line of its own and is written back.
+- Modes: Normal, Insert (`i a I A o O`, counts repeat the typed text), Replace (`R`), Visual (`v V Ctrl+V`, `gv`),
+  command line (`:`, `/`, `?`). The bottom row shows the mode, messages (errors in red), the pending keys, `[+]` and
+  `line,col`.
+- Motions with counts: `h j k l` / arrows, `w W b B e E ge gE` (Ctrl+Left / Right), `0 ^ $ g_`, `gg G`, `{ }`,
+  `f F t T ; ,`, `%`, `H M L`, `+ - Enter`, pages (`Ctrl+F B D U E Y`).
+- Operators `d c y > < g~ gu gU` with motions, doubled for lines, or text objects (`iw aw iW aW i" a" i' a' i( a(
+  i[ a[ i{ a{ i< a< ip ap`); `x X s S D C Y p P J gJ ~ r`; registers `"`, `"0`, `"1`–`"9`, `"-`, `"a`–`"z`
+  (`"A`–`"Z` append), `"_`; `.` repeats the last change; `u` / `Ctrl+R`.
+- Visual mode: motions, searches and text objects extend the selection; `o O`; `d x X D y Y c s C S R > < ~ u U J gJ
+  r p P`, `:` with `'<,'>`; in a block `I` / `A` / `c` type into every line, a yanked block is put as a block.
+- Search: `/ ? n N * #` (JavaScript regular expressions plus `\<` `\>`), wrapping around (`wrapscan`).
+- Ex: ranges (`n . $ '< '> %`, `+n` / `-n`), `:w :q :q! :wq :x ZZ ZQ`, `:e[!]`, `:s/pat/rep/[giI]` (`&`, `\1`, `\r`,
+  `:s`, `:&&`), `:d :y :> :< :j :m :t :co`, `:noh`, `:set number relativenumber ignorecase smartcase hlsearch
+  wrapscan shiftwidth`.
+- Insert mode: `Ctrl+W` (word before the cursor), `Ctrl+U` (to the line start), `Ctrl+Left / Right`.
+- Mouse (vim's `mouse=a`): click places the cursor (Insert mode stays), drag selects, double click a word, triple
+  click a line, the wheel scrolls; Shift+middle pastes (the terminal's).
+
+**Not (yet)**: syntax highlighting and completion (#10, 11.28a/b), marks, macros, `:!`, windows / buffers, undo
+across sessions, `d/pattern`.
+
 ### about
 
 **Summary**: Prints the CC: Tweaked (or CC: Rhino) version and credits.

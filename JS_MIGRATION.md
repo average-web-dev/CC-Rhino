@@ -382,6 +382,7 @@ src/ts/
     │   ├── bash.ts                → interactive shell
     │   ├── ls.ts, cp.ts, …        → file-management commands
     │   ├── edit.ts                → full-screen text editor
+    │   ├── vi.ts, vim.ts          → modal editor (vi / vim, #10)
     │   └── …                      (one file per program from JS_ROM_FEATURES.md)
     ├── lib/                       → /rom/lib/   (libraries, on require.paths)
     │   ├── colors.ts
@@ -474,6 +475,9 @@ Done in #2 on top of the TTY model (#50), differently from the Lua ROM:
   - [ ] **11.28c** Copy / cut / paste **selection** (shift+arrows), plus `Run`/`Print` menu items and an unsaved-changes prompt on Exit.
   - [ ] **11.28d** Mouse support (`CSI.mouse(true)` + `Term.readInput` mouse events: click to position caret, wheel to scroll).
   - [ ] **11.28e** Depends on Tier-0 `keys.ts` (11.4) + `colors.ts` (11.3) — replace the inlined key codes / colour numbers once those land.
+  - [x] **11.28f** `vi.ts` / `vim.ts` (#10): a modal editor like vim (Normal / Insert / Replace / Visual modes, motions,
+    operators, text objects, registers, `.`, search, ex commands with ranges, `:set`, mouse), event driven; see
+    JS_ROM_FEATURES.md `vi`. Selection (11.28c) and the mouse (11.28d) exist there, `edit` stays simple.
 - [ ] **11.29** `js.ts` — interactive JS REPL using `Function()`; print return values via `cc/pretty`; history, tab-completion
 - [ ] **11.30** `monitor.ts` — run a program redirecting its terminal output to an attached monitor peripheral
 - [ ] **11.31** Network programs: `wget.ts`, `pastebin.ts` (upload/download)
@@ -856,8 +860,8 @@ class that draws by writing ANSI. Branch `feature/tty-term`.
 - [x] **16.9** Tier 0 (#2) on top of the TTY model: kitty keyboard protocol, `'keydown'` / `'keyup'` + `Key`, named
   colours (`ColorIndex`), `geometry`, internal validators; named constant groups instead of magic strings/numbers
   (#52: `CSI` in `internal/csi`, `GlfwKeys`)
-- [ ] **16.10** Follow-ups: `edit` like vi/vim (#10); `window` as a native display with a TTY (#3); docs on VitePress
-  (#51)
+- [ ] **16.10** Follow-ups: `window` as a native display with a TTY (#3); docs on VitePress (#51); syntax highlighting
+  and completion in `vi` (#10, 11.28a/b); faster drawing through ANSI (#57)
 - [x] **16.11** Palette (#54): OSC 4 / OSC 104 in `TerminalEmulator` (per console, `ESC c` resets), read back through
   `TtyHandle.getPaletteColor`; ROM `color` module (`Color`), `CSI.setPaletteColor` / `resetPalette`, Term colours by
   index, `Term.setPaletteColor` / `getPaletteColor` / `resetPalette`
@@ -870,6 +874,8 @@ class that draws by writing ANSI. Branch `feature/tty-term`.
 - [x] **16.14** Paste and mouse through the TTY: Ctrl+Shift+V / Shift+Insert / middle button paste (Ctrl+V is a key),
   bracketed paste on request (mode 2004, readline asks), mouse reports only after `CSI.mouse`; stdin `'paste'` /
   `'mouse'`; the native `paste` / `mouse_*` events are internal
+- [x] **16.15** `vi` (#10): a modal editor like vim on the TTY (raw mode, kitty keys, bracketed paste, mouse), event
+  driven; `edit` stays the simple editor
 
 ---
 
