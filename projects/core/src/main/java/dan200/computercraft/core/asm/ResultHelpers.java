@@ -11,16 +11,21 @@ final class ResultHelpers {
     private ResultHelpers() {
     }
 
-    static @Nullable Object checkNormalResult(MethodResult result) {
+    static MethodResult checkNormalResult(MethodResult result) {
         if (result.getCallback() != null) {
             // Due to how tasks are implemented, we can't currently return a MethodResult. This is an
             // entirely artificial limitation - we can remove it if it ever becomes an issue.
             throw new IllegalStateException("Must return MethodResult.of from mainThread function.");
         }
 
-        // A MethodResult now carries exactly one value; hand that lone value back to the task.
-        var values = result.getResult();
-        return values == null || values.length == 0 ? null : values[0];
+        // Hand the whole result back to the task (TaskCallback returns it as is), so that no result (a void method,
+        // undefined in JS) stays apart from a null one.
+        return result;
+    }
+
+    /** A {@code null} return as no result ({@code undefined} in JS), for {@code @ScriptFunction(undefinedIfNull = true)}. */
+    static MethodResult undefinedIfNull(@Nullable Object value) {
+        return value == null ? MethodResult.of() : MethodResult.of(value);
     }
 
     static RuntimeException throwUnchecked(Throwable t) {

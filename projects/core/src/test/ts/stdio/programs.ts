@@ -46,7 +46,7 @@ eq(run('label', 'set', 'Mine').out, 'Computer label set to "Mine"\n');
 eq(system.getComputerLabel(), 'Mine');
 matches(run('id').out, /^This is computer #\d+ \(Mine\)\n$/, 'id with label');
 eq(run('label', 'clear').out, 'Computer label cleared\n');
-eq(system.getComputerLabel() ?? null, null);
+eq(system.getComputerLabel(), null, 'a @Nullable return is null, not undefined');
 eq(run('label').status, 1, 'usage');
 eq(run('label', 'get', 'left').err, 'label: left: No disk drive\n');
 

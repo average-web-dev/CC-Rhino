@@ -8,6 +8,7 @@ import dan200.computercraft.api.scripting.IContext;
 import dan200.computercraft.api.scripting.MethodResult;
 import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.core.methods.ApiMethod;
+import org.jspecify.annotations.Nullable;
 import org.mozilla.javascript.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,11 +73,11 @@ final class JSMethodBridge extends BaseFunction {
     }
 
     @Override
-    public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+    public @Nullable Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
         return promise ? callPromise(cx, scope, args) : callBlocking(cx, scope, args);
     }
 
-    private Object callBlocking(Context cx, Scriptable scope, Object[] args) {
+    private @Nullable Object callBlocking(Context cx, Scriptable scope, Object[] args) {
         var promises = JSPromises.get(cx);
         var inAsyncCode = promises != null && promises.inAsyncCode();
         // A method that may block needs a continuation, so make sure we can capture one *before* it runs and has side

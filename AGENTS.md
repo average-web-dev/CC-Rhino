@@ -230,7 +230,11 @@ part of `assemble`.
   meanwhile.
 - Main-thread work: `@ScriptFunction(mainThread = true)` or `TaskCallback`; externally-completed work (turtle
   command queue) uses `TaskCompletion.await(taskId)` and the standard `task_complete` event.
-- Return values: one value per call. Can-fail actions return a `Result` record (`{ success, reason? }`); structured data
+- Return values: one value per call. `void` / `MethodResult.of()` is `undefined` in JS, a `null` return (`@Nullable`,
+  typed `T | null`) is `null`; `@ScriptFunction(undefinedIfNull = true)` turns a `null` return into `undefined` (typed
+  `T | undefined`, for Node APIs like `fs.statSync(…, { throwIfNoEntry: false })`). Main-thread functions keep the
+  difference too (`TaskCallback` returns the function's `MethodResult`); fs callbacks get `undefined` data when there
+  is none, as in Node. Can-fail actions return a `Result` record (`{ success, reason? }`); structured data
   should be Java **records** (converted by reflection in `JSValues.toJs`, field names = component names).
   Real errors are thrown (`ScriptException`).
 - A failed blocking call (`task_complete` with `ok = false`) throws a normal, catchable JS `Error` at the call site

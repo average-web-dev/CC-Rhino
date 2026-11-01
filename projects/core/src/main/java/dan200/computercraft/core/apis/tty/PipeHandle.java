@@ -62,9 +62,8 @@ public final class PipeHandle {
      * Return what can be read now, without waiting.
      *
      * @return The text ({@code ""} if nothing is buffered), or {@code undefined} at end of input.
-     * @cc-r.return string | undefined
      */
-    @ScriptFunction
+    @ScriptFunction(undefinedIfNull = true)
     public @Nullable String tryRead() {
         return pipe.read().data();
     }
@@ -132,7 +131,8 @@ public final class PipeHandle {
         MethodResult next() {
             while (true) {
                 var read = pipe.read();
-                if (!read.isEmpty()) return MethodResult.of(read.data());
+                // End of input (no data) is undefined in JS.
+                if (!read.isEmpty()) return read.data() == null ? MethodResult.of() : MethodResult.of(read.data());
                 if (pipe.await(() -> queue.accept(new CoreEvents.PipeReadable(pipe.id())))) return pull;
             }
         }

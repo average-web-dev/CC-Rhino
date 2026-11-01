@@ -20,6 +20,7 @@ import org.jspecify.annotations.Nullable;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.Undefined;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -255,7 +256,7 @@ public class FSAPI implements IComputerAPI {
      * @throws ScriptException If the directory could not be created.
      * @cc-r.overload {@code (path: string, options?: number | FsMkdirOptions | null): string | undefined}
      */
-    @ScriptFunction
+    @ScriptFunction(undefinedIfNull = true)
     public final @Nullable String mkdirSync(IArguments args) throws ScriptException {
         var path = args.getString(0);
         return doMkdir(path, flag(options(args.get(1)), "recursive", false));
@@ -563,7 +564,7 @@ public class FSAPI implements IComputerAPI {
      * @cc-r.overload {@code (path: string, options: FsStatOptions & { throwIfNoEntry: false }): FsStats | undefined}
      * @cc-r.overload {@code (path: string, options?: FsStatOptions | null): FsStats}
      */
-    @ScriptFunction({ "statSync", "lstatSync" })
+    @ScriptFunction(value = { "statSync", "lstatSync" }, undefinedIfNull = true)
     public final @Nullable Stats statSync(IArguments args) throws ScriptException {
         var path = args.getString(0);
         return doStat(path, flag(options(args.get(1)), "throwIfNoEntry", true));
@@ -1243,9 +1244,11 @@ public class FSAPI implements IComputerAPI {
     private static void withCallback(Function callback, Operation operation) {
         var cx = Context.getCurrentContext();
         var scope = ScriptableObject.getTopLevelScope(callback);
-        Object err = null, result = null;
+        Object err = null, result = Undefined.instance;
         try {
-            result = JSValues.toJs(cx, scope, operation.run());
+            // No result (a void operation, a missing path with throwIfNoEntry: false) is undefined, as in Node.
+            var value = operation.run();
+            if (value != null) result = JSValues.toJs(cx, scope, value);
         } catch (ScriptException e) {
             err = JSErrors.newError(cx, scope, e);
         }

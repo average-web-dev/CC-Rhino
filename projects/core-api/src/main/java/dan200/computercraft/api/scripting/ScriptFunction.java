@@ -32,7 +32,8 @@ import java.util.Optional;
  * This function may return {@link MethodResult}. However, if you simply return a value (rather than having to yield),
  * you may return {@code void}, a single value (either an object or a primitive like {@code int}) or array of objects.
  * These will be treated the same as {@link MethodResult#of()}, {@link MethodResult#of(Object)} and
- * {@link MethodResult#of(Object...)}.
+ * {@link MethodResult#of(Object...)}. {@link MethodResult#of()} is {@code undefined} in JavaScript, a {@code null}
+ * value {@code null} (or {@code undefined} with {@link #undefinedIfNull()}).
  */
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
@@ -62,4 +63,14 @@ public @interface ScriptFunction {
      * @return Whether this function supports unsafe arguments.
      */
     boolean unsafe() default false;
+
+    /**
+     * Return {@code undefined} instead of {@code null} when this method returns {@code null}, as Node does for "no
+     * result" (e.g. {@code fs.statSync(path, { throwIfNoEntry: false })} for a missing path). Without it, a
+     * {@code null} return is JavaScript's {@code null} (typed {@code T | null}); with it, the type is
+     * {@code T | undefined}.
+     *
+     * @return Whether a {@code null} return becomes {@code undefined}.
+     */
+    boolean undefinedIfNull() default false;
 }

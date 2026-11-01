@@ -119,7 +119,8 @@ class JSFsAPITest {
         try {
             run(machine, null);
             run(machine, TICK);
-            assertEquals(List.of("true:ENOENT: no such file or directory, open '/missing.txt':null", "stat:true"), probe.values);
+            // As in Node, a failed operation passes only the error: the data argument is undefined.
+            assertEquals(List.of("true:ENOENT: no such file or directory, open '/missing.txt':undefined", "stat:true"), probe.values);
         } finally {
             machine.close();
         }

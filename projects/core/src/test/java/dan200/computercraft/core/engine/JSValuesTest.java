@@ -6,6 +6,7 @@ package dan200.computercraft.core.engine;
 
 import dan200.computercraft.api.scripting.MethodResult;
 import dan200.computercraft.core.methods.ApiMethod;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -103,6 +104,28 @@ class JSValuesTest {
             "slots", (target, context, args) -> MethodResult.of(Map.of(1, "a", 3, "b"))
         ));
         assertEquals(List.of(true, false, "a,b"), values);
+    }
+
+    /** A record with a {@code @Nullable} component, for {@link #null_results_are_null_and_void_results_undefined}. */
+    private record Labelled(String name, @Nullable String label) {
+    }
+
+    @Test
+    void null_results_are_null_and_void_results_undefined() throws Exception {
+        var values = run("""
+            probe.record(e.none() === undefined);
+            probe.record(e.nothing() === null);
+            probe.record(e.list()[1] === null);
+            var r = e.record();
+            probe.record(r.label === null && 'label' in r);
+            """, Map.of(
+            "none", (target, context, args) -> MethodResult.of(),
+            // A @Nullable return (`T | null` in the generated types) that is null.
+            "nothing", (target, context, args) -> MethodResult.of((Object) null),
+            "list", (target, context, args) -> MethodResult.of(java.util.Arrays.asList("a", null)),
+            "record", (target, context, args) -> MethodResult.of(new Labelled("x", null))
+        ));
+        assertEquals(List.of(true, true, true, true), values);
     }
 
     @Test

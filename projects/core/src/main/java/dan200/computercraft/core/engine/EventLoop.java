@@ -1015,7 +1015,7 @@ public final class EventLoop {
      * continuation is resumed — if it blocks again it is parked again through {@link #park} — and a promise is
      * resolved, or rejected with the marker's error.
      */
-    private MachineResult resume(Context cx, Scriptable scope, Strand strand, Waiter waiter, Object jsResult) {
+    private MachineResult resume(Context cx, Scriptable scope, Strand strand, Waiter waiter, @Nullable Object jsResult) {
         return switch (waiter) {
             case Waiter.Blocked blocked ->
                 run(cx, scope, strand, () -> cx.resumeContinuation(blocked.pending().getContinuation(), scope, jsResult));

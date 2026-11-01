@@ -44,7 +44,8 @@ final class TaskCallback implements ICallback, ScriptTask {
         if (eventTask.longValue() != taskId) return pull;
 
         if (isOk) {
-            return MethodResult.of(result);
+            // A task may hand back a whole MethodResult (a main-thread @ScriptFunction does), e.g. to return nothing.
+            return result instanceof MethodResult value ? value : MethodResult.of(result);
         } else if (failure != null) {
             throw failure;
         } else if (response.length >= 4 && response[3] instanceof String message) {

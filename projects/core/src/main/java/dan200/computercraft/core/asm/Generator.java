@@ -41,7 +41,7 @@ final class Generator<T> {
     private static final Logger LOG = LoggerFactory.getLogger(Generator.class);
     private static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();
 
-    private static final MethodHandle METHOD_RESULT_OF_VOID, METHOD_RESULT_OF_ONE;
+    private static final MethodHandle METHOD_RESULT_OF_VOID, METHOD_RESULT_OF_ONE, METHOD_RESULT_UNDEFINED_IF_NULL;
 
     private static final Map<Class<?>, ArgMethods> argMethods;
     private static final ArgMethods ARG_TABLE_UNSAFE;
@@ -65,6 +65,7 @@ final class Generator<T> {
         try {
             METHOD_RESULT_OF_VOID = LOOKUP.findStatic(MethodResult.class, "of", MethodType.methodType(MethodResult.class));
             METHOD_RESULT_OF_ONE = LOOKUP.findStatic(MethodResult.class, "of", MethodType.methodType(MethodResult.class, Object.class));
+            METHOD_RESULT_UNDEFINED_IF_NULL = LOOKUP.findStatic(ResultHelpers.class, "undefinedIfNull", MethodType.methodType(MethodResult.class, Object.class));
 
             Map<Class<?>, ArgMethods> argMethodMap = new HashMap<>();
             addArgType(argMethodMap, int.class, "Int");
@@ -223,7 +224,7 @@ final class Generator<T> {
     /**
      * Generate our {@link T} instance for a specific method.
      * <p>
-     * This {@linkplain #buildMethodHandle(Member, MethodHandle, List, boolean)} builds the method handle, and then
+     * This {@linkplain #buildMethodHandle(Member, MethodHandle, List, boolean, boolean)} builds the method handle, and then
      * wraps it with {@link #factory}.
      *
      * @param method     The original method, for reflection and error reporting.
@@ -235,7 +236,7 @@ final class Generator<T> {
         LOG.debug("Generating method wrapper for {}.{}.", method.getDeclaringClass().getName(), method.getName());
 
         var annotation = method.getAnnotation(ScriptFunction.class);
-        var wrappedHandle = buildMethodHandle(method, handle, parameters, annotation.unsafe());
+        var wrappedHandle = buildMethodHandle(method, handle, parameters, annotation.unsafe(), annotation.undefinedIfNull());
         if (wrappedHandle == null) return Optional.empty();
 
         var instance = factory.apply(wrappedHandle);
@@ -252,7 +253,9 @@ final class Generator<T> {
      * @param unsafe         Whether to allow unsafe argument getters.
      * @return The wrapped method handle.
      */
-    private @Nullable MethodHandle buildMethodHandle(Member method, MethodHandle handle, List<Type> parameterTypes, boolean unsafe) {
+    private @Nullable MethodHandle buildMethodHandle(
+        Member method, MethodHandle handle, List<Type> parameterTypes, boolean unsafe, boolean undefinedIfNull
+    ) {
         if (handle.type().parameterCount() != parameterTypes.size() + 1) {
             throw new IllegalArgumentException("Argument lists are mismatched");
         }
@@ -308,7 +311,10 @@ final class Generator<T> {
         } else {
             // Every other return — including Object[], List and Map — is a single value. toJs renders arrays and
             // collections as one JS array, so there is no "multiple return values" collapse.
-            return MethodHandles.filterReturnValue(handle.asType(type.changeReturnType(Object.class)), METHOD_RESULT_OF_ONE);
+            return MethodHandles.filterReturnValue(
+                handle.asType(type.changeReturnType(Object.class)),
+                undefinedIfNull ? METHOD_RESULT_UNDEFINED_IF_NULL : METHOD_RESULT_OF_ONE
+            );
         }
     }
 

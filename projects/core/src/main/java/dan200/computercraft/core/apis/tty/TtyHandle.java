@@ -130,9 +130,8 @@ public final class TtyHandle {
      * The cursor column of the device showing this TTY.
      *
      * @return The column, starting at 0, or {@code undefined} for a virtual TTY.
-     * @cc-r.return number | undefined
      */
-    @ScriptFunction
+    @ScriptFunction(undefinedIfNull = true)
     public @Nullable Integer getCursorColumn() {
         var column = tty.column();
         return column < 0 ? null : column;
@@ -144,9 +143,8 @@ public final class TtyHandle {
      * @param index The colour index, 0–15 (as in {@code ESC [ 38;5;n m}).
      * @return The colour as {@code 0xRRGGBB}, or {@code undefined} for a virtual TTY.
      * @throws ScriptException If the index is out of range.
-     * @cc-r.return number | undefined
      */
-    @ScriptFunction
+    @ScriptFunction(undefinedIfNull = true)
     public @Nullable Integer getPaletteColor(int index) throws ScriptException {
         if (index < 0 || index > 15) throw new ScriptException("Color index must be 0-15, got " + index);
         var rgb = tty.paletteColour(index);

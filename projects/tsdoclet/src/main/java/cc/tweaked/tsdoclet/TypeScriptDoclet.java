@@ -602,7 +602,8 @@ public class TypeScriptDoclet implements Doclet {
             paramStr = String.join(", ", params);
         }
 
-        // Return type: explicit @cc-r.return wins, else map the Java type (+ | null if @Nullable).
+        // Return type: explicit @cc-r.return wins, else map the Java type (+ | null if @Nullable, | undefined with
+        // @ScriptFunction(undefinedIfNull = true)).
         var ret = doc.tag("cc-r.return");
         if (ret != null) {
             ret = ret.trim();
@@ -611,7 +612,9 @@ public class TypeScriptDoclet implements Doclet {
             if (ret.contains("unknown")) {
                 error(method, "Return type maps to an imprecise TS type (" + ret + "); add @cc-r.return");
             }
-            if (!ret.equals("void") && !ret.contains("null") && isNullable(method)) ret = ret + " | null";
+            if (!ret.equals("void") && !ret.contains("null") && isNullable(method)) {
+                ret = ret + (scriptFunctionFlag(method, "undefinedIfNull") ? " | undefined" : " | null");
+            }
         }
 
         if (promise) ret = "Promise<" + promiseObjects(ret) + ">";
@@ -742,6 +745,17 @@ public class TypeScriptDoclet implements Doclet {
             }
         }
         return List.of(method.getSimpleName().toString());
+    }
+
+    /** Whether {@code @ScriptFunction(flag = true)} is set on {@code method}. */
+    private boolean scriptFunctionFlag(ExecutableElement method, String flag) {
+        for (var am : method.getAnnotationMirrors()) {
+            if (!simpleName(am.getAnnotationType()).equals("ScriptFunction")) continue;
+            for (var entry : am.getElementValues().entrySet()) {
+                if (entry.getKey().getSimpleName().contentEquals(flag)) return Boolean.TRUE.equals(entry.getValue().getValue());
+            }
+        }
+        return false;
     }
 
     @SuppressWarnings("unchecked")

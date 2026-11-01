@@ -197,13 +197,15 @@ public final class JSValues {
     }
 
     /**
-     * Convert a CC method result array to a single JS return value.
-     * Zero results → undefined, one result → that value, two or more → JS Array.
+     * Convert a CC method result array to a single JS return value: no result (a {@code void} method,
+     * {@code MethodResult.of()}) → {@code undefined}; a {@code null} result (a {@code @Nullable} return, typed
+     * {@code T | null}) → {@code null}; otherwise the converted value.
      */
-    static Object toJsResult(Context cx, Scriptable scope, @Nullable Object @Nullable [] results) {
+    static @Nullable Object toJsResult(Context cx, Scriptable scope, @Nullable Object @Nullable [] results) {
         // A MethodResult now carries exactly one value (arrays/collections are themselves single JS-array values),
         // so there is never more than one element to convert.
         if (results == null || results.length == 0) return Undefined.instance;
+        if (results[0] == null) return null;
         var v = toJs(cx, scope, results[0]);
         return v != null ? v : Undefined.instance;
     }
