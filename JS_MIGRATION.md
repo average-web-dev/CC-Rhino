@@ -445,7 +445,7 @@ Done in #2 on top of the TTY model (#50), differently from the Lua ROM:
 #### Tier 2 — OS layer + shell (depends on Tier 0–1)
 
 - [ ] **11.13** `src/ts/bios.ts` — hardware init only: terminal reset, banner, `require.paths`, boot `/rom/os` — *partial: boot menu, `require.paths`, boots `/rom/os`; installs only the Node globals `process`/`console` (#34, no more `print`/`write`)*
-- [ ] **11.14** `src/ts/rom/os/index.ts` — device detection, PATH, aliases, completion registration, autorun, startup discovery, launch bash — *partial: device detection + `require.paths`; aliases/autorun/startup in #1*
+- [ ] **11.14** `src/ts/rom/os/index.ts` — device detection, PATH, aliases, completion registration, autorun, startup discovery, launch bash — *partial: device detection, `PATH` (`/rom/os/bin:/rom/bin`, programs) apart from `require.paths` (`/rom/lib`, modules), `/mnt`; aliases/autorun/startup in #1*
 - [ ] **11.15** `src/ts/rom/lib/cc/shell/completion.ts` — completion handler factories (`file`, `program`, `help`, `peripheral`)
 - [ ] **11.16** `src/ts/rom/bin/bash.ts` — readline loop, PATH search, alias resolution, tab-complete, built-ins (cd, exit, alias, set, help, clear, pwd) — *partial: built on `readline` (line editing, history with prefix search, tab completion, Ctrl+C), `$VAR`, cd/exit/export/unset/env, Ctrl+T, programs as jobs with `process.argv`/`process.exit` (#34); rest in #4*
 
@@ -466,9 +466,9 @@ Done in #2 on top of the TTY model (#50), differently from the Lua ROM:
 
 #### Tier 5 — Built-in programs (depends on Tier 0–4)
 
-- [ ] **11.25** File management: `ls.ts`, `cp.ts`, `mv.ts`, `rm.ts`, `mkdir.ts`, `type.ts`, `drive.ts` — *partial: `ls`, `cp`, `mv`, `rm`, `mkdir`, `cat`, `echo` in `rom/os/bin`*
-- [ ] **11.26** Info/control: `id.ts`, `label.ts`, `reboot.ts`, `shutdown.ts`, `clear.ts`, `time.ts`, `about.ts` — *partial: `clear`*
-- [ ] **11.27** `help.ts` (program) — page help topics from `/rom/help/`; `programs.ts` — list available commands
+- [x] **11.25** File management: `ls`, `cp`, `mv`, `rm`, `mkdir`, `cat`, `echo`, `type`, `drive`, `mount` (#7) in `rom/os/bin`; disks mount under `/mnt` (`/mnt/disk`, `/mnt/disk2`, …; the OS creates `/mnt`), `mount <drive> <path>` moves them (`drive.setMountPath`)
+- [x] **11.26** Info/control (#7): `id`, `label`, `reboot`, `shutdown`, `clear`, `time`, `about` (`system.getHost()`, CC's `_HOST`)
+- [ ] **11.27** `help.ts` (program) — page help topics from `/rom/help/` (needs the help content, #11, and the `help` library, #6); `programs.ts` — list available commands — *partial: `programs`*
 - [x] **11.28** `edit.ts` — full-screen text editor (MVP): load/create, cursor + scroll, insert/Enter/Backspace/Delete, paste, term_resize, Ctrl menu (Save/Exit). Established the **interactive-program model**: `main()` blocks on a `system.yield()` spin while its own `events.on('char'/'key'/'paste')` callbacks edit; `bash` suspends its own input listeners while a program runs. Follow-ups:
   - [ ] **11.28a** Syntax highlighting for `.ts`/`.js` — `term.blit` per line + a tokenizer in a shared `rom/lib/cc/syntax.ts` (keyword/string/template/number/comment/identifier → colour). Must thread a multiline carry state (block comments, template literals) from the top of the viewport down. Reused by `js.ts` (11.29).
   - [ ] **11.28b** Tab completion — `require('…')` module names (native + `require.paths`) and identifiers/keywords; reuse bash's `commonPrefix` + the `cc/shell/completion` factories (11.15).
@@ -479,10 +479,10 @@ Done in #2 on top of the TTY model (#50), differently from the Lua ROM:
     operators, text objects, registers, `.`, search, ex commands with ranges, `:set`, mouse), event driven; see
     JS_ROM_FEATURES.md `vi`. Selection (11.28c) and the mouse (11.28d) exist there, `edit` stays simple.
 - [ ] **11.29** `js.ts` — interactive JS REPL using `Function()`; print return values via `cc/pretty`; history, tab-completion
-- [ ] **11.30** `monitor.ts` — run a program redirecting its terminal output to an attached monitor peripheral
+- [x] **11.30** `monitor` (#7): `monitor <name> <program>` runs the program on the monitor's TTY (touches are mouse input, size changes stdout `'resize'`; no keyboard), `monitor scale <name> <0.5-5>`
 - [ ] **11.31** Network programs: `wget.ts`, `pastebin.ts` (upload/download)
 - [ ] **11.32** Rednet programs: `chat.ts` (send/receive messages), `repeat.ts` (wireless relay daemon)
-- [ ] **11.33** Peripheral utilities: `peripherals.ts` (list attached), `redstone.ts` (inspect/set sides) — *partial: `peripherals`*
+- [x] **11.33** Peripheral utilities: `peripherals` (list attached), `redstone` (#7: `probe`, `set <side> <0-15|on|off>`, `set <side> <dye> <on|off>`, `pulse` with timers)
 - [ ] **11.34** Turtle programs: `go.ts`, `turn.ts`, `excavate.ts`, `tunnel.ts`, `refuel.ts`, `craft.ts`, `dance.ts`, `equip.ts`, `unequip.ts`
 - [ ] **11.35** Pocket programs: `equip.ts`, `unequip.ts`, `falling.ts`
 - [ ] **11.36** Command-computer programs: `commands.ts`, `exec.ts`

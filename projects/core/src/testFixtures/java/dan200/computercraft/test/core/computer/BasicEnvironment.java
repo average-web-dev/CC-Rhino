@@ -61,7 +61,7 @@ public class BasicEnvironment implements ComputerEnvironment, GlobalEnvironment 
 
     @Override
     public String getHostString() {
-        return "ComputerCraft 1.0 (Test environment)";
+        return "CC: Rhino 1.0 (Test environment)";
     }
 
     @Override

@@ -6,6 +6,7 @@
 // Everything after this (aliases, autorun, completion) is bash's or future layers' job.
 
 import system from 'system';
+import fs     from 'fs';
 import * as env from '/rom/lib/env';
 import util   from 'util';
 import screen from 'screen';
@@ -52,6 +53,14 @@ env.set('PATH', '/rom/os/bin:/rom/bin');
 require.paths = ['/rom/lib'];
 klog('ok', 'PATH: ' + env.get('PATH'));
 klog('ok', 'Module paths: ' + require.paths.join(', '));
+
+// Disks are mounted under /mnt (/mnt/disk, /mnt/disk2, …; `mount` moves them). The mounts exist without the
+// directory, but it has to be there for `ls /` to show it.
+try {
+    fs.mkdirSync('/mnt', { recursive: true });
+} catch (error: any) {
+    klog('fail', 'Cannot create /mnt: ' + (error?.message ?? error));
+}
 
 klog('ok', 'Kernel ready - handing off to shell');
 

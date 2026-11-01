@@ -1607,17 +1607,40 @@ across sessions, `d/pattern`.
 
 ---
 
+### mount
+
+**Summary**: Show and change where disks are mounted.
+
+**Feature contract**:
+- `mount` → lists the drives with a data disk (on the sides and behind wired modems): `<drive> on /<path> (<label>)`.
+- `mount <drive> <path>` → mounts that drive's disks at `<path>` from now on (`drive.setMountPath(path)`), the current
+  disk at once; fails if something else is there, at `/` or under `/rom`.
+- `mount <drive> --default` → back to the default.
+- Disks mount under `/mnt` by default (`/mnt/disk`, `/mnt/disk2`, …), not in the root as in CC: Tweaked; the OS
+  creates `/mnt` at boot.
+
+**Status**: done (#7), `/rom/os/bin/mount.ts`; `DiskDrivePeripheral.setMountPath` (per computer, kept while it stays
+attached).
+
+**Dependencies**: `peripheral`
+
+**Priority**: important
+
+---
+
 ### monitor
 
 **Summary**: Run a program on an attached monitor peripheral.
 
 **Feature contract**:
-- `monitor <name> <program> [args...]` → redirects term to the monitor, runs the program there.
-- `monitor scale <name> <scale>` → sets the monitor's text scale (0.5–5).
-- Translates `monitor_touch` events to `mouse_click`/`mouse_up` events.
-- Translates `monitor_resize` to `term_resize`.
+- `monitor <name> <program> [args...]` → runs the program with the monitor's TTY (`monitor.getTty()`) as its
+  stdin/stdout/stderr (`child_process.spawnSync` with that TTY). A monitor has no keyboard.
+- `monitor scale <name> <scale>` → sets the monitor's text scale (0.5–5, steps of 0.5).
+- Touches arrive as mouse input once the program asked for it (`CSI.mouse(true)`); size changes as stdout `'resize'`.
 
-**Dependencies**: `peripheral`, `shell`, `term`, events
+**Status**: done (#7), `/rom/os/bin/monitor.ts`.
+
+**Dependencies**: `peripheral`, `child_process`
 
 **Priority**: optional
 

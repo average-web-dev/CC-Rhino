@@ -106,11 +106,38 @@ class Disk_Drive_Test {
             helper.setContainerItem(BlockPos(1, 2, 2), 0, ItemStack(ModRegistry.Items.DISK.get()))
         }
         thenOnComputer {
-            assertEquals("right", getApi<FSAPI>().getDrive("disk"))
+            assertEquals("right", getApi<FSAPI>().getDrive("mnt/disk"))
             callPeripheral("right", "ejectDisk")
         }
         thenIdle(2)
-        thenOnComputer { assertEquals(null, getApi<FSAPI>().getDrive("disk")) }
+        thenOnComputer { assertEquals(null, getApi<FSAPI>().getDrive("mnt/disk")) }
+    }
+
+    /**
+     * setMountPath moves the disk at once, keeps the path for the next disk and goes back to the default without one.
+     */
+    @GameTest
+    fun Moves_mount(helper: GameTestHelper) = helper.sequence {
+        thenOnComputer { } // Wait for the computer to start up
+        thenExecute {
+            helper.setContainerItem(BlockPos(1, 2, 2), 0, ItemStack(ModRegistry.Items.DISK.get()))
+        }
+        thenOnComputer {
+            assertEquals("mnt/disk", callPeripheral("right", "getMountPath")?.get(0))
+            assertEquals("floppy", callPeripheral("right", "setMountPath", "/floppy/")?.get(0))
+            assertEquals("right", getApi<FSAPI>().getDrive("floppy"))
+            assertEquals(null, getApi<FSAPI>().getDrive("mnt/disk"))
+            callPeripheral("right", "ejectDisk")
+        }
+        thenIdle(2)
+        thenExecute {
+            helper.setContainerItem(BlockPos(1, 2, 2), 0, ItemStack(ModRegistry.Items.DISK.get()))
+        }
+        thenIdle(2)
+        thenOnComputer {
+            assertEquals("floppy", callPeripheral("right", "getMountPath")?.get(0), "the next disk goes there too")
+            assertEquals("mnt/disk", callPeripheral("right", "setMountPath")?.get(0), "back to the default")
+        }
     }
 
     /**

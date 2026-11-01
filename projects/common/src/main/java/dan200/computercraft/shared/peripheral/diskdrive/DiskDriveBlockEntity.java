@@ -7,6 +7,7 @@ package dan200.computercraft.shared.peripheral.diskdrive;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import dan200.computercraft.api.filesystem.Mount;
 import dan200.computercraft.api.filesystem.WritableMount;
+import dan200.computercraft.api.scripting.ScriptException;
 import dan200.computercraft.api.media.IMedia;
 import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.api.peripheral.IPeripheral;
@@ -65,6 +66,9 @@ public final class DiskDriveBlockEntity extends AbstractContainerBlockEntity imp
     private static final class MountInfo {
         @Nullable
         String mountPath;
+        /** Where the computer wants this drive's disks ({@link DiskDrivePeripheral#setMountPath}), or the default. */
+        @Nullable
+        String preferredPath;
     }
 
     private final DiskDrivePeripheral peripheral = new DiskDrivePeripheral(this);
@@ -262,6 +266,41 @@ public final class DiskDriveBlockEntity extends AbstractContainerBlockEntity imp
     }
 
     /**
+     * Mount this drive's disks at {@code path} on {@code computer} from now on ({@code null}: the default,
+     * {@code mnt/disk}, {@code mnt/disk2}, …), moving the current disk there at once.
+     *
+     * @return The disk's new mount path, or {@code null} if no data disk is inserted.
+     * @throws ScriptException If something else is already at {@code path}.
+     */
+    @Nullable
+    String setDiskMountPath(IComputerAccess computer, @Nullable String path) throws ScriptException {
+        synchronized (this) {
+            var info = computers.get(computer);
+            if (info == null) return null;
+            var mount = this.mount;
+            if (info.mountPath == null || mount == null) {
+                info.preferredPath = path;
+                return null;
+            }
+            if (path != null && path.equals(info.mountPath)) {
+                info.preferredPath = path;
+                return path;
+            }
+            var old = info.mountPath;
+            computer.unmount(old);
+            var mounted = path == null ? null : mountAt(computer, path, mount);
+            if (path != null && mounted == null) {
+                // Taken: back where it was.
+                info.mountPath = mountAt(computer, old, mount);
+                throw new ScriptException("/" + path + " already exists");
+            }
+            info.preferredPath = path;
+            info.mountPath = mounted != null ? mounted : mountAtDefault(computer, mount);
+            return info.mountPath;
+        }
+    }
+
+    /**
      * Attach a computer to this disk drive. This sets up the {@link MountInfo} map and flags us to mount next tick. We
      * don't mount here, as that might require mutating the current stack.
      *
@@ -320,25 +359,26 @@ public final class DiskDriveBlockEntity extends AbstractContainerBlockEntity imp
     }
 
     private static void mountDisk(IComputerAccess computer, MountInfo info, @Nullable Mount mount) {
-        if (mount instanceof WritableMount writable) {
-            // Try mounting at the lowest numbered "disk" name we can
-            var n = 1;
-            while (info.mountPath == null) {
-                info.mountPath = computer.mountWritable(n == 1 ? "disk" : "disk" + n, writable);
-                n++;
-            }
-        } else if (mount != null) {
-            // Try mounting at the lowest numbered "disk" name we can
-            var n = 1;
-            while (info.mountPath == null) {
-                info.mountPath = computer.mount(n == 1 ? "disk" : "disk" + n, mount);
-                n++;
-            }
+        if (mount != null) {
+            // Where the computer asked for, else (or if that is taken) the lowest numbered mnt/disk name we can.
+            if (info.preferredPath != null) info.mountPath = mountAt(computer, info.preferredPath, mount);
+            if (info.mountPath == null) info.mountPath = mountAtDefault(computer, mount);
         } else {
             assert info.mountPath == null : "Mount path should be null";
         }
 
         computer.queueEvent(new PeripheralEvents.DiskInsert(computer.getAttachmentName()));
+    }
+
+    /** Mount at {@code path}; {@code null} if something is already there. */
+    private static @Nullable String mountAt(IComputerAccess computer, String path, Mount mount) {
+        return mount instanceof WritableMount writable ? computer.mountWritable(path, writable) : computer.mount(path, mount);
+    }
+
+    private static String mountAtDefault(IComputerAccess computer, Mount mount) {
+        String path = null;
+        for (var n = 1; path == null; n++) path = mountAt(computer, n == 1 ? "mnt/disk" : "mnt/disk" + n, mount);
+        return path;
     }
 
     private static void unmountDisk(IComputerAccess computer, MountInfo info) {

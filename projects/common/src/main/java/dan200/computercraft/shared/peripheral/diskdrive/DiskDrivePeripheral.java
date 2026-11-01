@@ -18,8 +18,8 @@ import java.util.Optional;
  * Disk drives are a peripheral which allow you to read and write to floppy disks and other "mountable media" (such as
  * computers or turtles). They also allow you to {@link #playAudio play records}.
  * <p>
- * When a disk drive attaches some mount (such as a floppy disk or computer), it attaches a folder called {@code disk},
- * {@code disk2}, etc... to the root directory of the computer. This folder can be used to interact with the files on
+ * When a disk drive attaches some mount (such as a floppy disk or computer), it attaches a folder called
+ * {@code mnt/disk}, {@code mnt/disk2}, etc... (or where {@link #setMountPath} says) to the computer. This folder can be used to interact with the files on
  * that disk.
  * <p>
  * When a disk is inserted, a {@code disk} event is fired, with the side peripheral is on. Likewise, when the disk is
@@ -106,6 +106,29 @@ public class DiskDrivePeripheral implements IPeripheral {
     @Nullable
     public final String getMountPath(IComputerAccess computer) {
         return diskDrive.getDiskMountPath(computer);
+    }
+
+    /**
+     * Mount this drive's disks somewhere else on this computer, e.g. {@code "floppy"} or {@code "mnt/data"}: the
+     * current disk moves there at once, and disks inserted later go there too (while this computer stays attached).
+     * Without a path, disks go back to the default ({@code mnt/disk}, {@code mnt/disk2}, …).
+     *
+     * @param computer The computer object
+     * @param path     Where to mount the disks, relative to the root ({@code "/floppy"} works too).
+     * @return The disk's new mount path, or {@code null} if no data disk is inserted.
+     * @throws ScriptException If something else is already at that path, or the path is the root or {@code rom}.
+     */
+    @ScriptFunction
+    @Nullable
+    public final String setMountPath(IComputerAccess computer, Optional<String> path) throws ScriptException {
+        var normalised = path.map(p -> p.replaceAll("^/+|/+$", "").replaceAll("/+", "/")).orElse(null);
+        if (normalised != null) {
+            if (normalised.isEmpty() || normalised.equals("rom") || normalised.startsWith("rom/")) {
+                throw new ScriptException("Cannot mount a disk at /" + normalised);
+            }
+            if (("/" + normalised + "/").matches(".*/\\.\\.?/.*")) throw new ScriptException("Invalid mount path /" + normalised);
+        }
+        return diskDrive.setDiskMountPath(computer, normalised);
     }
 
     /**

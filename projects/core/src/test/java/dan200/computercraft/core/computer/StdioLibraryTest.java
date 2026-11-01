@@ -97,6 +97,12 @@ class StdioLibraryTest {
         run("color.js");
     }
 
+    /** The small programs in /rom/os/bin (#7). */
+    @Test
+    void programs() {
+        run("programs.js");
+    }
+
     /** Bundled cables in the redstone module: channels as dyes. */
     @Test
     void redstone() {

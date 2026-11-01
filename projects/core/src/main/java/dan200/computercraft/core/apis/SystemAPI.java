@@ -204,6 +204,17 @@ public class SystemAPI implements IComputerAPI {
     }
 
     /**
+     * Describes the environment the computer runs in: the mod and Minecraft version (e.g. {@code "CC: Rhino 1.0.0
+     * (Minecraft 1.21.1)"}), like CC: Tweaked's {@code _HOST}.
+     *
+     * @return The host string.
+     */
+    @ScriptFunction
+    public final String getHost() {
+        return apiEnvironment.getGlobalEnvironment().getHostString();
+    }
+
+    /**
      * Returns the ID of the computer.
      *
      * @return The ID of the computer.
