@@ -62,6 +62,7 @@ public final class ServerContext {
     private final ComputerContext context;
     private final MainThread mainThread;
     private final IDAssigner idAssigner;
+    private final DeviceIds deviceIds;
     private final WirelessNetwork wirelessNetwork = new WirelessNetwork();
     private final Path storageDir;
 
@@ -76,6 +77,7 @@ public final class ServerContext {
             .genericMethods(GenericSources.getAllMethods())
             .build();
         idAssigner = new IDAssigner(storageDir.resolve("ids.json"));
+        deviceIds = new DeviceIds(this, storageDir.resolve("device_ids.json"));
     }
 
     /**
@@ -175,6 +177,15 @@ public final class ServerContext {
      */
     public int getNextId(String kind) {
         return idAssigner.getNextId(kind);
+    }
+
+    /**
+     * Get the ids of devices (peripherals), which stay the same wherever a device is attached.
+     *
+     * @return The device id store.
+     */
+    public DeviceIds deviceIds() {
+        return deviceIds;
     }
 
     /**

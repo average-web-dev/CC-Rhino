@@ -153,21 +153,43 @@ public interface IComputerAccess {
     }
 
     /**
-     * Get a string, unique to the computer, by which the computer refers to this peripheral.
-     * For directly attached peripherals this will be "left","right","front","back",etc, but
-     * for peripherals attached remotely it will be different. It is good practice to supply
-     * this string when raising events to the computer, so that the computer knows from
-     * which peripheral the event came.
+     * Get the id by which the computer refers to this peripheral: its device id ({@code monitor_3}), the same whether
+     * it is attached to a side or reached through a wired network. It is good practice to supply this string when
+     * raising events to the computer, so that the computer knows from which peripheral the event came.
      *
-     * @return A string unique to the computer, but not globally.
+     * @return The device's id.
      * @throws NotAttachedException If the peripheral has been detached.
      */
     String getAttachmentName();
 
     /**
-     * Get a set of peripherals that this computer access can "see", along with their attachment name.
+     * Attach another device to the computer, for instance one this peripheral reaches through a network (a wired
+     * modem's remote peripherals). The computer treats it exactly like a device on one of its sides: it is listed,
+     * called and named by its id, and gets its own {@link IComputerAccess}.
      * <p>
-     * This may include other peripherals on the wired network or peripherals on other sides of the computer.
+     * Devices attached this way are detached with this peripheral, if it does not detach them itself.
+     *
+     * @param id         The device's id, as returned by its {@link #getAttachmentName()}.
+     * @param peripheral The device.
+     * @throws NotAttachedException          If the peripheral has been detached.
+     * @throws UnsupportedOperationException If this computer cannot attach other devices.
+     */
+    default void attachDevice(String id, IPeripheral peripheral) {
+        throw new UnsupportedOperationException("This computer cannot attach devices");
+    }
+
+    /**
+     * Detach a device previously attached with {@link #attachDevice(String, IPeripheral)}.
+     *
+     * @param id The device's id.
+     * @throws NotAttachedException If the peripheral has been detached.
+     */
+    default void detachDevice(String id) {
+        throw new UnsupportedOperationException("This computer cannot attach devices");
+    }
+
+    /**
+     * Get the devices attached to the computer, by id: those on its sides and those reached through a network.
      *
      * @return All reachable peripherals
      * @throws NotAttachedException If the peripheral has been detached.

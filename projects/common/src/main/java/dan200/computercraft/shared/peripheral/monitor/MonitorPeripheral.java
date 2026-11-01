@@ -37,7 +37,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <pre>{@code
  * const peripheral = require("peripheral");
- * new Term(TTY.from(peripheral.call("top", "getTty"))).write("Hello, world!");
+ * const monitor = peripheral.find("monitor")[0];
+ * new Term(TTY.from(monitor.getTty())).write("Hello, world!");
  * }</pre>
  * @cc.see monitor_resize Queued when a monitor is resized.
  * @cc.see monitor_touch Queued when an advanced monitor is clicked.

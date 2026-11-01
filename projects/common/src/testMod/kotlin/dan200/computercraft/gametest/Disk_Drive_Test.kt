@@ -5,6 +5,7 @@
 package dan200.computercraft.gametest
 
 import dan200.computercraft.core.apis.FSAPI
+import dan200.computercraft.core.apis.PeripheralAPI
 import dan200.computercraft.gametest.api.*
 import dan200.computercraft.shared.ModRegistry
 import dan200.computercraft.shared.media.items.TreasureDisk
@@ -78,13 +79,15 @@ class Disk_Drive_Test {
             // thenOnComputer discards events, so instead we need to track our state transitions.
             started = true
 
+            // Events name the drive by its device id.
+            val drive = getApi<PeripheralAPI>().getDeviceOn("right")
             val diskEvent = pullEvent("disk")
-            assertThat(diskEvent, array(equalTo("disk"), equalTo("right")))
+            assertThat(diskEvent, array(equalTo("disk"), equalTo(drive)))
 
             disk = true
 
             val ejectEvent = pullEvent("disk_eject")
-            assertThat(ejectEvent, array(equalTo("disk_eject"), equalTo("right")))
+            assertThat(ejectEvent, array(equalTo("disk_eject"), equalTo(drive)))
 
             ejected = true
         }
@@ -106,7 +109,7 @@ class Disk_Drive_Test {
             helper.setContainerItem(BlockPos(1, 2, 2), 0, ItemStack(ModRegistry.Items.DISK.get()))
         }
         thenOnComputer {
-            assertEquals("right", getApi<FSAPI>().getDrive("mnt/disk"))
+            assertEquals(getApi<PeripheralAPI>().getDeviceOn("right"), getApi<FSAPI>().getDrive("mnt/disk"))
             callPeripheral("right", "ejectDisk")
         }
         thenIdle(2)
@@ -125,7 +128,7 @@ class Disk_Drive_Test {
         thenOnComputer {
             assertEquals("mnt/disk", callPeripheral("right", "getMountPath")?.get(0))
             assertEquals("floppy", callPeripheral("right", "setMountPath", "/floppy/")?.get(0))
-            assertEquals("right", getApi<FSAPI>().getDrive("floppy"))
+            assertEquals(getApi<PeripheralAPI>().getDeviceOn("right"), getApi<FSAPI>().getDrive("floppy"))
             assertEquals(null, getApi<FSAPI>().getDrive("mnt/disk"))
             callPeripheral("right", "ejectDisk")
         }

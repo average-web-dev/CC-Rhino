@@ -55,6 +55,10 @@ const expected: Record<string, [string, string[]]> = {
     'system/promises': ['object', ['cancelAlarm', 'cancelTimer', 'clock', 'computerID', 'computerLabel', 'day',
         'epoch', 'getComputerID', 'getComputerLabel', 'getHost', 'process', 'processes', 'reboot', 'setAlarm',
         'setComputerLabel', 'shutdown', 'sleep', 'startTimer', 'time', 'yield']],
+    'peripheral': ['object', ['call', 'find', 'get', 'getDeviceOn', 'getMethods', 'getNames', 'getType', 'hasType',
+        'isPresent', 'list', 'wrap']],
+    'peripheral/promises': ['object', ['call', 'get', 'getDeviceOn', 'getMethods', 'getNames', 'getType', 'hasType',
+        'isPresent', 'list']],
     '/rom/lib/internal/globals': ['object', []],
     '/rom/bin/bash': ['object', ['getCwd', 'getExitCode', 'main', 'run', 'setCwd', 'start']],
     '/rom/bin/edit': ['object', main],
@@ -97,8 +101,9 @@ for (const [name, [type, keys]] of Object.entries(expected)) {
     }
 }
 
-// system passes on every function of the native module behind it (#60, #62).
-for (const [name, nativeName] of [['system', 'internal/system'], ['system/promises', 'internal/system/promises']]) {
+// system and peripheral pass on every function of the native module behind them (#60, #61, #62).
+for (const [name, nativeName] of [['system', 'internal/system'], ['system/promises', 'internal/system/promises'],
+    ['peripheral', 'internal/peripheral'], ['peripheral/promises', 'internal/peripheral/promises']]) {
     let wrapper = require(name) as Record<string, unknown>;
     for (const key of Object.keys(require(nativeName) as object)) {
         eq(typeof wrapper[key], 'function', name + ' passes on ' + nativeName + '.' + key);

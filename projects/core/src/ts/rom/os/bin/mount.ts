@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-// mount — where the disks in the disk drives are mounted:
+// mount — where the disks in the disk drives are mounted (a drive by id, /dev path or side):
 //
 //   mount                      list the drives with a disk and where it is mounted
 //   mount <drive> <path>       mount the drive's disks at <path> (now, and the disks inserted later)
@@ -29,29 +29,16 @@ export function main(args: string[], cwd: string): void {
 }
 
 function list(): void {
-    let drives = attached().filter((name) => peripheral.hasType(name, 'drive'));
+    // Every drive, on a side or behind a wired modem.
     let any = false;
-    for (let drive of drives) {
-        let path = peripheral.call(drive, 'getMountPath') as string | null;
+    for (let drive of peripheral.find('drive')) {
+        let path = drive.getMountPath();
         if (path == null) continue;
         any = true;
-        let label = peripheral.call(drive, 'getDiskLabel') as string | null;
-        console.log(`${drive} on /${path}` + (label != null ? ` (${label})` : ''));
+        let label = drive.getDiskLabel();
+        console.log(`${drive.id} on /${path}` + (label != null ? ` (${label})` : ''));
     }
     if (!any) console.log('No disks mounted');
-}
-
-/** The attached peripherals: on the sides, and behind wired modems. */
-function attached(): string[] {
-    let names: string[] = [];
-    for (let side of peripheral.getSides()) {
-        if (!peripheral.isPresent(side)) continue;
-        names.push(side);
-        if (peripheral.hasType(side, 'peripheral_hub')) {
-            names.push(...(peripheral.call(side, 'getNamesRemote') as string[]));
-        }
-    }
-    return names;
 }
 
 function fail(message: string): void {

@@ -47,14 +47,22 @@ public final class CoreEvents {
         }
     }
 
-    /** A peripheral was attached on a side (or a remote peripheral appeared on a wired network). */
+    /**
+     * A device was attached: on a side, or reached through a wired network.
+     *
+     * @param id The device's id ({@code monitor_3}).
+     */
     @Event("peripheral")
-    public record PeripheralAttach(String side) {
+    public record PeripheralAttach(String id) {
     }
 
-    /** A peripheral was detached. */
+    /**
+     * A device was detached.
+     *
+     * @param id The device's id.
+     */
     @Event("peripheral_detach")
-    public record PeripheralDetach(String side) {
+    public record PeripheralDetach(String id) {
     }
 
     /**

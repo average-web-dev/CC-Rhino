@@ -317,6 +317,15 @@ public class MonitorBlockEntity extends BlockEntity {
         return isCompatible(monitor) ? MonitorState.present(monitor) : MonitorState.MISSING;
     }
 
+    /**
+     * The position of this monitor's origin block, which identifies the whole multi-block monitor.
+     *
+     * @return The origin's position.
+     */
+    public BlockPos getOriginPos() {
+        return toWorldPos(0, 0);
+    }
+
     private @Nullable MonitorBlockEntity getOrigin() {
         return getLoadedMonitor(0, 0).getMonitor();
     }

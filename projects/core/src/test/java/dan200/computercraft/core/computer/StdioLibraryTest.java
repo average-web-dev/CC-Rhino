@@ -4,6 +4,7 @@
 
 package dan200.computercraft.core.computer;
 
+import dan200.computercraft.core.apis.PeripheralAPITest;
 import dan200.computercraft.core.filesystem.MemoryMount;
 import org.junit.jupiter.api.Test;
 
@@ -11,6 +12,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 /**
  * The Node-style ROM modules {@code util}, {@code console}, {@code process}, {@code readline},
@@ -34,12 +36,16 @@ class StdioLibraryTest {
     }
 
     private static void run(String name, String... modules) {
+        run(name, x -> {
+        }, modules);
+    }
+
+    private static void run(String name, Consumer<Computer> setup, String... modules) {
         var mount = new MemoryMount()
             .addFile("prelude.js", resource("prelude.js"))
             .addFile("test.js", resource(name));
         for (var module : modules) mount.addFile(module, resource(module));
-        ComputerBootstrap.run(mount, x -> {
-        }, MAX_SECONDS);
+        ComputerBootstrap.run(mount, setup, MAX_SECONDS);
     }
 
     @Test
@@ -107,6 +113,15 @@ class StdioLibraryTest {
     @Test
     void programs() {
         run("programs.js");
+    }
+
+    /** The peripheral module: devices by id, side or /dev path (#61). */
+    @Test
+    void peripheral() {
+        run("peripheral.js", x -> {
+            x.getEnvironment().setPeripheral(ComputerSide.TOP, new PeripheralAPITest.Hub());
+            x.getEnvironment().setPeripheral(ComputerSide.LEFT, new PeripheralAPITest.Thing("left"));
+        });
     }
 
     /** Bundled cables in the redstone module: channels as dyes. */

@@ -27,7 +27,7 @@ public class MethodTest {
 
     @Test
     public void testMainThreadPeripheral() {
-        ComputerBootstrap.run("assert(require('peripheral').call('top', 'go') === 123)",
+        ComputerBootstrap.run("assert(require('internal/peripheral').call('top', 'go') === 123)",
             x -> x.getEnvironment().setPeripheral(ComputerSide.TOP, new MainThread()),
             50);
     }
@@ -51,7 +51,7 @@ public class MethodTest {
     public void testDynamicPeripheral() {
         ComputerBootstrap.run(
             """
-                var peripheral = require('peripheral');
+                var peripheral = require('internal/peripheral');
                 assert(peripheral.call('top', 'foo') === 123, 'foo: ' + peripheral.call('top', 'foo'));
                 assert(peripheral.call('top', 'bar') === 321, 'bar: ' + peripheral.call('top', 'bar'));""",
             x -> x.getEnvironment().setPeripheral(ComputerSide.TOP, new Dynamic()),
@@ -73,7 +73,7 @@ public class MethodTest {
     public void testPeripheralThrow() {
         ComputerBootstrap.run(
             """
-                var peripheral = require('peripheral');
+                var peripheral = require('internal/peripheral');
                 function errorOf(method) {
                     try { peripheral.call('top', method); } catch (e) { return String(e.message); }
                     return null;

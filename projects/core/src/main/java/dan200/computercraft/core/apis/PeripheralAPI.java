@@ -21,15 +21,20 @@ import org.jspecify.annotations.Nullable;
 import java.util.*;
 
 /**
- * CC's "native" peripheral API. This is wrapped within CraftOS to provide a version which works with modems.
+ * The devices (peripherals) of a computer, by id: those on its sides and those reached through a network (a wired
+ * modem's remote peripherals, attached with {@link IComputerAccess#attachDevice}) alike. A device's id is the same
+ * wherever it is attached ({@link dan200.computercraft.core.computer.ComputerEnvironment#deviceId}); a side name still
+ * finds the device on that side. The ROM module {@code peripheral} wraps this one.
  *
- * @cc.module peripheral
+ * @cc.module internal/peripheral
  * @hidden
  */
 public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralChangeListener {
     private final class PeripheralWrapper extends ComputerAccess implements GuardedContext.Guard {
-        private final String side;
+        private final String id;
         private final IPeripheral peripheral;
+        /** The device that attached this one ({@link #attachDevice}), or {@code null} for a device on a side. */
+        private final @Nullable PeripheralWrapper owner;
 
         private final String type;
         private final Set<String> additionalTypes;
@@ -38,10 +43,11 @@ public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralC
 
         private @Nullable GuardedContext contextWrapper;
 
-        PeripheralWrapper(IPeripheral peripheral, String side) {
+        PeripheralWrapper(IPeripheral peripheral, String id, @Nullable PeripheralWrapper owner) {
             super(environment);
-            this.side = side;
+            this.id = id;
             this.peripheral = peripheral;
+            this.owner = owner;
 
             type = Objects.requireNonNull(peripheral.getType(), "Peripheral type cannot be null");
             additionalTypes = peripheral.getAdditionalTypes();
@@ -49,16 +55,15 @@ public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralC
             methodMap = peripheralMethods.getSelfMethods(peripheral);
         }
 
-        private IPeripheral getPeripheral() {
-            return peripheral;
+        private List<String> getTypes() {
+            var types = new ArrayList<String>(1 + additionalTypes.size());
+            types.add(type);
+            types.addAll(additionalTypes);
+            return types;
         }
 
-        private String getType() {
-            return type;
-        }
-
-        private Set<String> getAdditionalTypes() {
-            return additionalTypes;
+        private boolean hasType(String type) {
+            return this.type.equals(type) || additionalTypes.contains(type);
         }
 
         private Collection<String> getMethods() {
@@ -148,7 +153,25 @@ public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralC
         @Override
         public String getAttachmentName() {
             if (!attached) throw new NotAttachedException();
-            return side;
+            return id;
+        }
+
+        @Override
+        public void attachDevice(String id, IPeripheral peripheral) {
+            if (!attached) throw new NotAttachedException();
+            addDevice(new PeripheralWrapper(peripheral, id, this));
+        }
+
+        @Override
+        public void detachDevice(String id) {
+            if (!attached) throw new NotAttachedException();
+            synchronized (devices) {
+                var attachments = devices.get(id);
+                if (attachments == null) return;
+                for (var device : List.copyOf(attachments)) {
+                    if (device.owner == this) removeDevice(device);
+                }
+            }
         }
 
         @Override
@@ -156,12 +179,9 @@ public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralC
             if (!attached) throw new NotAttachedException();
 
             Map<String, IPeripheral> peripherals = new HashMap<>();
-            for (var wrapper : PeripheralAPI.this.peripherals) {
-                if (wrapper != null && wrapper.isAttached()) {
-                    peripherals.put(wrapper.getAttachmentName(), wrapper.getPeripheral());
-                }
+            synchronized (devices) {
+                for (var entry : devices.entrySet()) peripherals.put(entry.getKey(), entry.getValue().getFirst().peripheral);
             }
-
             return Collections.unmodifiableMap(peripherals);
         }
 
@@ -169,13 +189,8 @@ public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralC
         @Override
         public IPeripheral getAvailablePeripheral(String name) {
             if (!attached) throw new NotAttachedException();
-
-            for (var wrapper : peripherals) {
-                if (wrapper != null && wrapper.isAttached() && wrapper.getAttachmentName().equals(name)) {
-                    return wrapper.getPeripheral();
-                }
-            }
-            return null;
+            var device = find(name);
+            return device == null ? null : device.peripheral;
         }
 
         @Override
@@ -187,7 +202,13 @@ public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralC
 
     private final IAPIEnvironment environment;
     private final MethodSupplier<PeripheralMethod> peripheralMethods;
-    private final PeripheralWrapper[] peripherals = new PeripheralWrapper[6];
+    /** The device on each side. */
+    private final @Nullable PeripheralWrapper[] sides = new PeripheralWrapper[6];
+    /**
+     * Every device by id. A device reached in several ways (on a side and through a cable) is attached once: the
+     * first of its attachments is the one in use, the next takes over when it goes.
+     */
+    private final Map<String, List<PeripheralWrapper>> devices = new HashMap<>();
     private boolean running;
 
     public PeripheralAPI(IAPIEnvironment environment, MethodSupplier<PeripheralMethod> peripheralMethods) {
@@ -201,178 +222,199 @@ public class PeripheralAPI implements IComputerAPI, IAPIEnvironment.IPeripheralC
 
     @Override
     public void onPeripheralChanged(ComputerSide side, @Nullable IPeripheral newPeripheral) {
-        synchronized (peripherals) {
+        synchronized (devices) {
             var index = side.ordinal();
-            if (peripherals[index] != null) {
-                // Queue a detachment
-                final var wrapper = peripherals[index];
-                if (wrapper.isAttached()) wrapper.detach();
-
-                // Queue a detachment event
-                environment.queueEvent(new CoreEvents.PeripheralDetach(side.getName()));
+            var old = sides[index];
+            if (old != null) {
+                sides[index] = null;
+                removeDevice(old);
             }
 
-            // Assign the new peripheral
-            peripherals[index] = newPeripheral == null ? null
-                : new PeripheralWrapper(newPeripheral, side.getName());
-
-            if (peripherals[index] != null) {
-                // Queue an attachment
-                final var wrapper = peripherals[index];
-                if (running && !wrapper.isAttached()) wrapper.attach();
-
-                // Queue an attachment event
-                environment.queueEvent(new CoreEvents.PeripheralAttach(side.getName()));
+            if (newPeripheral != null) {
+                var id = environment.getComputerEnvironment().deviceId(side, newPeripheral);
+                var device = sides[index] = new PeripheralWrapper(newPeripheral, id, null);
+                addDevice(device);
             }
+        }
+    }
+
+    private void addDevice(PeripheralWrapper device) {
+        synchronized (devices) {
+            var attachments = devices.computeIfAbsent(device.id, k -> new ArrayList<>(1));
+            attachments.add(device);
+            if (attachments.size() > 1) return;
+
+            if (running) device.attach();
+            environment.queueEvent(new CoreEvents.PeripheralAttach(device.id));
+        }
+    }
+
+    private void removeDevice(PeripheralWrapper device) {
+        synchronized (devices) {
+            var attachments = devices.get(device.id);
+            if (attachments == null) return;
+            var inUse = !attachments.isEmpty() && attachments.getFirst() == device;
+            if (!attachments.remove(device)) return;
+
+            // Detaching a hub detaches the devices it attached; whatever it forgets goes with it too.
+            if (device.isAttached()) device.detach();
+            for (var attachmentsOfId : List.copyOf(devices.values())) {
+                for (var other : List.copyOf(attachmentsOfId)) {
+                    if (other.owner == device) removeDevice(other);
+                }
+            }
+
+            if (attachments.isEmpty()) {
+                devices.remove(device.id);
+                environment.queueEvent(new CoreEvents.PeripheralDetach(device.id));
+            } else if (inUse && running) {
+                attachments.getFirst().attach();
+            }
+        }
+    }
+
+    /** The device in use with this id, or on this side. */
+    private @Nullable PeripheralWrapper find(String name) {
+        synchronized (devices) {
+            var attachments = devices.get(name);
+            if (attachments != null) return attachments.getFirst();
+
+            var side = ComputerSide.valueOfInsensitive(name);
+            var device = side == null ? null : sides[side.ordinal()];
+            if (device == null) return null;
+            attachments = devices.get(device.id);
+            return attachments == null ? null : attachments.getFirst();
         }
     }
 
     @Override
     public String[] getNames() {
-        return new String[]{ "peripheral" };
+        return new String[]{ "internal/peripheral" };
     }
 
     @Override
     public void startup() {
-        synchronized (peripherals) {
+        synchronized (devices) {
             running = true;
-            for (var i = 0; i < 6; i++) {
-                var wrapper = peripherals[i];
-                if (wrapper != null && !wrapper.isAttached()) wrapper.attach();
+            for (var attachments : List.copyOf(devices.values())) {
+                var device = attachments.getFirst();
+                if (!device.isAttached()) device.attach();
             }
         }
     }
 
     @Override
     public void shutdown() {
-        synchronized (peripherals) {
+        synchronized (devices) {
             running = false;
-            for (var i = 0; i < 6; i++) {
-                var wrapper = peripherals[i];
-                if (wrapper != null && wrapper.isAttached()) {
-                    wrapper.detach();
-                }
+            for (var attachments : List.copyOf(devices.values())) {
+                if (attachments.isEmpty()) continue;
+                var device = attachments.getFirst();
+                if (device.isAttached()) device.detach();
             }
         }
     }
 
     /**
-     * The six sides a peripheral can be attached to.
+     * The ids of every attached device, on a side or reached through a network, sorted.
      *
-     * @return The side names.
-     * @cc-r.return ComputerSide[]
+     * @return The device ids.
      */
-    @ScriptFunction
-    public final List<String> getSides() {
-        return ComputerSide.NAMES;
-    }
-
-    /**
-     * Whether a peripheral is attached to the given side.
-     *
-     * @param sideName The side to check.
-     * @return Whether there is a peripheral on that side.
-     */
-    @ScriptFunction
-    public final boolean isPresent(String sideName) {
-        var side = ComputerSide.valueOfInsensitive(sideName);
-        if (side != null) {
-            synchronized (peripherals) {
-                var p = peripherals[side.ordinal()];
-                if (p != null) return true;
-            }
+    @ScriptFunction("getNames")
+    public final List<String> getDeviceNames() {
+        synchronized (devices) {
+            var names = new ArrayList<>(devices.keySet());
+            names.sort(Comparator.naturalOrder());
+            return names;
         }
-        return false;
     }
 
     /**
-     * The types of the peripheral on the given side: its primary type first, then any additional types.
+     * The id of the device on a side.
      *
-     * @param sideName The side to check.
-     * @return The peripheral's types, or {@code null} if nothing is attached.
+     * @param sideName The side.
+     * @return The device's id, or {@code null} if nothing is attached there.
      */
     @ScriptFunction
-    public final @Nullable List<String> getType(String sideName) {
+    public final @Nullable String getDeviceOn(String sideName) {
         var side = ComputerSide.valueOfInsensitive(sideName);
         if (side == null) return null;
-
-        synchronized (peripherals) {
-            var p = peripherals[side.ordinal()];
-            if (p == null) return null;
-            // Return a single List (rendered as one JS array) rather than an Object[], which the bridge
-            // would treat as multiple return values and collapse to a bare string when there is only one type.
-            var types = new ArrayList<String>();
-            types.add(p.getType());
-            types.addAll(p.getAdditionalTypes());
-            return types;
+        synchronized (devices) {
+            var device = sides[side.ordinal()];
+            return device == null ? null : device.id;
         }
     }
 
     /**
-     * Whether the peripheral on the given side has a type (primary or additional).
+     * Whether a device is attached.
      *
-     * @param sideName The side to check.
-     * @param type     The type to look for.
-     * @return Whether the peripheral has that type, or {@code null} if nothing is attached.
+     * @param name The device's id (or a side).
+     * @return Whether the device is attached.
      */
     @ScriptFunction
-    public final @Nullable Boolean hasType(String sideName, String type) {
-        var side = ComputerSide.valueOfInsensitive(sideName);
-        if (side == null) return null;
-
-        synchronized (peripherals) {
-            var p = peripherals[side.ordinal()];
-            if (p != null) {
-                return p.getType().equals(type) || p.getAdditionalTypes().contains(type);
-            }
-        }
-        return null;
+    public final boolean isPresent(String name) {
+        return find(name) != null;
     }
 
     /**
-     * The names of the methods the peripheral on the given side provides.
+     * The types of a device: its primary type first, then any additional types.
      *
-     * @param sideName The side to check.
-     * @return The method names, or {@code null} if nothing is attached.
+     * @param name The device's id (or a side).
+     * @return The device's types, or {@code null} if it is not attached.
      */
     @ScriptFunction
-    public final @Nullable Collection<String> getMethods(String sideName) {
-        var side = ComputerSide.valueOfInsensitive(sideName);
-        if (side == null) return null;
-
-        synchronized (peripherals) {
-            var p = peripherals[side.ordinal()];
-            if (p != null) return p.getMethods();
-        }
-        return null;
+    public final @Nullable List<String> getType(String name) {
+        // A single List (one JS array) rather than an Object[], which the bridge would treat as multiple return values.
+        var device = find(name);
+        return device == null ? null : device.getTypes();
     }
 
     /**
-     * Call a method on the peripheral on the given side.
+     * Whether a device has a type (primary or additional).
+     *
+     * @param name The device's id (or a side).
+     * @param type The type to look for.
+     * @return Whether the device has that type, or {@code null} if it is not attached.
+     */
+    @ScriptFunction
+    public final @Nullable Boolean hasType(String name, String type) {
+        var device = find(name);
+        return device == null ? null : device.hasType(type);
+    }
+
+    /**
+     * The names of the methods a device provides.
+     *
+     * @param name The device's id (or a side).
+     * @return The method names, or {@code null} if it is not attached.
+     */
+    @ScriptFunction
+    public final @Nullable Collection<String> getMethods(String name) {
+        var device = find(name);
+        return device == null ? null : device.getMethods();
+    }
+
+    /**
+     * Call a method of a device.
      *
      * @param context The calling context.
-     * @param args    The side, the method name, and the method's arguments.
-     * @return Whatever the peripheral method returns.
-     * @throws ScriptException If no peripheral is attached, there is no such method, or the method fails.
-     * @cc-r.params {@code side: string, method: string, ...args: unknown[]}
+     * @param args    The device's id (or a side), the method name, and the method's arguments.
+     * @return Whatever the method returns.
+     * @throws ScriptException If the device is not attached, there is no such method, or the method fails.
+     * @cc-r.params {@code name: string, method: string, ...args: unknown[]}
      * @cc-r.return unknown
      */
     @ScriptFunction
     public final MethodResult call(IContext context, IArguments args) throws ScriptException {
-        var side = ComputerSide.valueOfInsensitive(args.getString(0));
+        var name = args.getString(0);
         var methodName = args.getString(1);
         var methodArgs = args.drop(2);
 
-        if (side == null) throw new ScriptException("No peripheral attached");
-
-        PeripheralWrapper p;
-        synchronized (peripherals) {
-            p = peripherals[side.ordinal()];
-        }
-        if (p == null) throw new ScriptException("No peripheral attached");
+        var device = find(name);
+        if (device == null) throw new ScriptException("No such device: " + name);
 
         try {
-            return p.call(context, methodName, methodArgs).adjustError(1);
+            return device.call(context, methodName, methodArgs).adjustError(1);
         } catch (ScriptException e) {
             // We increase the error level by one in order to shift the error level to where peripheral.call was
             // invoked. It would be possible to do it in script code, but would add significantly more overhead.

@@ -40,7 +40,6 @@ require('/rom/lib/internal/globals');
 
   // ── Discovery ──────────────────────────────────────────────────────────────
 
-  // TODO: query peripheral API for disk drives instead of hardcoding mount points.
   const DISK_BOOT_FILE  = "boot.js";
   const DISK_LABEL_FILE = ".label";
   const LOCAL_BOOT_FILE = "/boot.js";
@@ -67,22 +66,19 @@ require('/rom/lib/internal/globals');
           });
       }
 
-      for (let side of peripheral.getSides()) {
-          if (!peripheral.hasType(side, 'drive')) {
+      // Every drive with a disk, on a side or behind a wired modem.
+      for (let drive of peripheral.find('drive')) {
+          if (!drive.hasData()) {
               continue;
           }
 
-          if (!peripheral.call(side, 'hasData')) {
-              continue;
-          }
-
-          let mountPoint = peripheral.call(side, 'getMountPath');
-          let diskLabel = peripheral.call(side, 'getDiskLabel');
+          let mountPoint = drive.getMountPath();
+          let diskLabel = drive.getDiskLabel();
 
           let script = `${mountPoint}/${DISK_BOOT_FILE}`;
           let labelFile = `${mountPoint}/${DISK_LABEL_FILE}`;
 
-          let label = `Disk (${diskLabel ?? side})`
+          let label = `Disk (${diskLabel ?? drive.id})`
           if (fs.existsSync(labelFile)) {
               label = readFirstLine(labelFile) ?? label
           }

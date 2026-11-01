@@ -285,6 +285,14 @@ public class ServerComputer implements ComputerEnvironment {
     }
 
     @Override
+    public final String deviceId(ComputerSide side, IPeripheral peripheral) {
+        // A device whose target is this computer's own block (a turtle's crafting table) is an upgrade, not a block.
+        var key = DeviceIds.blockKey(peripheral.getTarget());
+        if (key == null || key.equals(DeviceIds.blockKey(level, position))) key = DeviceIds.upgradeKey(getID(), side.getName());
+        return ServerContext.get(level.getServer()).deviceIds().idOf(key, peripheral.getType());
+    }
+
+    @Override
     public final WritableMount createRootMount() {
         var capacity = storageCapacity <= 0 ? ConfigSpec.computerSpaceLimit.get() : storageCapacity;
         return ComputerCraftAPI.createSaveDirMount(level.getServer(), "computer/" + computer.getID(), capacity);

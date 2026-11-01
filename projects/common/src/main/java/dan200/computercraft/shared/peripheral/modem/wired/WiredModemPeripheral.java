@@ -4,24 +4,15 @@
 
 package dan200.computercraft.shared.peripheral.modem.wired;
 
-import dan200.computercraft.api.filesystem.Mount;
-import dan200.computercraft.api.filesystem.WritableMount;
 import dan200.computercraft.api.network.PacketNetwork;
 import dan200.computercraft.api.network.wired.WiredNode;
 import dan200.computercraft.api.network.wired.WiredSender;
 import dan200.computercraft.api.peripheral.IComputerAccess;
 import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.api.peripheral.NotAttachedException;
-import dan200.computercraft.api.peripheral.WorkMonitor;
-import dan200.computercraft.api.scripting.*;
-import dan200.computercraft.core.apis.PeripheralAPI;
-import dan200.computercraft.core.apis.events.CoreEvents;
-import dan200.computercraft.core.computer.GuardedContext;
-import dan200.computercraft.core.methods.PeripheralMethod;
-import dan200.computercraft.shared.computer.core.ServerContext;
+import dan200.computercraft.api.scripting.ScriptFunction;
 import dan200.computercraft.shared.peripheral.modem.ModemPeripheral;
 import dan200.computercraft.shared.peripheral.modem.ModemState;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import org.jspecify.annotations.Nullable;
@@ -29,11 +20,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 /**
- * A wired modem: a {@link ModemPeripheral modem} which can also access the peripherals on its wired network.
+ * A wired modem: a {@link ModemPeripheral modem} which also attaches the peripherals on its wired network to its
+ * computers. They are devices of the computer like those on its sides (same ids, same {@code peripheral} calls).
  *
  * @cc.module modem
  */
@@ -44,7 +34,8 @@ public abstract class WiredModemPeripheral extends ModemPeripheral implements Wi
     private final WiredModemLocalPeripheral localPeripheral;
     private final BlockEntity target;
 
-    private final Map<IComputerAccess, ConcurrentMap<String, RemotePeripheralWrapper>> peripheralWrappers = new HashMap<>(1);
+    /** The computers this modem is attached to, which see the remote peripherals as their own devices. */
+    private final Set<IComputerAccess> computers = new HashSet<>(1);
 
     public WiredModemPeripheral(
         ModemState state,
@@ -80,134 +71,7 @@ public abstract class WiredModemPeripheral extends ModemPeripheral implements Wi
     }
     //endregion
 
-    @Override
-    public Set<String> getAdditionalTypes() {
-        return Set.of("peripheral_hub");
-    }
-
     //region Peripheral methods
-
-    /**
-     * List all remote peripherals on the wired network.
-     * <p>
-     * If this computer is attached to the network, it _will not_ be included in
-     * this list.
-     * <p>
-     * > [!NOTE]
-     * > This function only appears on wired modems. Check {@link #isWireless} returns false before calling it.
-     *
-     * @param computer The calling computer.
-     * @return Remote peripheral names on the network.
-     */
-    @ScriptFunction
-    public final Collection<String> getNamesRemote(IComputerAccess computer) {
-        var wrappers = getWrappers(computer);
-        return wrappers == null ? Set.of() : wrappers.keySet();
-    }
-
-    /**
-     * Determine if a peripheral is available on this wired network.
-     * <p>
-     * > [!NOTE]
-     * > This function only appears on wired modems. Check {@link #isWireless} returns false before calling it.
-     *
-     * @param computer The calling computer.
-     * @param name     The peripheral's name.
-     * @return boolean If a peripheral is present with the given name.
-     * @see PeripheralAPI#isPresent
-     */
-    @ScriptFunction
-    public final boolean isPresentRemote(IComputerAccess computer, String name) {
-        return getWrapper(computer, name) != null;
-    }
-
-    /**
-     * Get the type of a peripheral is available on this wired network.
-     * <p>
-     * > [!NOTE]
-     * > This function only appears on wired modems. Check {@link #isWireless} returns false before calling it.
-     *
-     * @param computer The calling computer.
-     * @param name     The peripheral's name.
-     * @return The peripheral's name.
-     * @cc.changed 1.99 Peripherals can have multiple types - this function returns multiple values.
-     * @see PeripheralAPI#getType
-     */
-    @ScriptFunction
-    public final @Nullable List<String> getTypeRemote(IComputerAccess computer, String name) {
-        var wrapper = getWrapper(computer, name);
-        if (wrapper == null) return null;
-        // Return a single List (one JS array) rather than an Object[], which would collapse to a bare
-        // string when a peripheral has only one type. Mirrors PeripheralAPI#getType.
-        var types = new ArrayList<String>();
-        types.add(wrapper.getType());
-        types.addAll(wrapper.getAdditionalTypes());
-        return types;
-    }
-
-    /**
-     * Check a peripheral is of a particular type.
-     * <p>
-     * > [!NOTE]
-     * > This function only appears on wired modems. Check {@link #isWireless} returns false before calling it.
-     *
-     * @param computer The calling computer.
-     * @param name     The peripheral's name.
-     * @param type     The type to check.
-     * @return The peripheral's name.
-     * @cc.since 1.99
-     * @see PeripheralAPI#getType
-     */
-    @ScriptFunction
-    public final @Nullable Boolean hasTypeRemote(IComputerAccess computer, String name, String type) {
-        var wrapper = getWrapper(computer, name);
-        if (wrapper == null) return null;
-        return wrapper.getType().equals(type) || wrapper.getAdditionalTypes().contains(type);
-    }
-
-    /**
-     * Get all available methods for the remote peripheral with the given name.
-     * <p>
-     * > [!NOTE]
-     * > This function only appears on wired modems. Check {@link #isWireless} returns false before calling it.
-     *
-     * @param computer The calling computer.
-     * @param name     The peripheral's name.
-     * @return A list of methods provided by this peripheral, or {@code nil} if it is not present.
-     * @see PeripheralAPI#getMethods
-     */
-    @ScriptFunction
-    public final @Nullable Collection<String> getMethodsRemote(IComputerAccess computer, String name) {
-        var wrapper = getWrapper(computer, name);
-        if (wrapper == null) return null;
-
-        return wrapper.getMethodNames();
-    }
-
-    /**
-     * Call a method on a peripheral on this wired network.
-     * <p>
-     * > [!NOTE]
-     * > This function only appears on wired modems. Check {@link #isWireless} returns false before calling it.
-     *
-     * @param computer  The calling computer.
-     * @param context   The Lua context we're executing in.
-     * @param arguments Arguments to this computer.
-     * @return The peripheral's result.
-     * @throws ScriptException (hidden) If the method throws an error.
-     * @cc-r.params {@code remoteName: string, method: string, ...args: unknown[]}
-     * @cc-r.return unknown
-     * @see PeripheralAPI#call
-     */
-    @ScriptFunction
-    public final MethodResult callRemote(IComputerAccess computer, IContext context, IArguments arguments) throws ScriptException {
-        var remoteName = arguments.getString(0);
-        var methodName = arguments.getString(1);
-        var wrapper = getWrapper(computer, remoteName);
-        if (wrapper == null) throw new ScriptException("No peripheral: " + remoteName);
-
-        return wrapper.callMethod(context, methodName, arguments.drop(2));
-    }
 
     /**
      * Returns the network name of the current computer, if the modem is on. This
@@ -222,39 +86,31 @@ public abstract class WiredModemPeripheral extends ModemPeripheral implements Wi
      */
     @ScriptFunction
     public final @Nullable String getNameLocal() {
-        var local = localPeripheral.getConnectedName();
-        return local;
+        return localPeripheral.getConnectedName();
     }
 
     @Override
     @SuppressWarnings("UnsynchronizedOverridesSynchronized")
     public void attach(IComputerAccess computer) {
         super.attach(computer);
-
-        ConcurrentMap<String, RemotePeripheralWrapper> wrappers;
-        synchronized (peripheralWrappers) {
-            wrappers = peripheralWrappers.computeIfAbsent(computer, k -> new ConcurrentHashMap<>());
+        synchronized (computers) {
+            computers.add(computer);
         }
 
+        Map<String, IPeripheral> remote;
         synchronized (modem.getRemotePeripherals()) {
-            for (var entry : modem.getRemotePeripherals().entrySet()) {
-                attachPeripheralImpl(computer, wrappers, entry.getKey(), entry.getValue());
-            }
+            remote = Map.copyOf(modem.getRemotePeripherals());
         }
+        for (var entry : remote.entrySet()) attachTo(computer, entry.getKey(), entry.getValue());
     }
 
     @Override
     @SuppressWarnings("UnsynchronizedOverridesSynchronized")
     public void detach(IComputerAccess computer) {
-        Map<String, RemotePeripheralWrapper> wrappers;
-        synchronized (peripheralWrappers) {
-            wrappers = peripheralWrappers.remove(computer);
+        // The computer detaches the devices this modem attached to it.
+        synchronized (computers) {
+            computers.remove(computer);
         }
-        if (wrappers != null) {
-            for (var wrapper : wrappers.values()) wrapper.detach();
-            wrappers.clear();
-        }
-
         super.detach(computer);
     }
 
@@ -275,199 +131,32 @@ public abstract class WiredModemPeripheral extends ModemPeripheral implements Wi
     }
 
     public void attachPeripheral(String name, IPeripheral peripheral) {
-        synchronized (peripheralWrappers) {
-            for (var entry : peripheralWrappers.entrySet()) {
-                attachPeripheralImpl(entry.getKey(), entry.getValue(), name, peripheral);
-            }
-        }
+        for (var computer : computers()) attachTo(computer, name, peripheral);
     }
 
     public void detachPeripheral(String name) {
-        synchronized (peripheralWrappers) {
-            for (var wrappers : peripheralWrappers.values()) {
-                var wrapper = wrappers.remove(name);
-                if (wrapper != null) wrapper.detach();
+        for (var computer : computers()) {
+            try {
+                computer.detachDevice(name);
+            } catch (NotAttachedException ignored) {
+                // Detached meanwhile: the computer dropped the device with this modem.
             }
         }
     }
 
-    private void attachPeripheralImpl(IComputerAccess computer, ConcurrentMap<String, RemotePeripheralWrapper> peripherals, String periphName, IPeripheral peripheral) {
-        if (!peripherals.containsKey(periphName) && !periphName.equals(localPeripheral.getConnectedName())) {
-            var methods = ServerContext.get(((ServerLevel) getLevel()).getServer()).peripheralMethods().getSelfMethods(peripheral);
-            var wrapper = new RemotePeripheralWrapper(modem, peripheral, computer, periphName, methods);
-            peripherals.put(periphName, wrapper);
-            wrapper.attach();
+    private List<IComputerAccess> computers() {
+        synchronized (computers) {
+            return List.copyOf(computers);
         }
     }
 
-    private @Nullable ConcurrentMap<String, RemotePeripheralWrapper> getWrappers(IComputerAccess computer) {
-        synchronized (peripheralWrappers) {
-            return peripheralWrappers.get(computer);
-        }
-    }
-
-    private @Nullable RemotePeripheralWrapper getWrapper(IComputerAccess computer, String remoteName) {
-        var wrappers = getWrappers(computer);
-        return wrappers == null ? null : wrappers.get(remoteName);
-    }
-
-    private static final class RemotePeripheralWrapper implements IComputerAccess, GuardedContext.Guard {
-        private final WiredModemElement element;
-        private final IPeripheral peripheral;
-        private final IComputerAccess computer;
-        private final String name;
-
-        private final String type;
-        private final Set<String> additionalTypes;
-        private final Map<String, PeripheralMethod> methodMap;
-
-        private volatile boolean attached;
-        private final Set<String> mounts = new HashSet<>();
-
-        private @Nullable GuardedContext contextWrapper;
-
-        RemotePeripheralWrapper(WiredModemElement element, IPeripheral peripheral, IComputerAccess computer, String name, Map<String, PeripheralMethod> methods) {
-            this.element = element;
-            this.peripheral = peripheral;
-            this.computer = computer;
-            this.name = name;
-
-            type = Objects.requireNonNull(peripheral.getType(), "Peripheral type cannot be null");
-            additionalTypes = peripheral.getAdditionalTypes();
-            methodMap = methods;
-        }
-
-        private void attach() {
-            attached = true;
-            peripheral.attach(this);
-            computer.queueEvent(new CoreEvents.PeripheralAttach(getAttachmentName()));
-        }
-
-        private void detach() {
-            peripheral.detach(this);
-            computer.queueEvent(new CoreEvents.PeripheralDetach(getAttachmentName()));
-            attached = false;
-
-            synchronized (this) {
-                if (!mounts.isEmpty()) {
-                    LOG.warn("Peripheral {} called mount but did not call unmount for {}", peripheral, mounts);
-                }
-
-                for (var mount : mounts) computer.unmount(mount);
-                mounts.clear();
-            }
-        }
-
-        private String getType() {
-            return type;
-        }
-
-        private Set<String> getAdditionalTypes() {
-            return additionalTypes;
-        }
-
-        private Collection<String> getMethodNames() {
-            return methodMap.keySet();
-        }
-
-        private MethodResult callMethod(IContext context, String methodName, IArguments arguments) throws ScriptException {
-            var method = methodMap.get(methodName);
-            if (method == null) throw new ScriptException("No such method " + methodName);
-
-            // Wrap the IContext. We try to reuse the previous context where possible to avoid allocations.
-            var contextWrapper = this.contextWrapper;
-            if (contextWrapper == null || !contextWrapper.wraps(context)) {
-                contextWrapper = this.contextWrapper = new GuardedContext(context, this);
-            }
-
-            return method.apply(peripheral, contextWrapper, this, arguments);
-        }
-
-        @Override
-        public boolean checkValid() {
-            return attached;
-        }
-
-        // IComputerAccess implementation
-
-        @Override
-        public synchronized @Nullable String mount(String desiredLocation, Mount mount) {
-            if (!attached) throw new NotAttachedException();
-            var mounted = computer.mount(desiredLocation, mount, name);
-            mounts.add(mounted);
-            return mounted;
-        }
-
-        @Override
-        public synchronized @Nullable String mount(String desiredLocation, Mount mount, String driveName) {
-            if (!attached) throw new NotAttachedException();
-            var mounted = computer.mount(desiredLocation, mount, driveName);
-            mounts.add(mounted);
-            return mounted;
-        }
-
-        @Override
-        public synchronized @Nullable String mountWritable(String desiredLocation, WritableMount mount) {
-            if (!attached) throw new NotAttachedException();
-            var mounted = computer.mountWritable(desiredLocation, mount, name);
-            mounts.add(mounted);
-            return mounted;
-        }
-
-        @Override
-        public synchronized @Nullable String mountWritable(String desiredLocation, WritableMount mount, String driveName) {
-            if (!attached) throw new NotAttachedException();
-            var mounted = computer.mountWritable(desiredLocation, mount, driveName);
-            mounts.add(mounted);
-            return mounted;
-        }
-
-        @Override
-        public synchronized void unmount(@Nullable String location) {
-            if (!attached) throw new NotAttachedException();
-            computer.unmount(location);
-            mounts.remove(location);
-        }
-
-        @Override
-        public int getID() {
-            if (!attached) throw new NotAttachedException();
-            return computer.getID();
-        }
-
-        @Override
-        public void queueEvent(String event, @Nullable Object... arguments) {
-            if (!attached) throw new NotAttachedException();
-            computer.queueEvent(event, arguments);
-        }
-
-        @Override
-        public WorkMonitor getMainThreadMonitor() {
-            if (!attached) throw new NotAttachedException();
-            return computer.getMainThreadMonitor();
-        }
-
-        @Override
-        public String getAttachmentName() {
-            if (!attached) throw new NotAttachedException();
-            return name;
-        }
-
-        @Override
-        public Map<String, IPeripheral> getAvailablePeripherals() {
-            if (!attached) throw new NotAttachedException();
-            synchronized (element.getRemotePeripherals()) {
-                return Map.copyOf(element.getRemotePeripherals());
-            }
-        }
-
-        @Nullable
-        @Override
-        public IPeripheral getAvailablePeripheral(String name) {
-            if (!attached) throw new NotAttachedException();
-            synchronized (element.getRemotePeripherals()) {
-                return element.getRemotePeripherals().get(name);
-            }
+    /** Attach a remote peripheral to a computer, as one of its devices (by its device id). */
+    private void attachTo(IComputerAccess computer, String name, IPeripheral peripheral) {
+        if (name.equals(localPeripheral.getConnectedName())) return;
+        try {
+            computer.attachDevice(name, peripheral);
+        } catch (NotAttachedException e) {
+            LOG.debug("Computer detached while attaching {}", name, e);
         }
     }
 }

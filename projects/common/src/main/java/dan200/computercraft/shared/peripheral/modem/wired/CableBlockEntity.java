@@ -15,8 +15,6 @@ import dan200.computercraft.shared.util.DirectionUtil;
 import dan200.computercraft.shared.util.TickScheduler;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.HolderLookup;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -143,18 +141,6 @@ public class CableBlockEntity extends BlockEntity {
         }
 
         return InteractionResult.CONSUME;
-    }
-
-    @Override
-    public void loadAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
-        super.loadAdditional(nbt, registries);
-        peripheral.read(nbt, "");
-    }
-
-    @Override
-    public void saveAdditional(CompoundTag nbt, HolderLookup.Provider registries) {
-        peripheral.write(nbt, "");
-        super.saveAdditional(nbt, registries);
     }
 
     private void updateBlockState() {

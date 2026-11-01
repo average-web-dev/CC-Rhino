@@ -29,14 +29,7 @@ class Inventory_Test {
         thenOnComputer {
             getApi<PeripheralAPI>().call(
                 context,
-                ObjectArguments(
-                    "back",
-                    "callRemote",
-                    "minecraft:barrel_0",
-                    "pushItems",
-                    "minecraft:shulker_box_0",
-                    1,
-                ),
+                ObjectArguments(findPeripheral("minecraft:barrel")!!, "pushItems", findPeripheral("minecraft:shulker_box")!!, 1),
             ).await().assertArrayEquals(0, message = "Does not move items")
         }
         thenExecute {
@@ -55,14 +48,7 @@ class Inventory_Test {
         thenOnComputer {
             getApi<PeripheralAPI>().call(
                 context,
-                ObjectArguments(
-                    "back",
-                    "callRemote",
-                    "minecraft:furnace_0",
-                    "pushItems",
-                    "minecraft:barrel_0",
-                    1,
-                ),
+                ObjectArguments(findPeripheral("minecraft:furnace")!!, "pushItems", findPeripheral("minecraft:barrel")!!, 1),
             ).await().assertArrayEquals(0, message = "Does not move items")
         }
         thenExecute {
@@ -86,7 +72,7 @@ class Inventory_Test {
         thenOnComputer {
             getApi<PeripheralAPI>().call(context, ObjectArguments("left", "size")).await()
                 .assertArrayEquals(54, message = "Has 54 slots")
-            getApi<PeripheralAPI>().call(context, ObjectArguments("left", "pushItems", "right", 1)).await()
+            getApi<PeripheralAPI>().call(context, ObjectArguments("left", "pushItems", getApi<PeripheralAPI>().getDeviceOn("right")!!, 1)).await()
                 .assertArrayEquals(32, message = "Moved 32 items into a double chest")
         }
     }

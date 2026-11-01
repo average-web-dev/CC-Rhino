@@ -5,6 +5,7 @@
 package dan200.computercraft.core.computer;
 
 import dan200.computercraft.api.filesystem.WritableMount;
+import dan200.computercraft.api.peripheral.IPeripheral;
 import dan200.computercraft.core.filesystem.WritableFileMount;
 import dan200.computercraft.core.metrics.MetricsObserver;
 import org.jspecify.annotations.Nullable;
@@ -40,4 +41,19 @@ public interface ComputerEnvironment {
      */
     @Nullable
     WritableMount createRootMount();
+
+    /**
+     * The id of a device attached to one of this computer's sides: a name for the device that is the same on every
+     * computer and wherever it is attached (see {@code DeviceIds} in the mod). Devices reached through a wired network
+     * are attached with their id ({@link dan200.computercraft.api.peripheral.IComputerAccess#attachDevice}).
+     * <p>
+     * The default, for computers outside a world, is {@code <type>_<side>}.
+     *
+     * @param side       The side the device is attached to.
+     * @param peripheral The device.
+     * @return The device's id.
+     */
+    default String deviceId(ComputerSide side, IPeripheral peripheral) {
+        return peripheral.getType() + "_" + side.getName();
+    }
 }

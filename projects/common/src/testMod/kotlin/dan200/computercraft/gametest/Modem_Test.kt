@@ -6,7 +6,6 @@ package dan200.computercraft.gametest
 
 import dan200.computercraft.api.scripting.ObjectArguments
 import dan200.computercraft.core.apis.PeripheralAPI
-import dan200.computercraft.core.computer.ComputerSide
 import dan200.computercraft.gametest.api.*
 import dan200.computercraft.impl.network.wired.WiredNodeImpl
 import dan200.computercraft.shared.ModRegistry
@@ -29,7 +28,7 @@ class Modem_Test {
     @GameTest
     fun Have_peripherals(helper: GameTestHelper) = helper.sequence {
         thenOnComputer {
-            assertEquals(listOf("monitor_0", "printer_0", "right"), getPeripheralNames(), "Starts with peripherals")
+            assertEquals(listOf("modem", "monitor", "printer"), getPeripheralTypes(), "Starts with peripherals")
         }
     }
 
@@ -37,7 +36,7 @@ class Modem_Test {
     fun Gains_peripherals(helper: GameTestHelper) = helper.sequence {
         val position = BlockPos(2, 2, 2)
         thenOnComputer {
-            assertEquals(listOf("back"), getPeripheralNames(), "Starts with peripherals")
+            assertEquals(listOf("modem"), getPeripheralTypes(), "Starts with peripherals")
         }
         thenExecute {
             helper.setBlock(
@@ -51,7 +50,7 @@ class Modem_Test {
         }
         thenIdle(1)
         thenOnComputer {
-            assertEquals(listOf("back", "monitor_1", "printer_1"), getPeripheralNames(), "Gains new peripherals")
+            assertEquals(listOf("modem", "monitor", "printer"), getPeripheralTypes(), "Gains new peripherals")
         }
     }
 
@@ -72,7 +71,7 @@ class Modem_Test {
             callPeripheral(modem, "open", 12)
 
             pullEvent("modem_message")
-                .assertArrayEquals("modem_message", "left", 12, 34, "Hello", 4, message = "Modem message")
+                .assertArrayEquals("modem_message", modem, 12, 34, "Hello", 4, message = "Modem message")
         }
     }
 
@@ -96,7 +95,7 @@ class Modem_Test {
     @GameTest
     fun Cable_modem_does_not_report_self(helper: GameTestHelper) = helper.sequence {
         // Modem does not report the computer as a peripheral.
-        thenOnComputer { assertEquals(listOf("back", "right"), getPeripheralNames()) }
+        thenOnComputer { assertEquals(listOf("modem", "modem"), getPeripheralTypes()) }
 
         // However, if we connect the network, the other modem does.
         thenExecute {
@@ -106,7 +105,7 @@ class Modem_Test {
             )
         }
         thenIdle(2)
-        thenOnComputer { assertEquals(listOf("back", "computer_0", "right"), getPeripheralNames()) }
+        thenOnComputer { assertEquals(listOf("computer", "modem", "modem"), getPeripheralTypes()) }
     }
 
     /**
@@ -115,7 +114,7 @@ class Modem_Test {
     @GameTest
     fun Full_block_modem_does_not_report_self(helper: GameTestHelper) = helper.sequence {
         // Modem does not report the computer as a peripheral.
-        thenOnComputer { assertEquals(listOf("back", "right"), getPeripheralNames()) }
+        thenOnComputer { assertEquals(listOf("modem", "modem"), getPeripheralTypes()) }
 
         // However, if we connect the network, the other modem does.
         thenExecute {
@@ -125,7 +124,7 @@ class Modem_Test {
             )
         }
         thenIdle(2)
-        thenOnComputer { assertEquals(listOf("back", "computer_1", "right"), getPeripheralNames()) }
+        thenOnComputer { assertEquals(listOf("computer", "modem", "modem"), getPeripheralTypes()) }
     }
 
     /**
@@ -160,60 +159,30 @@ class Modem_Test {
     @GameTest
     fun Chest_resizes_on_change(context: GameTestHelper) = context.sequence {
         thenOnComputer {
-            callRemotePeripheral("minecraft:chest_0", "size").assertArrayEquals(27)
+            callNamedPeripheral("minecraft:chest", "size").assertArrayEquals(27)
         }
         thenExecute { context.placeItemAt(ItemStack(Items.CHEST), BlockPos(2, 2, 2), Direction.WEST) }
         thenIdle(1)
         thenOnComputer {
-            callRemotePeripheral("minecraft:chest_0", "size").assertArrayEquals(54)
+            callNamedPeripheral("minecraft:chest", "size").assertArrayEquals(54)
         }
     }
 }
 
-private fun ScriptTaskContext.findPeripheral(type: String): String? {
+/** The id of a device of a type, on a side or behind a wired modem. */
+fun ScriptTaskContext.findPeripheral(type: String): String? {
     val peripheral = getApi<PeripheralAPI>()
-    for (side in ComputerSide.NAMES) {
-        val hasType = peripheral.hasType(side, type)
-        if (hasType == true) return side
-    }
-
-    return null
+    return peripheral.getDeviceNames().firstOrNull { peripheral.hasType(it, type) == true }
 }
 
-private suspend fun ScriptTaskContext.getPeripheralNames(): List<String> {
+/** The primary types of every device, sorted: device ids are assigned at run time. */
+private fun ScriptTaskContext.getPeripheralTypes(): List<String> {
     val peripheral = getApi<PeripheralAPI>()
-    val peripherals = mutableListOf<String>()
-    for (side in ComputerSide.NAMES) {
-        if (!peripheral.isPresent(side)) continue
-        peripherals.add(side)
-
-        val hasType = peripheral.hasType(side, "peripheral_hub")
-        if (hasType != true) continue
-
-        val names = peripheral.call(context, ObjectArguments(side, "getNamesRemote")).await() ?: continue
-        @Suppress("UNCHECKED_CAST")
-        peripherals.addAll(names[0] as Collection<String>)
-    }
-
-    peripherals.sort()
-    return peripherals
+    return peripheral.getDeviceNames().map { peripheral.getType(it)!![0] }.sorted()
 }
 
-private suspend fun ScriptTaskContext.callRemotePeripheral(name: String, method: String, vararg args: Any): Array<out Any?>? {
-    val peripheral = getApi<PeripheralAPI>()
-    if (peripheral.isPresent(name)) return peripheral.call(context, ObjectArguments(name, method, *args)).await()
-
-    for (side in ComputerSide.NAMES) {
-        if (!peripheral.isPresent(side)) continue
-
-        val hasType = peripheral.hasType(side, "peripheral_hub")
-        if (hasType != true) continue
-
-        val isPresent = peripheral.call(context, ObjectArguments(side, "isPresentRemote", name)).await() ?: continue
-        if (isPresent[0] as Boolean) {
-            return peripheral.call(context, ObjectArguments(side, "callRemote", name, method, *args)).await()
-        }
-    }
-
-    throw IllegalArgumentException("No such peripheral $name")
+/** Call a method of the device of a type. */
+private suspend fun ScriptTaskContext.callNamedPeripheral(type: String, method: String, vararg args: Any): Array<out Any?>? {
+    val name = findPeripheral(type) ?: throw IllegalArgumentException("No $type")
+    return getApi<PeripheralAPI>().call(context, ObjectArguments(name, method, *args)).await()
 }

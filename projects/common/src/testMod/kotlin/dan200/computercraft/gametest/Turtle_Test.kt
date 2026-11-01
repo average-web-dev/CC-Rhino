@@ -764,7 +764,7 @@ class Turtle_Test {
     fun Peripheral_change(helper: GameTestHelper) = helper.sequence {
         val testInfo = (helper as GameTestHelperAccessor).testInfo as GameTestInfoAccessor
 
-        val events = CopyOnWriteArrayList<Pair<String, String>>()
+        val events = CopyOnWriteArrayList<String>()
         var running = false
         thenStartComputer("listen") {
             running = true
@@ -772,7 +772,8 @@ class Turtle_Test {
                 val event = pullEvent()
                 TestHooks.LOG.info("[{}] Got event {} at tick {}", testInfo, event[0], testInfo.`computercraft$getTick`())
                 if (event[0] == "peripheral" || event[0] == "peripheral_detach") {
-                    events.add((event[0] as String) to (event[1] as String))
+                    // The device ids are assigned at run time: the old device goes, a new one comes.
+                    events.add(event[0] as String)
                 }
             }
         }
@@ -784,10 +785,7 @@ class Turtle_Test {
             TestHooks.LOG.info("[{}] Finished turtle at {}", testInfo, testInfo.`computercraft$getTick`())
         }
         thenWaitUntil {
-            val expected = listOf(
-                "peripheral_detach" to "right",
-                "peripheral" to "right",
-            )
+            val expected = listOf("peripheral_detach", "peripheral")
 
             if (events != expected) helper.fail("Expected $expected, but received $events")
         }
