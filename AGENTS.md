@@ -294,6 +294,9 @@ part of `assemble`.
   - A program exports `main(args, cwd)` (`export function main…`; same as `process.argv.slice(2)` /
     `process.cwd()`), or just has top-level code (Node style); bash calls it. `main` may be `async` (return a
     promise). The exit code is `process.exitCode`, not `main`'s return value.
+  - Bash and `child_process` find a bare program name on **`PATH`** (an env variable, `/rom/os/bin:/rom/bin`;
+    `internal/path`), modules resolve on **`require.paths`** (`/rom/lib`, like Node's `NODE_PATH`). The two are
+    separate, so a program may share a module's name (the `redstone` program uses the native `redstone` module).
   - **Event driven by default**, as in Node: `main` sets up state and listeners (stdin `'keydown'` / `'paste'` /
     `'mouse'` / `'data'`, stdout `'resize'`, timers, `events.on`, promises) and **returns**. The flowing stdin, ref'd
     timers and pending operations keep the job alive (#46); without them it ends.

@@ -139,7 +139,10 @@ interface Process {
     argv: string[];
     readonly argv0: string;
     execArgv: string[];
-    /** Environment variables: a live view of the `env` module (`PATH` mirrors `require.paths`); shared by all programs. */
+    /**
+     * Environment variables: a live view of the `env` module; shared by all programs. `PATH` lists the program
+     * directories (not `require.paths`, the module search path).
+     */
     env: Record<string, string | undefined>;
     readonly platform: "computercraft";
     /** The id of the running program (0 outside of a program). */

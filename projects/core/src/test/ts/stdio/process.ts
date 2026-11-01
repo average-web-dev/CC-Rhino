@@ -20,7 +20,7 @@ eq(JSON.stringify(process.stdout.getWindowSize()), '[51,19]');
 eq(process.stdout.hasColors(), true);
 eq(process.stdout.getColorDepth(), 4);
 
-// env is a live view of the env module (PATH mirrors require.paths). Values are converted to strings, as in Node.
+// env is a live view of the env module (PATH is an ordinary variable, not require.paths). Values are converted to strings, as in Node.
 (process.env as Record<string, unknown>).GREETING = 42;
 eq(env.get('GREETING'), '42');
 eq(process.env.GREETING, '42');
@@ -29,7 +29,10 @@ assert(Object.keys(process.env).indexOf('GREETING') !== -1, 'env keys');
 delete process.env.GREETING;
 eq(process.env.GREETING, undefined);
 eq(env.has('GREETING'), false);
-eq(process.env.PATH, require.paths.join(':'));
+process.env.PATH = '/a:/b';
+eq(env.get('PATH'), '/a:/b');
+eq(require.paths.indexOf('/a'), -1, 'PATH does not change the module search path');
+delete process.env.PATH;
 
 // cwd / chdir
 eq(process.cwd(), '/');

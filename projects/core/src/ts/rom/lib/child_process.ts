@@ -18,6 +18,7 @@
 // A program that fails is reported on its own stderr and exits with code 1. A child keeps its parent running until it
 // exits (as an un-unref'd Node child does).
 
+import { findProgram } from '/rom/lib/internal/path';
 import { EventEmitter } from '/rom/lib/internal/emitter';
 import * as jobs from '/rom/lib/internal/tty';
 import { TTY, ReadStream } from '/rom/lib/tty';
@@ -46,11 +47,18 @@ function notFound(program: string): Error {
     return err;
 }
 
-/** Resolve a program like the shell does: a path against the working directory, a bare name on require.paths. */
+/**
+ * Resolve a program like the shell does: a path against the working directory, a bare name on PATH (never a module of
+ * the same name: PATH is not require.paths).
+ */
 function resolveProgram(program: string, cwd: string): string {
     let isPath = program.startsWith('/') || program.startsWith('./') || program.startsWith('../');
     let target = program;
-    if (isPath) {
+    if (!isPath) {
+        let found = findProgram(program);
+        if (found === undefined) throw notFound(program);
+        target = found;
+    } else {
         let raw = (program.startsWith('/') ? '' : cwd.replace(/\/$/, '') + '/') + program;
         let out: string[] = [];
         for (let seg of raw.split('/')) {

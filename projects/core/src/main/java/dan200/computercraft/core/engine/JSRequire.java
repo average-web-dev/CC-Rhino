@@ -69,7 +69,7 @@ final class JSRequire extends ScriptableObject {
 
     /**
      * Node-style core modules implemented in the ROM (TypeScript under {@code /rom/lib}). Like Node's core modules they
-     * resolve before {@code require.paths}, so they cannot be shadowed and do not depend on {@code PATH}; they can also
+     * resolve before {@code require.paths}, so they cannot be shadowed and work whatever it says; they can also
      * be required with a {@code node:} prefix ({@code require('node:util')}).
      */
     static final Set<String> ROM_CORE_MODULES = Set.of(

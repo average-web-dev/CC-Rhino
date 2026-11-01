@@ -6,6 +6,7 @@
 // Everything after this (aliases, autorun, completion) is bash's or future layers' job.
 
 import system from 'system';
+import * as env from '/rom/lib/env';
 import util   from 'util';
 import screen from 'screen';
 import events from 'events';
@@ -45,9 +46,11 @@ klog('ok', `Computer ${system.getComputerID()} - ${device}`);
 const label = system.getComputerLabel();
 if (label) klog('info', `Label: ${label}`);
 
-// Setting the module search path also defines PATH: the env module exposes PATH
-// as a live alias of require.paths, so `echo $PATH` and `export PATH=...` just work.
-require.paths = ['/rom/os/bin', '/rom/bin', '/rom/lib'];
+// Programs are found on PATH, modules on require.paths (like Node's NODE_PATH): separate, so a program may share a
+// module's name (the `redstone` program, the native `redstone` module).
+env.set('PATH', '/rom/os/bin:/rom/bin');
+require.paths = ['/rom/lib'];
+klog('ok', 'PATH: ' + env.get('PATH'));
 klog('ok', 'Module paths: ' + require.paths.join(', '));
 
 klog('ok', 'Kernel ready - handing off to shell');

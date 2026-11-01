@@ -18,6 +18,7 @@ import readline from 'readline';
 import { Key } from '/rom/lib/tty';
 import * as tty from '/rom/lib/internal/tty';
 import { spawnSync } from '/rom/lib/child_process';
+import { programNames } from '/rom/lib/internal/path';
 
 import events   from 'events';
 import fs       from 'fs';
@@ -69,8 +70,8 @@ export function main(args: string[]): void {
 }
 
 /**
- * Run a program in the foreground, on the shell's TTY (child_process.spawnSync). Bare names ('ls') are resolved via
- * require.paths, paths ('/', './', '../') against the working directory. Programs are loaded with `require.uncached`,
+ * Run a program in the foreground, on the shell's TTY (child_process.spawnSync). Bare names ('ls') are looked up on
+ * PATH, paths ('/', './', '../') against the working directory. Programs are loaded with `require.uncached`,
  * so their top-level code runs on every invocation and edits take effect immediately. The program runs as a job of its
  * own (see /rom/lib/internal/tty): its own thread, `process.argv` = ['bash', path, ...args], a working directory of
  * its own (it starts in the shell's), a fresh stdin. It keeps running while it has ref'd pending work, as a Node
@@ -88,15 +89,11 @@ export function run(path: string, ...args: string[]): boolean {
 
 const BUILTINS = ['cd', 'exit', 'export', 'unset', 'env'];
 
-/** Command names: the builtins and the programs on require.paths. */
+/** Command names: the builtins and the programs on PATH. */
 function completeCommand(prefix: string): string[] {
     let names: Record<string, true> = {};
     for (let b of BUILTINS) names[b] = true;
-    for (let dir of require.paths) {
-        let entries: string[];
-        try { entries = fs.readdirSync(dir); } catch { continue; }
-        for (let e of entries) names[e.endsWith('.js') ? e.slice(0, -3) : e] = true;
-    }
+    for (let name of programNames()) names[name] = true;
     let out: string[] = [];
     for (let name of Object.keys(names)) if (name.startsWith(prefix)) out.push(name);
     return out.sort();
