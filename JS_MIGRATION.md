@@ -451,7 +451,8 @@ Done in #2 on top of the TTY model (#50), differently from the Lua ROM:
 
 #### Tier 3 — Peripheral + network libraries (depends on Tier 0–2)
 
-- [ ] **11.17** `src/ts/rom/lib/peripheral.ts` — `wrap`, `find`, `getNames`, `isPresent`, `getType`, `call`
+- [x] **11.17** `src/ts/rom/lib/peripheral.ts` — `wrap`, `find`, `getNames`, `isPresent`, `getType`, `call`; plus
+  `list`, `get`, `on('attach' | 'detach')`, devices by id or `/dev` path (#61)
 - [ ] **11.18** `src/ts/rom/lib/rednet.ts` — open/close, send, broadcast, receive (with timeout), host/lookup, protocol filter
 - [ ] **11.19** `src/ts/rom/lib/http.ts` — `get`, `post`, `request`/`checkURL` wrappers with streaming; `websocket`
 - [ ] **11.20** `src/ts/rom/lib/gps.ts` — trilateration via `rednet` + modem; `locate()` blocking call
@@ -693,7 +694,7 @@ calls waiting for an event (Phase 1/2), which `fireNow` does not do.
 | `SystemAPI` alarm tick | `alarm` | server tick | cross-thread: must stay |
 | `Computer` redstone tick | `redstone` | server tick | cross-thread: must stay |
 | `PeripheralAPI.onPeripheralChanged` | `peripheral`, `peripheral_detach` | server tick (peripheral change) | cross-thread: must stay |
-| `WiredModemPeripheral` remote attach/detach | `peripheral`, `peripheral_detach` | server thread (wired network) | cross-thread: must stay |
+| `PeripheralAPI` `attachDevice` / `detachDevice` (wired modems) | `peripheral`, `peripheral_detach` | server thread (wired network) | cross-thread: must stay |
 | `JSContext` main-thread task | `task_complete` | server thread (main-thread task) | cross-thread: must stay (wakes the `TaskCallback`, Phase 2) |
 | `TurtleBrain` command completion | `task_complete` | turtle update tick (server thread) | cross-thread: must stay (wakes `TaskCompletion.await`) |
 | `HttpRequest`, `CheckUrl`, `Websocket`, `WebsocketHandler` | `http_*`, `websocket_*` | Netty I/O threads | cross-thread: must stay |
@@ -709,7 +710,7 @@ calls waiting for an event (Phase 1/2), which `fireNow` does not do.
 | `TurtleBlockEntity` | `turtle_inventory` | server thread (inventory change) | cross-thread: must stay |
 | `CommandComputerCraft` (`/computercraft queue`) | `computer_command` | server thread (command) | cross-thread: must stay |
 | `ComputerExecutor` self-tick | `cc:js-tick` | any thread (executor wake-up) | must stay: it *is* the mechanism that schedules the next tick |
-| `ComputerAccess`, `PeripheralAPI.PeripheralWrapper`, `WiredModemPeripheral.RemotePeripheralWrapper`, `AttachedComputerSet` | any (addon `IComputerAccess.queueEvent`) | unknown (usually server thread) | must stay: generic API; Java code inside a script method can use `JSEventEmitter.current().fireNow(record)` |
+| `ComputerAccess`, `PeripheralAPI.PeripheralWrapper`, `AttachedComputerSet` | any (addon `IComputerAccess.queueEvent`) | unknown (usually server thread) | must stay: generic API; Java code inside a script method can use `JSEventEmitter.current().fireNow(record)` |
 | `TestAPI` / `ManagedComputers` (testMod), `KotlinMachine` / `ScriptTaskRunner` (test fixtures), `ComputerTrackingPeripheral` (example) | test / example events | test harness / server thread | must stay (test-only / example) |
 | `EventLoop.checkRejections` | `unhandled_rejection` | inside the machine | already dispatched directly (`EventLoop.emit`), never queued |
 | `JSMachine.handleEvent` (boot) | `__start__` | inside the machine | already dispatched directly, never queued |
@@ -885,6 +886,11 @@ class that draws by writing ANSI. Branch `feature/tty-term`.
   `process.kill(pid, signal)` (SIGTERM / SIGINT / SIGKILL, exit code 128 + number), `child.kill(signal)`; `ps` and
   `kill` in `/rom/os/bin`; a killed program's own children end with it (process table, TTY released), and the first
   console always gets a new shell when its shell ends
+- [x] **16.18** Devices (#61): every device has an id like computers and disks (`DeviceIds`, the same on a side and
+  through a cable); one registry in `PeripheralAPI` (`IComputerAccess.attachDevice`, used by wired modems; the
+  `*Remote` methods are gone); `peripheral` is a ROM module around `internal/peripheral` (`list`, `get`, `wrap`,
+  `find`, `on('attach' | 'detach')`); the OS names devices in `/dev` (`DevMount`, character devices, lowest free number
+  per type); a BEL in a program's output (`tty_bell`) plays on the first speaker
 
 ---
 

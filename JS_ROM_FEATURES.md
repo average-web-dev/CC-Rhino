@@ -445,28 +445,31 @@ spawned background threads are not terminated. bash runs each program as such a 
 
 ### peripheral
 
-**Summary**: Discover, query, and call methods on attached peripherals (both direct-side and wired-modem-remote).
+**Summary**: The computer's devices (#61), by id: on a side or behind a wired modem alike.
 
 **Feature contract**:
 ```
-peripheral.getNames(): string[]
-peripheral.isPresent(name: string): boolean
-peripheral.getType(nameOrWrapped: string | object): string | null   // returns first type
-peripheral.hasType(nameOrWrapped: string | object, type: string): boolean | null
-peripheral.getMethods(name: string): string[] | null
-peripheral.getName(wrapped: object): string
-peripheral.call(name: string, method: string, ...args): any
-peripheral.wrap(name: string): object | null    // plain object with method functions
-peripheral.find(type: string, filter?: (name, wrapped) => boolean): object[]
+peripheral.getNames(): string[]                      // every device id, sorted
+peripheral.getDeviceOn(side): string | null          // the id of the device on a side
+peripheral.isPresent / getType / hasType / getMethods / call(idOrPath, …)
+peripheral.list(): DeviceInfo[]                      // { id, types, path? }
+peripheral.get(idOrPath): DeviceInfo | undefined
+peripheral.wrap(idOrPath): Device | undefined        // methods + id, type, types; typed by the id / path
+peripheral.find(type, filter?): Device[]
+peripheral.on / once / off('attach' | 'detach', (device: DeviceInfo) => …)
 ```
 
 **CC-specific behaviour**:
-- Direct-side names are `"top"`, `"bottom"`, `"left"`, `"right"`, `"front"`, `"back"`.
-- Wired-modem remotes: if a side has type `"peripheral_hub"`, its remote names are added to `getNames()`.
-- `wrap` returns an object whose methods all delegate to `peripheral.call`; the wrapped object has `__name="peripheral"`, `name`, and `types` metadata.
-- `find` returns all wrapped peripherals of the given type that pass the optional filter.
+- A device id is `<type>_<n>` (`monitor_3`), assigned like computer and disk ids (`DeviceIds`, `device_ids.json`,
+  per block; the origin block of a monitor) and the same on every computer, directly or through a cable. Upgrades
+  (turtle / pocket) are keyed by computer and side. Every function takes an id, a `/dev` path or (compatibility) a side.
+- The OS names devices in `/dev` per type with the lowest free number (`/dev/monitor0`, `/dev/chest1`; reused after a
+  detach): character devices whose contents are `{"id":…,"types":[…]}` (`/rom/lib/internal/devices`).
+- There is no hub any more: the wired modem's `*Remote` methods and the `peripheral_hub` type are gone.
 
-**Dependencies**: native `peripheral`, `redstone` (for side list)
+**Status**: done (#61), `/rom/lib/peripheral.ts` (+ `peripheral/promises`) around the native `internal/peripheral`.
+
+**Dependencies**: native `internal/peripheral`, `events`, `fs`
 
 **Priority**: essential
 
@@ -1528,9 +1531,10 @@ across sessions, `d/pattern`.
 
 **Summary**: Display the computer ID and optionally the ID of a connected peripheral.
 
-**Feature contract**: `id [peripheral]` → prints computer ID or peripheral-reported ID.
+**Feature contract**: `id [device]` → prints the computer ID, or the ID of the disk in a drive / of an attached
+computer (the device by id, `/dev` path or side).
 
-**Dependencies**: native `os`, `peripheral`
+**Dependencies**: `system`, `peripheral`
 
 **Priority**: optional
 
@@ -1612,7 +1616,8 @@ across sessions, `d/pattern`.
 **Summary**: Show and change where disks are mounted.
 
 **Feature contract**:
-- `mount` → lists the drives with a data disk (on the sides and behind wired modems): `<drive> on /<path> (<label>)`.
+- `mount` → lists the drives with a data disk (on the sides and behind wired modems): `<drive id> on /<path> (<label>)`;
+  `<drive>` is an id, a `/dev` path or a side.
 - `mount <drive> <path>` → mounts that drive's disks at `<path>` from now on (`drive.setMountPath(path)`), the current
   disk at once; fails if something else is there, at `/` or under `/rom`.
 - `mount <drive> --default` → back to the default.
@@ -1633,6 +1638,7 @@ attached).
 **Summary**: Run a program on an attached monitor peripheral.
 
 **Feature contract**:
+- `<name>` is a device id, a `/dev` path (`/dev/monitor0`) or a side, direct or through a cable.
 - `monitor <name> <program> [args...]` → runs the program with the monitor's TTY (`monitor.getTty()`) as its
   stdin/stdout/stderr (`child_process.spawnSync` with that TTY). A monitor has no keyboard.
 - `monitor scale <name> <scale>` → sets the monitor's text scale (0.5–5, steps of 0.5).
@@ -1672,9 +1678,12 @@ attached).
 
 ### peripherals
 
-**Summary**: List all attached peripherals and their types.
+**Summary**: List all attached devices.
 
-**Feature contract**: `peripherals` → prints each peripheral name and its type(s).
+**Feature contract**: `peripherals` → prints each device's id, its type(s), its `/dev` path and the side it is on
+(none for devices behind a wired modem).
+
+**Status**: done (#61), `/rom/os/bin/peripherals.ts`.
 
 **Dependencies**: `peripheral`
 

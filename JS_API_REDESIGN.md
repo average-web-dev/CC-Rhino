@@ -450,10 +450,30 @@ No tuples, no async → portable 1:1.
 
 ---
 
-## `peripheral` — `wrap()` as a JS proxy
+## `peripheral` — devices by id (#61)
 
-| Function | Parameters | Return (new) | today |
-|---|---|---|---|
+A ROM module (`/rom/lib/peripheral`) around the native `internal/peripheral`. Devices have ids like computers and
+disks (`monitor_3`), the same on a side and through a cable: one registry in `PeripheralAPI`, which wired modems fill
+through `IComputerAccess.attachDevice` / `detachDevice`. Events (`peripheral`, `peripheral_detach`, `disk`,
+`monitor_touch`, …) and `getAttachmentName()` carry the id; a side still finds its device.
+
+| Function | Parameters | Return |
+|---|---|---|
+| `getNames` | – | `string[]` (every device id, sorted) |
+| `getDeviceOn` | `side` | `string \| null` |
+| `isPresent` | `idOrPath` | `boolean` |
+| `getType` | `idOrPath` | `string[] \| null` |
+| `hasType` | `idOrPath, type` | `boolean \| null` |
+| `getMethods` | `idOrPath` | `string[] \| null` |
+| `call` | `idOrPath, method, ...args` | `unknown` |
+| `list` / `get` | – / `idOrPath` | `DeviceInfo[]` / `DeviceInfo \| undefined` (`{ id, types, path? }`) |
+| `wrap` | `idOrPath` | `Device \| undefined`, typed by id or path (`wrap('/dev/monitor0')`: `MonitorPeripheral`) |
+| `find` | `type, filter?` | `Device[]` |
+| `on` / `once` / `off` | `'attach' \| 'detach', listener(device)` | the module |
+
+`/dev` (`DevMount`) holds a character device per device, named by the OS (lowest free number per type).
+
+---|---|---|---|
 | `getNames` | – | `string[]` | same |
 | `isPresent` | `side` | `boolean` | same |
 | `getType` | `side` | `string[] \| null` | was cons-array |
@@ -538,7 +558,6 @@ build); the tsdoclet fails the build on an `unknown` it cannot justify. Shapes:
 | `handle.seek(whence?, offset?)` | `number`, throws on failure | `number \| null \| [null, reason]` |
 | `handle.read(count?)` | `string \| number \| null` (number only without `count` in binary mode) | `unknown` |
 | `peripheral.hasType` / `getMethods` | `boolean \| null` / `string[] \| null` | `unknown` |
-| `peripheral.getSides` | `ComputerSide[]` | `string[]` |
 | `printer.getCursorPos()` / `setCursorPos(pos)` | `{x, y}` **0-based** like `term` | `[x, y]` 1-based / `(x, y)` |
 | `printer.getPageSize()` | `{width, height}` | `[width, height]` |
 | `printer.newPage()` / `endPage()` | `Result` (`"No ink"`, `"No paper"`, `"Output tray is full"`) | `boolean` |
@@ -546,7 +565,6 @@ build); the tsdoclet fails the build on an `unknown` it cannot justify. Shapes:
 | `command.runCommand()` (command block) | `Result` (`"Command failed"`) | `boolean` |
 | inventory `list()` / `getItemDetail(slot)` | `Record<number, ItemBasicDetail>` / `ItemDetail \| null` | `Record<string, unknown>` |
 | fluid `tanks()` | `Record<number, FluidBasicDetail>` | `Record<string, unknown>` |
-| wired modem `*Remote` | typed (`WiredModemPeripheral`) | not emitted |
 | `system.time()` | `number` | `Object` |
 
 Detail tables (`ItemDetail`, `BlockDetail`, `EntityDetail`, …) stay Java `Map`s because other mods' detail

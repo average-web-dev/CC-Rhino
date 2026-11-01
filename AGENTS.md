@@ -136,7 +136,8 @@ part of `assemble`.
 | ROM helpers: Node-style errors and argument validators (internal), escape sequences (`CSI`), `geometry` (`Point`, `Vector`), `color` (`Color`) | `rom/lib/internal/errors.ts`, `internal/validators.ts`, `internal/csi.ts`, `rom/lib/geometry.ts`, `rom/lib/color.ts`; types `src/ts/types/{geometry,color}.d.ts` |
 | Native TTYs: pipes, line discipline, terminal emulator, input encoder, screen consoles; `internal/pty`, `screen` modules | `core/tty/` (`Pipe`, `LineDiscipline`, `Tty`, `TerminalEmulator`, `InputEncoder`, `Screen`), `core/apis/tty/`, monitor: `common/.../peripheral/monitor/ServerMonitor.java` |
 | Event bus (`events.on/once/off/emit`, `fireNow`, native-name registry) | `core/engine/JSEventEmitter.java` (incl. the JS `emit`), `core/apis/EventsAPI.java`, `EventLoop.emitPlan`/`dispatchNow`, core-api `scripting/Events.java` |
-| Core APIs (`fs`, `system`, `http`, `peripheral`, `redstone`, `screen`) | `projects/core/src/main/java/dan200/computercraft/core/apis/` |
+| Core APIs (`fs`, `internal/system`, `http`, `internal/peripheral`, `redstone`, `screen`) | `projects/core/src/main/java/dan200/computercraft/core/apis/` |
+| Devices (#61): ids (`DeviceIds`), one registry for direct and wired devices, `/dev`, ROM `peripheral`, OS registry, the bell | `core/apis/PeripheralAPI.java`, `core/filesystem/DevMount.java`, `common/.../shared/computer/core/DeviceIds.java` (`ServerComputer.deviceId`, `WiredModemLocalPeripheral`, `WiredModemPeripheral`), `src/ts/rom/lib/peripheral.ts`, `internal/devices.ts`, `rom/os/index.ts`; types `src/ts/types/peripheral.d.ts` |
 | Scripting API for addon mods (`@ScriptFunction`, `MethodResult`, `Result`, `TaskCompletion`) | `projects/core-api/src/main/java/dan200/computercraft/api/scripting/` |
 | Turtle API + command queue | `projects/common/.../shared/turtle/apis/TurtleAPI.java`, `turtle/core/TurtleBrain.java` |
 | Turtle energy (FE / Tech Reborn Energy) | `forge|fabric/.../shared/turtle/TurtleEnergyStorage.java`, `TurtleBrain.pushEnergy` |
@@ -190,6 +191,19 @@ part of `assemble`.
   `WriteStream` turns into `'resize'`. There is no native `term` module any more: the ROM module `term` (class `Term`)
   draws by writing ANSI into a TTY, and `tty.CSI` (source: `internal/csi`, also used by `util`/`console`) holds the
   escape sequences (no raw `'\x1b[…'` in ROM code).
+- Devices (#61): every peripheral has an id like computers and disks (`monitor_3`; `DeviceIds` in `ServerContext`,
+  `device_ids.json`, keyed by block — a monitor's origin — or, for upgrades, by computer and side), the same on every
+  computer and wherever it is attached. `PeripheralAPI` keeps **one registry** for devices on the sides and devices a
+  peripheral attaches (`IComputerAccess.attachDevice` / `detachDevice`; wired modems attach their network's
+  peripherals — there are no `*Remote` methods or `peripheral_hub` any more); a device reached twice is attached once.
+  Events and `getAttachmentName()` carry the id; a side name still finds its device (`getDeviceOn(side)` gives the
+  id). `peripheral` is a ROM module around the native `internal/peripheral` (`list`, `get`, `wrap`, `find`,
+  `on('attach' | 'detach')`); every function takes an id, a `/dev` path or a side. The OS (`internal/devices`, started
+  in `rom/os/index.ts`) names devices in `/dev` per type with the lowest free number (`/dev/monitor0`, reused after a
+  detach): `DevMount`, read-only character devices (`isCharacterDevice()`) holding `{"id":…,"types":[…]}`, filled
+  through `internal/peripheral.setDeviceFile` / `removeDeviceFile` (not passed on by `peripheral`); it emits
+  `device_attach` / `device_detach`. A BEL in a program's output (not one ending an OSC) makes `tty.WriteStream` emit
+  `tty_bell`; the OS plays it on the first speaker (`playNote('bell', 1, 12)`, at most once per tick).
 - Node-style stdio (#34) is ROM TypeScript in `/rom/lib`: `process`, `console`, `util`, `readline`,
   `readline/promises`, `tty`, `term`, plus `geometry` (immutable `Point` / `Vector`) and `color` (immutable RGBA
   `Color`; `Dye`, the 16 dye ids, e.g. for bundled cables). These "ROM core modules" resolve before `require.paths` and with a `node:`
