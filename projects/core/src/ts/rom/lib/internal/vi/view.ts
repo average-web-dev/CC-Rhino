@@ -7,7 +7,8 @@
 // since the last draw are written, so typing does not repaint the whole screen.
 
 import { ColorIndex, type Term } from '/rom/lib/term';
-import { displayCol, expandTabs, type Editor } from '/rom/lib/internal/vi/editor';
+import type { Editor } from '/rom/lib/internal/vi/editor';
+import { displayCol, expandTabs } from '/rom/lib/internal/vi/tabs';
 
 /** What a row shows: its text and its colors (one of each per cell kind, enough for now). */
 interface Row {
@@ -81,8 +82,10 @@ export class View {
             let text = ':' + editor.command;
             return { text: text.slice(Math.max(0, text.length - width + 1)).padEnd(width), color: ColorIndex.WHITE };
         }
-        let ruler = `${editor.buffer.modified ? '[+] ' : ''}${editor.cursor.line + 1},${editor.cursor.col + 1}`;
-        let left = editor.message !== '' ? editor.message : editor.mode === 'insert' ? '-- INSERT --' : '';
+        let pending = editor.pendingKeys === '' ? '' : editor.pendingKeys.slice(-10) + '  ';
+        let ruler = `${pending}${editor.buffer.modified ? '[+] ' : ''}${editor.cursor.line + 1},${editor.cursor.col + 1}`;
+        let left = editor.message !== '' ? editor.message
+            : editor.mode === 'insert' ? '-- INSERT --' : editor.mode === 'replace' ? '-- REPLACE --' : '';
         if (editor.message !== '' && editor.message.length > width - ruler.length - 1) {
             return { text: left.slice(0, width).padEnd(width), color: editor.error ? ColorIndex.RED : ColorIndex.WHITE };
         }

@@ -3,16 +3,21 @@
 // SPDX-License-Identifier: MPL-2.0
 
 // /rom/lib/internal/vi/editor.ts — the state of the vi editor and what keys do to it, without any terminal: /rom/bin/vi
-// feeds it the decoded input and draws it with ./view.ts, and the tests drive it directly.
+// feeds it the decoded input and draws it with ./view.ts, and the tests drive it directly. Normal mode (commands,
+// motions, operators) is ./normal.ts; Insert, Replace and the command line are here.
 //
 // Keys are named as in vim's documentation: a typed character is itself ('a', 'A', ':'), others are '<Esc>', '<CR>',
-// '<BS>', '<Del>', '<Tab>', '<Up>' …, with Ctrl '<C-r>'.
+// '<BS>', '<Del>', '<Tab>', '<Up>' …, with Ctrl '<C-r>' / '<C-Left>', with Shift '<S-Left>'.
 
 import { TextBuffer, type Position } from '/rom/lib/internal/vi/buffer';
 import { Key } from '/rom/lib/internal/keys';
 import { execute } from '/rom/lib/internal/vi/ex';
+import { firstNonBlank, runMotion } from '/rom/lib/internal/vi/motions';
+import { NormalMode } from '/rom/lib/internal/vi/normal';
+import { Registers } from '/rom/lib/internal/vi/registers';
+import { colAtDisplay, displayCol } from '/rom/lib/internal/vi/tabs';
 
-export type Mode = 'normal' | 'insert' | 'command';
+export type Mode = 'normal' | 'insert' | 'replace' | 'command';
 
 /** How the editor reads and writes files (fs in vi; a map in the tests). */
 export interface FileIO {
@@ -22,53 +27,46 @@ export interface FileIO {
     write(path: string, text: string): void;
 }
 
-/** The width of a tab on screen. */
-export const TAB_WIDTH = 4;
-
-/** The screen column (from 0) of column `col` of `line`, tabs expanded. */
-export function displayCol(line: string, col: number): number {
-    let x = 0;
-    for (let i = 0; i < col && i < line.length; i++) x += line.charAt(i) === '\t' ? TAB_WIDTH - (x % TAB_WIDTH) : 1;
-    return x;
-}
-
-/** The column of `line` shown at screen column `x` (or the last one before it). */
-export function colAtDisplay(line: string, x: number): number {
-    let at = 0;
-    for (let i = 0; i < line.length; i++) {
-        let next = at + (line.charAt(i) === '\t' ? TAB_WIDTH - (at % TAB_WIDTH) : 1);
-        if (next > x) return i;
-        at = next;
-    }
-    return line.length;
-}
-
-/** `line` with its tabs expanded to spaces. */
-export function expandTabs(line: string): string {
-    if (line.indexOf('\t') < 0) return line;
-    let out = '';
-    for (let ch of line) out += ch === '\t' ? ' '.repeat(TAB_WIDTH - (out.length % TAB_WIDTH)) : ch;
-    return out;
-}
-
 const NAMED_KEYS: Record<string, string> = {
-    [Key.ESCAPE]: '<Esc>', [Key.ENTER]: '<CR>', [Key.NUMPAD_ENTER]: '<CR>', [Key.BACKSPACE]: '<BS>',
-    [Key.DELETE]: '<Del>', [Key.TAB]: '<Tab>', [Key.ARROW_UP]: '<Up>', [Key.ARROW_DOWN]: '<Down>',
-    [Key.ARROW_LEFT]: '<Left>', [Key.ARROW_RIGHT]: '<Right>', [Key.HOME]: '<Home>', [Key.END]: '<End>',
-    [Key.PAGE_UP]: '<PageUp>', [Key.PAGE_DOWN]: '<PageDown>', [Key.INSERT]: '<Insert>',
+    [Key.ESCAPE]: 'Esc', [Key.ENTER]: 'CR', [Key.NUMPAD_ENTER]: 'CR', [Key.BACKSPACE]: 'BS', [Key.DELETE]: 'Del',
+    [Key.TAB]: 'Tab', [Key.ARROW_UP]: 'Up', [Key.ARROW_DOWN]: 'Down', [Key.ARROW_LEFT]: 'Left',
+    [Key.ARROW_RIGHT]: 'Right', [Key.HOME]: 'Home', [Key.END]: 'End', [Key.PAGE_UP]: 'PageUp',
+    [Key.PAGE_DOWN]: 'PageDown', [Key.INSERT]: 'Insert',
 };
+
+/** Keys that keep their Ctrl / Shift in their name ('<C-Left>'); for the others the modifier means nothing to vi. */
+const MODIFIED_KEYS = new Set(['Up', 'Down', 'Left', 'Right', 'Home', 'End']);
 
 /** The vim name of a key press ('a', '<Esc>', '<C-r>'), or undefined for keys vi ignores (a modifier alone, F13). */
 export function keyName(key: TtyKeyInput): string | undefined {
     let named = NAMED_KEYS[key.code];
-    if (named !== undefined) return named;
+    if (named !== undefined) {
+        if (MODIFIED_KEYS.has(named) && key.ctrlKey) return `<C-${named}>`;
+        if (MODIFIED_KEYS.has(named) && key.shiftKey) return `<S-${named}>`;
+        return `<${named}>`;
+    }
     if (key.ctrlKey && /^Key[A-Z]$/.test(key.code)) return `<C-${key.code.charAt(3).toLowerCase()}>`;
     if (key.ctrlKey || key.altKey || key.metaKey) return undefined;
     return Array.from(key.key).length === 1 ? key.key : undefined;
 }
 
+/** Whether `name` is a key that types itself (a character, not '<…>'). */
+export function isCharKey(name: string): boolean {
+    return Array.from(name).length === 1;
+}
+
+/** What an Insert or Replace session typed, so that a count can repeat it (3ix<Esc> inserts "xxx"). */
+interface InsertSession {
+    count: number;
+    /** Text put before each repetition (o and O start a new line each time). */
+    prefix: string;
+    /** The text typed (Backspace takes it back again). */
+    typed: string;
+}
+
 export class Editor {
     readonly buffer: TextBuffer;
+    readonly registers = new Registers();
     /** The file being edited (undefined: none yet, `:w name` sets it). */
     path: string | undefined;
     cursor: Position = { line: 0, col: 0 };
@@ -85,12 +83,16 @@ export class Editor {
     left = 0;
     width = 51;
     rows = 18;
+    /** The screen column vertical moves aim for ('end' after '$': the end of every line). */
+    want: number | 'end' = 0;
+    /** The last f / t / F / T, for ; and ,. */
+    lastFind: { motion: string; char: string } | undefined;
 
     readonly #io: FileIO;
-    /** The screen column vertical moves try to keep (Infinity after '$': the end of every line). */
-    #want = 0;
-    /** The first key of a two-key command waiting for its second ('Z'). */
-    #pending = '';
+    readonly #normal: NormalMode;
+    #insert: InsertSession | undefined;
+    /** In Replace mode: the characters overwritten, so that Backspace can restore them ('' for appended ones). */
+    #replaced: string[] = [];
 
     constructor(io: FileIO, path?: string) {
         this.#io = io;
@@ -109,6 +111,12 @@ export class Editor {
         if (text !== undefined && text.endsWith('\n')) text = text.slice(0, -1);
         this.buffer = new TextBuffer(text ?? '');
         this.buffer.markSaved();
+        this.#normal = new NormalMode(this);
+    }
+
+    /** The keys of a Normal-mode command typed so far (shown at the bottom, like vim's 'showcmd'). */
+    get pendingKeys(): string {
+        return this.#normal.pending;
     }
 
     /** The size of the text area (the screen without the last row). */
@@ -123,6 +131,7 @@ export class Editor {
         let line = this.cursor.line;
         if (line < this.top) this.top = line;
         else if (line >= this.top + this.rows) this.top = line - this.rows + 1;
+        this.top = Math.max(0, Math.min(this.top, this.buffer.lineCount - 1));
         let x = displayCol(this.buffer.line(line), this.cursor.col);
         if (x < this.left) this.left = x;
         else if (x >= this.left + this.width) this.left = x - this.width + 1;
@@ -142,30 +151,34 @@ export class Editor {
             return;
         }
         let body = text.replace(/\r\n?/g, '\n');
-        if (this.mode === 'insert') {
+        if (this.mode === 'insert' || this.mode === 'replace') {
             this.cursor = this.buffer.insert(this.cursor, body, this.cursor);
+            if (this.#insert !== undefined) this.#insert.typed += body;
+            // '.' repeats it as typed.
+            for (let ch of body) this.#normal.record(ch === '\n' ? '<CR>' : ch);
         } else {
             this.buffer.begin(this.cursor);
             let end = this.buffer.insert(this.cursor, body, this.cursor);
-            this.cursor = this.#normalCol({ line: end.line, col: end.col - 1 });
+            this.cursor = this.normalCol({ line: end.line, col: end.col - 1 });
             this.buffer.end(this.cursor);
         }
-        this.#wantHere();
+        this.wantHere();
         this.follow();
     }
 
     /** One key, by its vim name. */
     feed(name: string): void {
         if (this.mode !== 'command') { this.message = ''; this.error = false; }
+        if (this.mode === 'insert' || this.mode === 'replace') this.#normal.record(name);
         switch (this.mode) {
-            case 'normal': this.#normal(name); break;
-            case 'insert': this.#insert(name); break;
+            case 'normal': this.#normal.feed(name); break;
+            case 'insert': case 'replace': this.#insertKey(name); break;
             case 'command': this.#commandLine(name); break;
         }
         this.follow();
     }
 
-    /** Show an error message (an ex command failed). */
+    /** Show an error message (a command failed). */
     fail(message: string): void {
         this.message = message;
         this.error = true;
@@ -192,160 +205,66 @@ export class Editor {
     gotoLine(line: number): void {
         let target = Math.max(0, Math.min(line, this.buffer.lineCount - 1));
         this.cursor = { line: target, col: firstNonBlank(this.buffer.line(target)) };
-        this.#wantHere();
+        this.wantHere();
     }
 
-    // ── Normal mode ──────────────────────────────────────────────────────────────────────────────────────────────────
-
-    #normal(name: string): void {
-        if (this.#pending === 'Z') {
-            this.#pending = '';
-            if (name === 'Z') execute(this, 'x');
-            else if (name === 'Q') execute(this, 'q!');
-            return;
-        }
-        let { line, col } = this.cursor;
-        let text = this.buffer.line(line);
-        switch (name) {
-            case 'h': case '<Left>': case '<BS>':
-                this.#moveTo({ line, col: col - 1 });
-                break;
-            case 'l': case '<Right>': case ' ':
-                this.#moveTo({ line, col: col + 1 });
-                break;
-            case 'j': case '<Down>': case '<C-n>': case '<CR>':
-                this.#vertical(1, name === '<CR>');
-                break;
-            case 'k': case '<Up>': case '<C-p>':
-                this.#vertical(-1, false);
-                break;
-            case '0': case '<Home>':
-                this.#moveTo({ line, col: 0 });
-                break;
-            case '$': case '<End>':
-                this.#moveTo({ line, col: text.length });
-                this.#want = Infinity;
-                break;
-            case '<PageDown>': case '<C-f>':
-                this.#page(1);
-                break;
-            case '<PageUp>': case '<C-b>':
-                this.#page(-1);
-                break;
-            case 'i': case '<Insert>':
-                this.#startInsert(this.cursor);
-                break;
-            case 'a':
-                this.#startInsert({ line, col: Math.min(col + 1, text.length) });
-                break;
-            case 'I':
-                this.#startInsert({ line, col: firstNonBlank(text) });
-                break;
-            case 'A':
-                this.#startInsert({ line, col: text.length });
-                break;
-            case 'o':
-                this.buffer.begin(this.cursor);
-                this.#startInsert(this.buffer.insert({ line, col: text.length }, '\n'));
-                break;
-            case 'O':
-                this.buffer.begin(this.cursor);
-                this.buffer.insert({ line, col: 0 }, '\n');
-                this.#startInsert({ line, col: 0 });
-                break;
-            case 'x': case '<Del>':
-                if (text.length > 0) {
-                    this.buffer.delete({ line, col }, { line, col: col + 1 }, this.cursor);
-                    this.cursor = this.#normalCol(this.cursor);
-                }
-                break;
-            case 'u':
-                this.#restore(this.buffer.undo(), 'Already at oldest change');
-                break;
-            case '<C-r>':
-                this.#restore(this.buffer.redo(), 'Already at newest change');
-                break;
-            case ':':
-                this.mode = 'command';
-                this.command = '';
-                break;
-            case 'Z':
-                this.#pending = 'Z';
-                break;
-            case '<C-c>':
-                this.message = 'Type  :q!  and press <Enter> to abandon all changes and exit vi';
-                break;
-            default:
-        }
-    }
-
-    #startInsert(at: Position): void {
-        this.buffer.begin(this.cursor);
-        this.cursor = at;
-        this.mode = 'insert';
-        this.#wantHere();
-    }
-
-    #restore(pos: Position | undefined, nothing: string): void {
-        if (pos === undefined) { this.message = nothing; return; }
-        this.cursor = this.#normalCol(pos);
-        this.#wantHere();
-    }
-
-    #moveTo(pos: Position): void {
-        let target = this.mode === 'normal' ? this.#normalCol(pos) : this.buffer.clamp(pos);
-        // A move that fails (h at the start, l at the end) keeps the column vertical moves aim for, as in vim.
-        if (target.line === this.cursor.line && target.col === this.cursor.col && pos.col !== target.col) return;
-        this.cursor = target;
-        this.#wantHere();
-    }
-
-    #vertical(delta: number, firstColumn: boolean): void {
-        let line = Math.max(0, Math.min(this.cursor.line + delta, this.buffer.lineCount - 1));
-        let text = this.buffer.line(line);
-        let col = firstColumn ? firstNonBlank(text)
-            : this.#want === Infinity ? text.length : colAtDisplay(text, this.#want);
-        this.cursor = this.mode === 'normal' ? this.#normalCol({ line, col }) : this.buffer.clamp({ line, col });
-        if (firstColumn) this.#wantHere();
-    }
-
-    #page(direction: number): void {
-        let step = Math.max(1, this.rows - 2);
-        this.top = Math.max(0, Math.min(this.top + direction * step, this.buffer.lineCount - 1));
-        let line = Math.max(this.top, Math.min(this.cursor.line + direction * step, this.buffer.lineCount - 1));
-        this.cursor = this.#normalCol({ line, col: colAtDisplay(this.buffer.line(line), this.#want) });
-    }
+    // ── Helpers for the modes ────────────────────────────────────────────────────────────────────────────────────────
 
     /** `pos` clamped for Normal mode: the cursor sits on a character, not after the last one. */
-    #normalCol(pos: Position): Position {
+    normalCol(pos: Position): Position {
         let clamped = this.buffer.clamp(pos);
         let length = this.buffer.line(clamped.line).length;
         return { line: clamped.line, col: Math.max(0, Math.min(clamped.col, length - 1)) };
     }
 
-    #wantHere(): void {
-        this.#want = displayCol(this.buffer.line(this.cursor.line), this.cursor.col);
+    /** Vertical moves aim for the cursor's current screen column from now on. */
+    wantHere(): void {
+        this.want = displayCol(this.buffer.line(this.cursor.line), this.cursor.col);
     }
 
-    // ── Insert mode ──────────────────────────────────────────────────────────────────────────────────────────────────
+    /** The column of `line` vertical moves land on. */
+    wantedCol(line: number): number {
+        let text = this.buffer.line(line);
+        return this.want === 'end' ? text.length : colAtDisplay(text, this.want);
+    }
 
-    #insert(name: string): void {
+    /**
+     * Enter Insert (or Replace) mode with the cursor at `at`. The undo step started before the command (o, c …) goes on
+     * until Esc; `count` and `prefix` say how Esc repeats the typed text (3ix, 2o).
+     */
+    startInsert(at: Position, mode: 'insert' | 'replace' = 'insert', count = 1, prefix = ''): void {
+        this.buffer.begin(this.cursor);
+        this.cursor = at;
+        this.mode = mode;
+        this.#insert = { count, prefix, typed: '' };
+        this.#replaced = [];
+        this.wantHere();
+    }
+
+    // ── Insert and Replace mode ──────────────────────────────────────────────────────────────────────────────────────
+
+    #insertKey(name: string): void {
         let { line, col } = this.cursor;
+        let session = this.#insert;
         switch (name) {
             case '<Esc>': case '<C-c>':
-                this.buffer.end(this.cursor);
-                this.mode = 'normal';
-                this.cursor = this.#normalCol({ line, col: col - 1 });
-                this.#wantHere();
+                this.#leaveInsert();
                 return;
             case '<CR>':
                 this.cursor = this.buffer.insert(this.cursor, '\n');
+                if (session !== undefined) session.typed += '\n';
                 break;
             case '<Tab>':
-                this.cursor = this.buffer.insert(this.cursor, '\t');
+                this.#type('\t');
                 break;
-            case '<BS>':
-                if (col > 0) {
+            case '<BS>': case '<C-h>':
+                if (this.mode === 'replace') {
+                    if (col === 0 || this.#replaced.length === 0) { this.#moveTo({ line, col: col - 1 }); return; }
+                    let original = this.#replaced.pop()!;
+                    this.buffer.delete({ line, col: col - 1 }, this.cursor);
+                    if (original !== '') this.buffer.insert({ line, col: col - 1 }, original);
+                    this.cursor = { line, col: col - 1 };
+                } else if (col > 0) {
                     this.buffer.delete({ line, col: col - 1 }, this.cursor);
                     this.cursor = { line, col: col - 1 };
                 } else if (line > 0) {
@@ -353,22 +272,90 @@ export class Editor {
                     this.buffer.delete({ line: line - 1, col: end }, this.cursor);
                     this.cursor = { line: line - 1, col: end };
                 }
+                if (session !== undefined) session.typed = session.typed.slice(0, -1);
                 break;
             case '<Del>':
                 if (col < this.buffer.line(line).length) this.buffer.delete(this.cursor, { line, col: col + 1 });
                 else if (line + 1 < this.buffer.lineCount) this.buffer.delete(this.cursor, { line: line + 1, col: 0 });
                 break;
+            case '<C-w>': {
+                // The word before the cursor (and the blanks after it), within the line.
+                let text = this.buffer.line(line);
+                let start = col;
+                while (start > 0 && /\s/.test(text.charAt(start - 1))) start--;
+                let word = start > 0 && /\w/.test(text.charAt(start - 1));
+                while (start > 0 && /\S/.test(text.charAt(start - 1)) && /\w/.test(text.charAt(start - 1)) === word) {
+                    start--;
+                }
+                if (start === col) return;
+                this.buffer.delete({ line, col: start }, this.cursor);
+                this.cursor = { line, col: start };
+                break;
+            }
+            case '<C-u>':
+                if (col === 0) return;
+                this.buffer.delete({ line, col: 0 }, this.cursor);
+                this.cursor = { line, col: 0 };
+                break;
             case '<Left>': this.#moveTo({ line, col: col - 1 }); return;
             case '<Right>': this.#moveTo({ line, col: col + 1 }); return;
-            case '<Up>': this.#vertical(-1, false); return;
-            case '<Down>': this.#vertical(1, false); return;
+            case '<Up>': case '<Down>': {
+                let target = Math.max(0, Math.min(line + (name === '<Up>' ? -1 : 1), this.buffer.lineCount - 1));
+                this.cursor = this.buffer.clamp({ line: target, col: this.wantedCol(target) });
+                return;
+            }
             case '<Home>': this.#moveTo({ line, col: 0 }); return;
             case '<End>': this.#moveTo({ line, col: this.buffer.line(line).length }); return;
+            case '<C-Left>': case '<S-Left>': case '<C-Right>': case '<S-Right>': {
+                let target = runMotion(name.endsWith('Left>') ? 'b' : 'w', {
+                    buffer: this.buffer, cursor: this.cursor, count: 1, counted: false, want: this.want,
+                    top: this.top, rows: this.rows,
+                });
+                if (target !== undefined) this.#moveTo(target.pos);
+                return;
+            }
             default:
-                if (Array.from(name).length !== 1) return;
-                this.cursor = this.buffer.insert(this.cursor, name);
+                if (!isCharKey(name)) return;
+                this.#type(name);
         }
-        this.#wantHere();
+        this.wantHere();
+    }
+
+    /** Type one character: inserted, or in Replace mode written over the character under the cursor. */
+    #type(text: string): void {
+        let { line, col } = this.cursor;
+        if (this.mode === 'replace') {
+            let original = col < this.buffer.line(line).length ? this.buffer.line(line).charAt(col) : '';
+            if (original !== '') this.buffer.delete(this.cursor, { line, col: col + 1 });
+            this.#replaced.push(original);
+        }
+        this.cursor = this.buffer.insert(this.cursor, text);
+        if (this.#insert !== undefined) this.#insert.typed += text;
+    }
+
+    #leaveInsert(): void {
+        let session = this.#insert;
+        this.#insert = undefined;
+        if (session !== undefined && session.count > 1 && session.typed !== '') {
+            let again = (session.prefix + session.typed).repeat(session.count - 1);
+            if (this.mode === 'replace') {
+                // Replacing again overwrites further characters.
+                let { line, col } = this.cursor;
+                let room = this.buffer.line(line).length - col;
+                this.buffer.delete(this.cursor, { line, col: col + Math.min(room, again.length) });
+            }
+            this.cursor = this.buffer.insert(this.cursor, again);
+        }
+        this.buffer.end(this.cursor);
+        this.mode = 'normal';
+        this.cursor = this.normalCol({ line: this.cursor.line, col: this.cursor.col - 1 });
+        this.wantHere();
+        this.#normal.insertDone();
+    }
+
+    #moveTo(pos: Position): void {
+        this.cursor = this.buffer.clamp(pos);
+        this.wantHere();
     }
 
     // ── Command line ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -386,7 +373,7 @@ export class Editor {
                 this.message = '';
                 this.error = false;
                 execute(this, command);
-                this.cursor = this.#normalCol(this.cursor);
+                this.cursor = this.normalCol(this.cursor);
                 return;
             }
             case '<BS>':
@@ -394,15 +381,9 @@ export class Editor {
                 else this.command = this.command.slice(0, -1);
                 return;
             default:
-                if (Array.from(name).length === 1) this.command += name;
+                if (isCharKey(name)) this.command += name;
         }
     }
-}
-
-/** The column of the first non-blank character of `text` (its length if there is none). */
-export function firstNonBlank(text: string): number {
-    let match = /\S/.exec(text);
-    return match === null ? Math.max(0, text.length - 1) : match.index;
 }
 
 /** `3L, 42B`: the line and byte count vim shows for a file. */
