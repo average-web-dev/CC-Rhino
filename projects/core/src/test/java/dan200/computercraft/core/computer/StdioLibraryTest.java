@@ -124,6 +124,12 @@ class StdioLibraryTest {
         });
     }
 
+    /** The image module: .nfp / .nft and drawing on a Term. */
+    @Test
+    void image() {
+        run("image.js");
+    }
+
     /** Bundled cables in the redstone module: channels as dyes. */
     @Test
     void redstone() {

@@ -74,7 +74,8 @@ final class JSRequire extends ScriptableObject {
      */
     static final Set<String> ROM_CORE_MODULES = Set.of(
         "console", "process", "util", "readline", "readline/promises", "timers", "timers/promises", "tty", "term",
-        "child_process", "os", "geometry", "color", "system", "system/promises", "peripheral", "peripheral/promises"
+        "child_process", "os", "geometry", "color", "system", "system/promises", "peripheral", "peripheral/promises",
+        "image"
     );
 
     private static final String NODE_PREFIX = "node:";

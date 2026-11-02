@@ -48,6 +48,8 @@ const expected: Record<string, [string, string[]]> = {
     'child_process': ['object', ['ChildProcess', 'exec', 'execSync', 'spawn', 'spawnSync']],
     'os': ['object', ['run']],
     'geometry': ['object', ['Point', 'Vector']],
+    'image': ['object', ['blitDigit', 'drawBox', 'drawFilledBox', 'drawImage', 'drawLine', 'drawPixel', 'loadNfp',
+        'loadNft', 'parseNfp', 'parseNft']],
     'color': ['object', ['Color', 'Dye']],
     'system': ['object', ['Signal', 'cancelAlarm', 'cancelTimer', 'clock', 'computerID', 'computerLabel', 'day',
         'epoch', 'formatTime', 'getComputerID', 'getComputerLabel', 'getHost', 'off', 'on', 'once', 'process', 'processes', 'reboot',
