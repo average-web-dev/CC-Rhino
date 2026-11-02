@@ -51,8 +51,9 @@ before `require.paths` and as `node:<name>`). Full API: JS_API_REDESIGN.md, "Nod
   `'keydown'` / `'keyup'` events (compared against `Key`; no Node `'keypress'`), pause/resume. Listeners belong to the
   program that adds them.
 - `console`: Node's Console (log/info/debug/warn/error/dir/table/time*/count*/group*/assert/trace/clear).
-- `util`: format, formatWithOptions, inspect, inherits, promisify, stripVTControlCharacters, styleText,
-  isDeepStrictEqual. Replaces `textutils.serialize`-style debugging output and `cc.pretty`'s role for printing.
+- `util`: format, formatWithOptions, inspect (with `colors`: `inspect.styles` / `inspect.colors`, as in Node), inherits,
+  promisify, stripVTControlCharacters, styleText, isDeepStrictEqual. Replaces `textutils.serialize`-style debugging
+  output and `cc.pretty` (#3). `console` colours inspected values on a colour TTY (`colorMode: 'auto'`).
 - `readline`: line editing, history (prefix search), tab completion, `question` (blocking without callback;
   promise in `readline/promises`). Replaces CC's `read(replaceChar, history, completeFn)`; `replaceChar` (password
   masking) is not supported yet.
@@ -384,32 +385,12 @@ keys.getName(code: number): string | null
 
 ---
 
-### paintutils
+### paintutils → `image`
 
-**Summary**: Draw pixels, lines, boxes, and colour images (`.nfp` format) on the terminal.
-
-**Feature contract**:
-```
-paintutils.parseImage(imageStr: string): number[][]  // parse .nfp text to 2D colour array
-paintutils.loadImage(path: string): number[][] | null
-
-paintutils.drawPixel(x: number, y: number, color?: number): void
-paintutils.drawLine(x1: number, y1: number, x2: number, y2: number, color?: number): void
-paintutils.drawBox(x1: number, y1: number, x2: number, y2: number, color?: number): void
-paintutils.drawFilledBox(x1: number, y1: number, x2: number, y2: number, color?: number): void
-paintutils.drawImage(image: number[][], x: number, y: number): void
-```
-
-**CC-specific behaviour**:
-- `.nfp` image format: each character is a hex digit (`0`-`f`) representing one pixel colour; rows separated by newlines; `0` is transparent (not drawn).
-- All draw functions use `term.setBackgroundColor` + `term.write(" ")` for each pixel.
-- `drawBox` and `drawFilledBox` use `term.blit` for efficiency on rows.
-- Cursor position and background colour are side effects (not restored).
-- Coordinates are 1-indexed (matching CC terminal convention).
-
-**Dependencies**: `term`, `colors`, `io`, `fs`
-
-**Priority**: optional
+**Done (#3)** as the ROM core module `image` (`/rom/lib/image.ts`, together with cc.image.nft): `parseNfp` / `loadNfp`
+(pixel images: `ColorIndex | null` per pixel), `parseNft` / `loadNft` (text images: blit rows), `drawPixel`,
+`drawLine`, `drawBox`, `drawFilledBox`, `drawImage(term, image, at)`, `blitDigit`. Positions are 0-based `{ x, y }`,
+drawing is clipped to the Term and leaves its cursor and colours as they were (blit rows).
 
 ---
 
@@ -569,56 +550,10 @@ settings.save(path?: string): boolean   // default ".settings"; serialises curre
 
 ### textutils
 
-**Summary**: String formatting, paged printing, columnar display, CC serialisation, JSON serialisation/deserialisation, and URL encoding.
-
-**Feature contract**:
-```
-textutils.slowWrite(text: string, rate?: number): void  // default 20 chars/sec
-textutils.slowPrint(text: string, rate?: number): void
-
-textutils.formatTime(time: number, twentyFourHour?: boolean): string
-// time is a fractional hour value (0-24); outputs "6:30 PM" or "18:30"
-
-textutils.pagedPrint(text: string, freeLines?: number): number
-// Prints text; pauses with "Press any key to continue" at screen bottom.
-// Returns number of lines printed.
-
-textutils.tabulate(...rows: (string[] | number)[]): void
-// Print columns; number args set text colour for subsequent rows.
-textutils.pagedTabulate(...): void  // same but paged
-
-textutils.serialize(value: any, opts?: { compact?: boolean, allow_repetitions?: boolean }): string
-textutils.serialise(...)  // alias
-textutils.unserialize(s: string): any | null
-textutils.unserialise(...)  // alias
-
-textutils.serializeJSON(value: any, opts?: { nbt_style?, unicode_strings?, allow_repetitions? } | boolean): string
-textutils.serialiseJSON(...)  // alias
-textutils.unserializeJSON(s: string, opts?: { nbt_style?, parse_null?, parse_empty_array? }): any | [null, string]
-textutils.unserialiseJSON(...)  // alias
-
-textutils.empty_json_array  // sentinel table representing JSON []
-textutils.json_null          // sentinel table representing JSON null
-
-textutils.urlEncode(str: string): string
-
-textutils.complete(searchText: string, searchTable?: object): string[]
-// Tab-completion for Lua expressions; appends "(" for functions, "." for tables.
-```
-
-**CC-specific behaviour**:
-- `serialize` produces Lua-table syntax (`{ 1, 2, a = "b" }`), not JSON.
-- `serialize` errors on recursive tables unless `allow_repetitions` is set.
-- `unserialize` runs `load("return " + s)` — it evaluates Lua-syntax strings.
-- `serializeJSON` encodes non-string-keyed tables as JSON objects; numeric-key-only tables as arrays. Empty tables become `{}`.
-- `json_null` and `empty_json_array` are special sentinel objects; `tostring()` on them returns `"null"` / `"[]"`.
-- `pagedPrint` uses `term.redirect` to intercept scroll operations.
-
-**Dependencies**: `term`, `cc.strings`, events (`key`)
-
-**Implementation notes**: `unserialize` in Lua uses `load("return " .. s)`. In JS use a safe Lua-syntax parser or a small sandboxed evaluator for the CC table format. `serializeJSON`/`unserializeJSON` can delegate to a standard JSON library with special handling for sentinels and NBT-style. `complete` traverses the prototype chain of the search table.
-
-**Priority**: essential
+**Done the Node way (#3)**, no `textutils` module: `system.formatTime(time?, hour12?)` (#63 will return a `Date`
+instead), `Term.tabulate(...lists | ColorIndex)` (columns, like `ls`), `Term.page(text)` (pagedPrint: a screen at a
+time, `q` stops). Serialisation is `JSON`, URL encoding `encodeURIComponent`, debugging output `util.inspect`; `js`
+does its own completion.
 
 ---
 
@@ -726,45 +661,9 @@ v.equals(other: Vector): boolean
 
 ### window
 
-> **Note (#50):** with TTYs there is no `TermRedirect` to wrap. The plan is a native display that carries a TTY and a
-> terminal emulator, like a monitor, so a program runs in a window by being started with the window's TTY; the
-> contract below is the CraftOS reference.
-
-**Summary**: A buffered off-screen terminal redirect that occupies a sub-region of a parent terminal; supports visibility toggling, repositioning, and content redrawing.
-
-**Feature contract**:
-```
-window.create(
-  parent: TermRedirect,
-  x: number, y: number,
-  width: number, height: number,
-  visible?: boolean
-): Window
-
-// Window implements all term.Redirect methods plus:
-window.setVisible(visible: boolean): void
-window.isVisible(): boolean
-window.redraw(): void              // force repaint to parent
-window.restoreCursor(): void       // sync parent cursor to window cursor
-window.getPosition(): [number, number]
-window.reposition(newX, newY, newWidth?, newHeight?, newParent?): void
-window.getLine(y: number): [string, string, string]  // text, fgColors, bgColors (blit format)
-```
-
-**CC-specific behaviour**:
-- `create` immediately redraws itself if `visible=true`.
-- Content is buffered per-line as three parallel strings: text, fg blit, bg blit.
-- Cursor position is 1-indexed within the window (not parent).
-- When invisible, no writes reach the parent; making visible triggers immediate redraw.
-- Palette changes propagate to parent when visible.
-- `reposition` can simultaneously change size and parent.
-- Scrolling shifts buffered lines and fills new empty lines with current bg colour.
-
-**Dependencies**: `colors`, native `term`
-
-**Implementation notes**: The window stores 1-indexed cursor coords internally. The parent terminal uses 1-indexed coords shifted by the window's offset. All write operations clip to the window bounds before forwarding to parent.
-
-**Priority**: essential
+**Dropped (#3).** The virtual consoles (Alt+1…9, `chvt`) take multishell's place, the alternate screen (`?1049`) the
+buffering, and `monitor` runs a program on the monitor's own TTY. Running several programs in parts of one screen
+(split screen) would need a native display and is not planned.
 
 ---
 
@@ -843,43 +742,8 @@ split(str: string, delimiter: string, plain?: boolean, limit?: number): string[]
 
 ### cc/pretty
 
-**Summary**: Document-based pretty-printer for structured data, with colour support.
-
-**Feature contract**:
-```
-import * as pretty from 'cc/pretty'
-
-// Document primitives
-pretty.empty: Doc
-pretty.space: Doc
-pretty.line: Doc       // line break (removed by group)
-pretty.space_line: Doc // line break → space when collapsed by group
-
-// Combinators
-pretty.text(str: string, colour?: number): Doc
-pretty.concat(...docs: Doc[]): Doc       // also doc1 + doc2 in some contexts
-pretty.nest(depth: number, doc: Doc): Doc
-pretty.group(doc: Doc): Doc              // try single-line, fall back to multi-line
-
-// Output
-pretty.write(doc: Doc, ribbonFrac?: number): void   // to current terminal
-pretty.print(doc: Doc, ribbonFrac?: number): void   // write + newline
-pretty.render(doc: Doc, width?: number, ribbonFrac?: number): string
-
-// High-level
-pretty.pretty(obj: any, options?: { function_args?: boolean, function_source?: boolean }): Doc
-pretty.pretty_print(obj: any, options?, ribbonFrac?): void
-```
-
-**CC-specific behaviour**:
-- Strings render in red, numbers in magenta, functions in lightGray, tables in `{}` with nested docs.
-- `pretty.pretty` does not recurse into the same table twice (cycle detection).
-- `group` collapses a doc to one line if it fits within `ribbonFrac * width` (default 0.6).
-- `Doc.__concat` allows `doc1 .. doc2` syntax in Lua; in JS use `pretty.concat(doc1, doc2)`.
-
-**Dependencies**: `term`, `colors`, `cc/expect`
-
-**Priority**: important
+**Done the Node way (#3):** `util.inspect(value, { colors: true })` (Node's styles: numbers yellow, strings green, …;
+`inspect.styles` / `inspect.colors` can be changed); `console` uses it on colour TTYs.
 
 ---
 
@@ -1026,28 +890,7 @@ decode(str: string, altChars?: string): string | [null, string]
 
 ### cc/image/nft
 
-**Summary**: Parse and render NFT (Nitrogen Fingers Text) images that support coloured text.
-
-**Feature contract**:
-```
-import { parse, load, draw } from 'cc/image/nft'
-
-// NFT image: array of { text: string, foreground: string, background: string }
-// where foreground/background are blit-format strings (one hex char per character)
-
-parse(imageStr: string): NftImage
-load(path: string): NftImage | [null, string]
-draw(image: NftImage, x: number, y: number, target?: TermRedirect): void
-```
-
-**CC-specific behaviour**:
-- NFT escape bytes: `\x1F` (char 31) = set foreground, `\x1E` (char 30) = set background.
-- Line boundaries reset colours to white foreground, black background.
-- Default target is `term` (current terminal).
-
-**Dependencies**: `io`, `term`, `cc/expect`
-
-**Priority**: optional
+**Done (#3)** in the `image` module: `parseNft`, `loadNft`, drawn with `drawImage` (see paintutils → `image`).
 
 ---
 
@@ -1282,31 +1125,7 @@ shell.getRunningProgram(): string
 
 ### multishell (advanced)
 
-**Summary**: Tabbed multi-program interface for colour Advanced Computers; shows a tab bar, supports switching between programs.
-
-**Feature contract**:
-```
-// multishell API (injected by the multishell program)
-multishell.launch(env: object, program: string, ...args): number
-multishell.getCurrent(): number
-multishell.getCount(): number
-multishell.setTitle(id: number, title: string): void
-multishell.getTitle(id: number): string | null
-multishell.getFocus(): number
-multishell.setFocus(id: number): boolean
-```
-
-**CC-specific behaviour**:
-- Tab bar at top row (height 1); each tab shows its title, max ~8 chars.
-- `Ctrl+Tab` or clicking a tab switches focus.
-- Each tab owns a `window` sized to `(termWidth, termHeight - 1)` at y=2.
-- Only the focused tab's window is visible.
-- `multishell.launch` creates a new tab and optionally focuses it.
-- `bg` launches in background (no focus change); `fg` launches and focuses.
-
-**Dependencies**: `window`, `term`, `keys`, `colors`, `fs`, `cc/expect`
-
-**Priority**: important (colour terminals only)
+**Dropped (#3):** replaced by the virtual consoles (Alt+1…9, `chvt`); background jobs are #59.
 
 ---
 
@@ -1576,26 +1395,20 @@ computer (the device by id, `/dev` path or side).
 
 ---
 
-### lua (REPL)
+### js (REPL)
 
-**Summary**: Interactive Lua/JavaScript REPL with history, expression pretty-printing, and tab completion.
+**Summary**: Interactive JavaScript REPL, like `node` without arguments. **Done (#3)**, `/rom/os/bin/js.ts`.
 
 **Feature contract**:
-- Prompt: `lua> `
-- Accepts expressions (auto-wraps in `return`), statements, and multiline input.
-- Tab-completes using `textutils.complete` against the REPL environment.
-- Pretty-prints results using `cc/pretty`.
-- On error, shows parse/runtime error with source annotation.
-- `exit()` or Ctrl+D exits the REPL.
+- Prompt `> `, `... ` for unfinished input (open brackets, template literal or comment).
+- Expressions run as `new Function('return (…)')`, so they may call blocking APIs; statements run through an indirect
+  eval, so declarations (`let`, `const`, `var`, functions) stay; `let x = <expression>` assigns the expression's value.
+- Results via `util.inspect` (coloured on a colour terminal); the last one in `_`, the last error in `_error`.
+- Tab completion of globals and of the properties of `a.b.` (prototype chain included).
+- `.help`, `.break`, `.exit`; Ctrl+C clears the input (twice on an empty line exits), Ctrl+D exits.
 
-**CC-specific behaviour**:
-- `exit` variable prints a hint when displayed.
-- `local` at the start of input shows a warning (locals are lost between lines).
-- Function args and source are shown if `lua.function_args`/`lua.function_source` settings are set.
-
-**Dependencies**: `cc/pretty`, `cc/internal/exception`, `cc/internal/syntax`, `textutils`, `settings`
-
-**Priority**: important
+**Limits**: the input is not compiled by Babel (no `class`, `async`/`await`); blocking calls only in expressions, not
+inside statements (Rhino cannot pause inside eval); globals are shared with other programs.
 
 ---
 

@@ -436,11 +436,15 @@ Done in #2 on top of the TTY model (#50), differently from the Lua ROM:
 
 #### Tier 1 — Terminal + formatting (depends on `term` native)
 
-- [ ] **11.8** `src/ts/rom/lib/textutils.ts` — `serialize`/`unserialize`, `formatTime`, `pagedPrint`, `tabulate`, `urlEncode`/`urlDecode`
-- [ ] **11.9** `src/ts/rom/lib/cc/pretty.ts` — pretty-printing of arbitrary JS values with colour support
-- [ ] **11.10** `src/ts/rom/lib/window.ts` — virtual terminal window (redirectable sub-surface of `term`)
-- [ ] **11.11** `src/ts/rom/lib/paintutils.ts` — terminal pixel drawing (lines, boxes, images, NFT images)
-- [ ] **11.12** `src/ts/rom/lib/cc/image/nft.ts` — NFT image format (parse/build)
+Done the Node way (#3): no `textutils` / `cc.pretty` / `paintutils` / `window` modules.
+
+- [x] **11.8** textutils → what JS lacks, where it belongs: `system.formatTime` (#63: a `Date` instead), `Term.tabulate`,
+  `Term.page`; serialisation is `JSON`, URL encoding `encodeURIComponent`, debugging output `util.inspect`
+- [x] **11.9** cc.pretty → colours in `util.inspect` (`inspect.styles` / `inspect.colors`) and `console` (`colorMode`)
+- [x] ~~**11.10** `window`~~ — dropped: the virtual consoles (Alt+1…9) replace multishell, the alternate screen replaces
+  buffering, `monitor` runs programs on the monitor's TTY; split screen would be an issue of its own
+- [x] **11.11** paintutils → the `image` ROM module over `Term` (pixels, lines, boxes, images; 0-based, clipped)
+- [x] **11.12** cc.image.nft → `image.parseNft` / `loadNft` / `drawImage`
 
 #### Tier 2 — OS layer + shell (depends on Tier 0–1)
 
@@ -479,7 +483,9 @@ Done in #2 on top of the TTY model (#50), differently from the Lua ROM:
   - [x] **11.28f** `vi.ts` / `vim.ts` (#10): a modal editor like vim (Normal / Insert / Replace / Visual modes, motions,
     operators, text objects, registers, `.`, search, ex commands with ranges, `:set`, mouse), event driven; see
     JS_ROM_FEATURES.md `vi`. Selection (11.28c) and the mouse (11.28d) exist there, `edit` stays simple.
-- [ ] **11.29** `js.ts` — interactive JS REPL using `Function()`; print return values via `cc/pretty`; history, tab-completion
+- [x] **11.29** `js` (`/rom/os/bin/js.ts`, #3) — JS REPL: expressions as `Function()` (may block), statements through
+  an indirect eval (declarations stay); results via coloured `util.inspect`, `_`; history, tab completion, `... `
+  continuation, `.help` / `.break` / `.exit`
 - [x] **11.30** `monitor` (#7): `monitor <name> <program>` runs the program on the monitor's TTY (touches are mouse input, size changes stdout `'resize'`; no keyboard), `monitor scale <name> <0.5-5>`
 - [ ] **11.31** Network programs: `wget.ts`, `pastebin.ts` (upload/download)
 - [ ] **11.32** Rednet programs: `chat.ts` (send/receive messages), `repeat.ts` (wireless relay daemon)
@@ -487,7 +493,7 @@ Done in #2 on top of the TTY model (#50), differently from the Lua ROM:
 - [ ] **11.34** Turtle programs: `go.ts`, `turn.ts`, `excavate.ts`, `tunnel.ts`, `refuel.ts`, `craft.ts`, `dance.ts`, `equip.ts`, `unequip.ts`
 - [ ] **11.35** Pocket programs: `equip.ts`, `unequip.ts`, `falling.ts`
 - [ ] **11.36** Command-computer programs: `commands.ts`, `exec.ts`
-- [ ] **11.37** Multishell + bg/fg: `src/ts/rom/bin/multishell.ts` — tabbed shell using `window`; `bg.ts` / `fg.ts` open/move tabs
+- [x] ~~**11.37** Multishell + bg/fg~~ — replaced by the virtual consoles (Alt+1…9, `chvt`); background jobs are #59
 - [ ] **11.38** Fun programs: `hello.ts`, `dj.ts`, `speaker.ts`, `worm.ts`, `adventure.ts`, `paint.ts`, `redirection.ts`
 
 #### Tier 6 — Help content + validation
@@ -861,7 +867,7 @@ class that draws by writing ANSI. Branch `feature/tty-term`.
 - [x] **16.9** Tier 0 (#2) on top of the TTY model: kitty keyboard protocol, `'keydown'` / `'keyup'` + `Key`, named
   colours (`ColorIndex`), `geometry`, internal validators; named constant groups instead of magic strings/numbers
   (#52: `CSI` in `internal/csi`, `GlfwKeys`)
-- [ ] **16.10** Follow-ups: `window` as a native display with a TTY (#3); docs on VitePress (#51); syntax highlighting
+- [ ] **16.10** Follow-ups: docs on VitePress (#51); syntax highlighting
   and completion in `vi` (#10, 11.28a/b); faster drawing through ANSI (#57)
 - [x] **16.11** Palette (#54): OSC 4 / OSC 104 in `TerminalEmulator` (per console, `ESC c` resets), read back through
   `TtyHandle.getPaletteColor`; ROM `color` module (`Color`), `CSI.setPaletteColor` / `resetPalette`, Term colours by

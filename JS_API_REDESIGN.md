@@ -320,6 +320,17 @@ ignored; promise states cannot be read on Rhino), `inherits`, `promisify` (+ `pr
 `stripVTControlCharacters`, `styleText(format, text)` (ANSI codes, which stdout maps onto CC colours),
 `isDeepStrictEqual`.
 
+Colours (#3): `inspect(value, { colors: true })` styles values like Node (`inspect.styles`: special cyan, number /
+bigint / boolean yellow, undefined grey, null bold, string / symbol green, date magenta, regexp red; `inspect.colors`:
+the ANSI codes per style name); colour codes do not count towards line breaks. `console` has Node's `colorMode`
+(`'auto'`: colours on a colour TTY, through `stream.hasColors()`).
+
+### `image` (ROM, #3)
+
+CraftOS's paintutils and cc.image.nft over `Term`: `parseNfp` / `loadNfp` (`PixelImage`: `(ColorIndex | null)[][]`),
+`parseNft` / `loadNft` (`TextImage`: `{ text, textColor, backgroundColor }[]`), `drawPixel`, `drawLine`, `drawBox`,
+`drawFilledBox`, `drawImage(term, image, at)`, `blitDigit(color)`. 0-based `{ x, y }`, clipped, cursor and colours kept.
+
 ### `readline` and `readline/promises`
 
 Port of Node's `lib/internal/readline/interface.js`. `createInterface({ input, output, prompt, completer, terminal,

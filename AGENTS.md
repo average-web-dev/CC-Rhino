@@ -143,6 +143,7 @@ part of `assemble`.
 | Turtle energy (FE / Tech Reborn Energy) | `forge|fabric/.../shared/turtle/TurtleEnergyStorage.java`, `TurtleBrain.pushEnergy` |
 | TypeScript → `.d.ts` generator | `projects/tsdoclet/` |
 | TS → Rhino JS compiler (tsc type-check + Babel emit), `babel-preset-rhino`, native `babel-helpers` module | `projects/core/src/build/compile-ts.mjs`, `projects/core/src/build/babel-preset-rhino/`, `core/engine/JSBabelHelpers.java`; feature matrix: `core/engine/JSRhinoFeatureTest.java` + `src/test/ts/features/` |
+| `image` (pixels, lines, boxes, .nfp / .nft on a Term), `Term.tabulate` / `page`, `system.formatTime`, the `js` REPL (#3) | `src/ts/rom/lib/image.ts`, `rom/lib/term.ts`, `rom/lib/system.ts`, `rom/os/bin/js.ts`; types `src/ts/types/{image,term,system}.d.ts` |
 | vi editor (#10): program, and the editor core without a terminal (buffer + undo, motions, Normal / Visual modes, registers, search, ex commands, view) | `src/ts/rom/bin/vi.ts` (`vim.ts`), `src/ts/rom/lib/internal/vi/` (`buffer.ts`, `editor.ts`, `normal.ts`, `motions.ts`, `registers.ts`, `search.ts`, `ex.ts`, `view.ts`, `tabs.ts`); tests `src/test/ts/stdio/vi.ts` |
 | ROM (TypeScript, transpiled to `/rom`, bios to `bios.js`) | `projects/core/src/ts/` (`bios.ts`, `rom/os`, `rom/bin`, `rom/os/bin`, `rom/lib`, `types/`) |
 | Legacy Lua ROM (reference only, not shipped to the JS machine) | `projects/core/src/main/resources/data/computercraft/lua/` |
@@ -183,7 +184,9 @@ part of `assemble`.
   the computer's terminal; keys, typed characters, pastes and the mouse reach it through `EventComputerInput` and are
   **not** queued as events (no `key`/`key_up`/`char`/`paste`/`mouse_*` events for scripts). As in a Linux terminal the
   client pastes with Ctrl+Shift+V / Shift+Insert / the middle button (plain Ctrl+V is a key): as typed text, or
-  bracketed (`ESC[200~ … ESC[201~`) once a program asked (`CSI.bracketedPaste`, mode 2004; readline does). The mouse
+  bracketed (`ESC[200~ … ESC[201~`) once a program asked (`CSI.bracketedPaste`, mode 2004; readline does). The right
+  Alt key is AltGr (`InputEncoder`): it types a key's third character instead of being a modifier (#64: let the
+  client decide, layout-independently). The mouse
   belongs to the terminal until a program asks for it (`CSI.mouse`); then clicks are reports in its input and the
   middle button pastes only with Shift (`Terminal.mouseReporting`, synced to the client). Monitors have
   a TTY too (`monitor.getTty()`; the peripheral itself only keeps the text scale — there are no drawing or palette
