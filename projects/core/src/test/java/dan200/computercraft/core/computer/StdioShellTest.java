@@ -207,6 +207,41 @@ class StdioShellTest {
         }
     }
 
+    /** js, the REPL: results, declarations that stay, blocking calls, unfinished input, errors, completion, .exit. */
+    @Test
+    void js_repl() {
+        try (var h = TerminalHarness.boot(programs())) {
+            waitForPrompt(h, "/");
+            h.enter("js");
+            h.waitForText("Welcome to the JavaScript REPL");
+            h.enter("1 + 41");
+            h.waitForText("42");
+            h.enter("let answer = 6 * 7");
+            h.enter("answer + 1");
+            h.waitForText("43");
+            h.enter("var sys = require('system'); sys.sleep(1); 'statements'");
+            h.waitFor("a statement that blocks fails inside eval", x -> x.screen().contains("promises') instead"));
+            h.enter("require('system').sleep(1), 'slept'");
+            h.waitForText("'slept'");
+            h.enter("function twice(x) {");
+            h.waitForText("... ");
+            h.enter("  return x * 2; }");
+            h.enter("twice(50)");
+            h.waitForText("100");
+            h.enter("_ + 1");
+            h.waitForText("101");
+            h.enter("missing + 1");
+            h.waitForText("Uncaught ReferenceError");
+            h.type("Math.fl");
+            h.key(KEY_TAB);
+            h.waitForText("Math.floor");
+            h.key(KEY_ENTER);
+            h.waitForText("[Function: floor]");
+            h.enter(".exit");
+            waitForPrompt(h, "/");
+        }
+    }
+
     /** A BEL a program writes rings the bell: the OS plays a note on the first speaker. */
     @Test
     void bell_plays_on_a_speaker() {

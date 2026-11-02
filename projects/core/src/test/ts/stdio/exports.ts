@@ -75,6 +75,7 @@ const expected: Record<string, [string, string[]]> = {
     '/rom/os/bin/drive': ['object', main],
     '/rom/os/bin/echo': ['object', main],
     '/rom/os/bin/id': ['object', main],
+    '/rom/os/bin/js': ['object', main],
     '/rom/os/bin/kill': ['object', main],
     '/rom/os/bin/label': ['object', main],
     '/rom/os/bin/ls': ['object', main],
