@@ -59,9 +59,15 @@ public final class InputEncoder {
     }
 
     private boolean shift;
-    private boolean ctrl;
-    private boolean alt;
+    private boolean ctrlDown;
+    private boolean altDown;
     private boolean superKey;
+    /**
+     * The right Alt key: AltGr on most non-US layouts (X11's ISO_Level3_Shift arrives as it; Windows adds a left Ctrl).
+     * Like a terminal, it selects a key's third character rather than being a modifier: while it is held, Ctrl and Alt
+     * do not count, so AltGr+7 types `{` instead of reporting Ctrl+Alt+7.
+     */
+    private boolean altGr;
 
     /**
      * A text key whose press waits for its character ({@link #REPORT_TEXT}): the client sends the key and the character
@@ -75,11 +81,21 @@ public final class InputEncoder {
     private boolean swallowChar;
 
     public boolean isCtrl() {
-        return ctrl;
+        return ctrl();
     }
 
     public boolean isAlt() {
-        return alt;
+        return alt();
+    }
+
+    /** Ctrl as a modifier: not the one Windows adds to AltGr. */
+    private boolean ctrl() {
+        return ctrlDown && !altGr;
+    }
+
+    /** Alt as a modifier: the left Alt key (the right one is AltGr). */
+    private boolean alt() {
+        return altDown && !altGr;
     }
 
     public boolean isShift() {
@@ -153,7 +169,7 @@ public final class InputEncoder {
             swallowChar = false;
             return null;
         }
-        if (ctrl) return null;
+        if (ctrl()) return null;
         return prefix() + ch;
     }
 
@@ -206,8 +222,8 @@ public final class InputEncoder {
             if (kind == Mouse.DRAG) code += 32;
         }
         if (shift) code += 4;
-        if (alt) code += 8;
-        if (ctrl) code += 16;
+        if (alt()) code += 8;
+        if (ctrl()) code += 16;
 
         if (sgr) return ESC + "[<" + code + ";" + x + ";" + y + (kind == Mouse.RELEASE ? "m" : "M");
 
@@ -271,17 +287,17 @@ public final class InputEncoder {
 
         if (key >= KEY_F1 && key <= KEY_F12) return ESC + FUNCTION_KEYS[key - KEY_F1];
         // Ctrl+letter: the control character (the computer sends no char event for it).
-        if (ctrl && key >= KEY_A && key <= KEY_Z) return prefix() + (char) (key - KEY_A + 1);
+        if (ctrl() && key >= KEY_A && key <= KEY_Z) return prefix() + (char) (key - KEY_A + 1);
         return null;
     }
 
     private String prefix() {
-        return alt ? ESC : "";
+        return alt() ? ESC : "";
     }
 
     /** xterm modifier parameter: 1 + shift(1) + alt(2) + ctrl(4). */
     private int modifiers() {
-        return 1 + (shift ? 1 : 0) + (alt ? 2 : 0) + (ctrl ? 4 : 0);
+        return 1 + (shift ? 1 : 0) + (alt() ? 2 : 0) + (ctrl() ? 4 : 0);
     }
 
     /** {@code ESC [ n ~}, or {@code ESC [ n ; m ~} with modifiers. */
@@ -312,7 +328,7 @@ public final class InputEncoder {
 
         var text = textCode(key);
         if (text >= 0) {
-            var modified = ctrl || alt || superKey;
+            var modified = ctrl() || alt() || superKey;
             if (all) {
                 if (event != RELEASE && (flags & REPORT_TEXT) != 0 && !modified) {
                     // Wait for the character the key types (charTyped), to report it with the key.
@@ -395,7 +411,7 @@ public final class InputEncoder {
 
     /** The kitty modifier parameter: 1 + shift(1) + alt(2) + ctrl(4) + super(8). */
     private int kittyModifiers() {
-        return 1 + (shift ? 1 : 0) + (alt ? 2 : 0) + (ctrl ? 4 : 0) + (superKey ? 8 : 0);
+        return 1 + (shift ? 1 : 0) + (alt() ? 2 : 0) + (ctrl() ? 4 : 0) + (superKey ? 8 : 0);
     }
 
     /** {@code CSI code [: alternate] [; modifiers [: event]] [; text] u}. */
@@ -462,8 +478,9 @@ public final class InputEncoder {
     private void trackModifier(int key, boolean down) {
         switch (key) {
             case KEY_LEFT_SHIFT, KEY_RIGHT_SHIFT -> shift = down;
-            case KEY_LEFT_CONTROL, KEY_RIGHT_CONTROL -> ctrl = down;
-            case KEY_LEFT_ALT, KEY_RIGHT_ALT -> alt = down;
+            case KEY_LEFT_CONTROL, KEY_RIGHT_CONTROL -> ctrlDown = down;
+            case KEY_LEFT_ALT -> altDown = down;
+            case KEY_RIGHT_ALT -> altGr = down;
             case KEY_LEFT_SUPER, KEY_RIGHT_SUPER -> superKey = down;
             default -> {
             }

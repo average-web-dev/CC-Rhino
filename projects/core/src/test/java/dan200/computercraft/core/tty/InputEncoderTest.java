@@ -47,6 +47,36 @@ class InputEncoderTest {
         assertEquals("x", encoder.charTyped('x'));
     }
 
+    /** AltGr (the right Alt key; Windows adds a left Ctrl) types a key's third character, it is no modifier. */
+    @Test
+    void alt_gr_types_characters() {
+        encoder.keyDown(KEY_RIGHT_ALT);
+        assertNull(encoder.keyDown(KEY_0 + 7));
+        assertEquals("{", encoder.charTyped('{'), "legacy: not Alt+{");
+        encoder.keyUp(KEY_0 + 7);
+        assertFalse(encoder.isAlt());
+
+        // Windows: Ctrl+AltGr.
+        encoder.keyDown(KEY_LEFT_CONTROL);
+        assertNull(encoder.keyDown(KEY_A + 16));
+        assertEquals("@", encoder.charTyped('@'), "not swallowed as a Ctrl character");
+        encoder.keyUp(KEY_A + 16);
+        encoder.keyUp(KEY_LEFT_CONTROL);
+
+        // Kitty, every key reported with its text: the key with the character it typed, without modifiers.
+        assertNull(encoder.keyDown(KEY_0 + 8, false, FULL));
+        assertEquals("\u001b[56;1;91u", encoder.charTyped('[', FULL));
+        // Only disambiguated: the character as typed.
+        assertNull(encoder.keyDown(KEY_0, false, DISAMBIGUATE));
+        assertEquals("}", encoder.charTyped('}', DISAMBIGUATE));
+        encoder.keyUp(KEY_RIGHT_ALT);
+
+        // The left Alt is still Alt.
+        encoder.keyDown(KEY_LEFT_ALT);
+        assertEquals("\u001bb", encoder.charTyped('b'));
+        encoder.keyUp(KEY_LEFT_ALT);
+    }
+
     @Test
     void mouse_only_when_requested() {
         assertNull(encoder.mouse(Mouse.PRESS, 1, 1, 1, MouseMode.NONE, true));
